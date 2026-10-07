@@ -52,6 +52,11 @@ for host in "$@"; do
 	publish_remote "$host"
 done
 
-echo "Chrome picks it up on its next update check (a few hours), or now via"
-echo "chrome://extensions > Developer mode > Update. Commit the version bump in"
-echo "static/manifest.chrome.json so the next build stays ahead of it."
+# Running browsers with the extension connected update right away; the rest pick the
+# release up on Chrome's own schedule (a few hours) or at the next start.
+sitegeist update || true
+for host in "$@"; do
+	ssh -o BatchMode=yes "$host" "zsh -l -c 'sitegeist update'" || true
+done
+
+echo "Commit the version bump in static/manifest.chrome.json so the next build stays ahead of it."

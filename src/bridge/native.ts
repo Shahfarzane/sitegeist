@@ -395,6 +395,17 @@ function onHostMessage(message: HostToExt): void {
 				setTimeout(() => chrome.runtime.reload(), 200);
 				return;
 			}
+			if (message.method === "bridge.update") {
+				// Check the update_url now instead of waiting for Chrome's schedule; onUpdateAvailable applies it.
+				chrome.runtime
+					.requestUpdateCheck()
+					.then(({ status, version }) => ({
+						result: { status, available: version ?? null, installed: chrome.runtime.getManifest().version },
+					}))
+					.catch((err: unknown) => ({ error: { code: ERR.INTERNAL, message: String(err) } }))
+					.then((r) => send({ type: "response", clientId: message.clientId, id: message.id, ...r }));
+				return;
+			}
 			let state = clients.get(message.clientId);
 			if (!state) {
 				// Host restarted mid-flight or we missed the connect; treat as a fresh client.
@@ -510,6 +521,12 @@ export function startBridge(): void {
 		}
 	});
 	chrome.action.onClicked.addListener(() => connect());
+	// Chrome applies a downloaded update only once the extension is idle, and the native port
+	// keeps the worker alive for as long as the browser runs: reload to apply it now.
+	chrome.runtime.onUpdateAvailable.addListener((details) => {
+		trace(`update ${details.version} available, reloading`);
+		chrome.runtime.reload();
+	});
 	connect();
 }
 

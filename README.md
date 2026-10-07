@@ -46,8 +46,9 @@ and signed releases install under the same id.
    `~/.local/share/sitegeist/extension/sitegeist-<version>.crx` onto the page.
 5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider.
 
-Later releases: run `scripts/release-crx.sh` again. Chrome polls `updates.xml` every few
-hours (or press Update in `chrome://extensions`) and installs any higher version. A
+Later releases: run `scripts/release-crx.sh` again. It ends with `sitegeist update`, which
+makes every running browser with the extension connected check `updates.xml` and reload
+into the new version right away; browsers that are closed pick it up on their own schedule. A
 production build bumps the version, so commit `static/manifest.chrome.json` afterwards.
 
 For development, `npm run build` and Load unpacked `dist-chrome/` work as before and

@@ -68,6 +68,9 @@ mode to "allow any site" there. pi: set `SITEGEIST_AUTO_ALLOW=1` to auto-approve
 `type`, `press`, `fill`, `scroll`, `drag`, `actions`, `run_js`, `cdp`, `wait`, `read_console`,
 `read_network`. `tabs_show` is the only tool that changes what the user sees.
 
+`sitegeist update` asks every running browser's extension to check its update URL now (used
+by `scripts/release-crx.sh`); the extension reloads itself once an update is downloaded.
+
 `cdp` sends a raw Chrome DevTools Protocol command to the session's current tab (emulation,
 headers, PDF, DOM, performance, input). `Page.navigate` goes through the site permission
 check; commands that reach other tabs or browser-wide state (`Target.*`, `Browser.*`,

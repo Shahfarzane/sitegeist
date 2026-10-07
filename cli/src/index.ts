@@ -15,6 +15,7 @@ Usage:
   sitegeist install         Write the native messaging manifest for every Chromium browser found
   sitegeist status          Show whether the extension is reachable
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
+  sitegeist update          Make every running browser check for a new signed release now
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
   sitegeist yolo            Allow agents to open ANY site (no per-site prompts)
   sitegeist ask             Require a prompt before agents open an un-allowed site (default)
@@ -114,6 +115,23 @@ async function main(): Promise<void> {
 			await client.connect();
 			console.log(JSON.stringify(await client.call("bridge.reload", {}, 5000)));
 			client.close();
+			return;
+		}
+		case "update": {
+			// Every running browser has its own host; ask each extension to check its update_url.
+			const sockets = listSockets();
+			if (sockets.length === 0) throw new Error("No running browser has the extension connected");
+			for (const path of sockets) {
+				const client = new BridgeClient({ name: "update" });
+				try {
+					await client.connect(path);
+					console.log(`${path}: ${JSON.stringify(await client.call("bridge.update", {}, 15000))}`);
+				} catch (err) {
+					console.log(`${path}: ${err instanceof Error ? err.message : String(err)}`);
+				} finally {
+					client.close();
+				}
+			}
 			return;
 		}
 		case "pi-extension":
