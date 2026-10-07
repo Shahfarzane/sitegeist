@@ -16,6 +16,7 @@
 - `scripts/setup-siblings.sh` and `patches/pi-mono-v0.60.0-sitegeist.patch`: reproducible sibling setup (mini-lit v0.2.1, pi v0.60.0 plus the unpublished pi-ai and pi-web-ui APIs this fork uses).
 - `cdp` bridge method and MCP tool: any Chrome DevTools Protocol command on the session's current tab, through the existing debugger attachment. `Page.navigate` asks for site permission; commands that reach other targets or browser-wide state are refused; results over 100k characters are truncated.
 - `sitegeist update` (bridge method `bridge.update`): every running browser checks its update URL now; the extension reloads as soon as an update is downloaded (the native port keeps the worker alive, so Chrome's apply-when-idle never happened). `scripts/release-crx.sh` calls it locally and on each ssh host.
+- Automatic releases: `scripts/auto-release.sh` (launchd agent via `scripts/install-auto-release.sh`) builds, signs and publishes every new commit on `origin/main` to this Mac and the given ssh hosts. Release versions are `<major>.<minor>.<commit count>` with the commit in `version_name` (shown in About), so no version bump is committed.
 
 ### Changed
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.

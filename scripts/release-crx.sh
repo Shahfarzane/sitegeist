@@ -3,7 +3,8 @@
 #
 #   scripts/release-crx.sh [ssh-host ...]
 #
-# 1. npm run build (bumps the manifest version; Chrome only updates to a higher version)
+# 1. builds with version <major>.<minor>.<commits on HEAD> (major.minor from the source
+#    manifest), so every commit on main is a higher version and nothing gets committed
 # 2. signs with "sitegeist CRX signing key" from 1Password DEV, read through op-agents
 # 3. copies the .crx and updates.xml to ~/.local/share/sitegeist/extension/, the folder the
 #    packaged manifest's update_url points at; every ssh host given gets the same folder
@@ -18,7 +19,10 @@ UPDATE_DIR="$HOME/.local/share/sitegeist/extension"
 KEY_ITEM="sitegeist CRX signing key"
 
 cd "$ROOT"
-npm run build
+BASE="$(node -p "require('./static/manifest.chrome.json').version.split('.').slice(0, 2).join('.')")"
+VERSION="$BASE.$(git rev-list --count HEAD)"
+NAME="$VERSION ($(git rev-parse --short HEAD)$( [ -n "$(git status --porcelain)" ] && echo ", modified"))"
+SITEGEIST_VERSION="$VERSION" SITEGEIST_VERSION_NAME="$NAME" npm run build
 
 KEY_DIR="$(mktemp -d)"
 trap 'rm -rf "$KEY_DIR"' EXIT
@@ -59,4 +63,3 @@ for host in "$@"; do
 	ssh -o BatchMode=yes "$host" "zsh -l -c 'sitegeist update'" || true
 done
 
-echo "Commit the version bump in static/manifest.chrome.json so the next build stays ahead of it."
