@@ -31,13 +31,28 @@ if [ ! -d "$PARENT/pi-mono" ]; then
 fi
 
 apply_once() {
-	local repo="$1" patch="$2"
+	local repo="$1" patch="$2" name changed outside
+	name="$(basename "$patch")"
 	if git -C "$repo" apply --reverse --check "$patch" 2>/dev/null; then
-		echo "$(basename "$patch") already applied"
-	else
-		git -C "$repo" apply "$patch"
-		echo "$(basename "$patch") applied"
+		echo "$name already applied"
+		return
 	fi
+	if ! git -C "$repo" apply --check "$patch" 2>/dev/null; then
+		# An older revision of this patch is applied. Reset the files it owns and re-apply,
+		# but never discard edits outside the patch (npm rewrites package-lock.json itself).
+		changed="$(git -C "$repo" diff --name-only | grep -v 'package-lock.json$' | sort || true)"
+		outside="$(comm -23 <(echo "$changed") <(git -C "$repo" apply --numstat "$patch" | cut -f3 | sort))"
+		if [ -n "$outside" ]; then
+			echo "$repo has changes outside $name:" >&2
+			echo "$outside" >&2
+			echo "Commit or move them, then rerun." >&2
+			exit 1
+		fi
+		echo "$changed" | xargs git -C "$repo" checkout --
+		echo "reset an older revision of $name"
+	fi
+	git -C "$repo" apply "$patch"
+	echo "$name applied"
 }
 apply_once "$PARENT/mini-lit" "$ROOT/patches/mini-lit-v0.2.1-sitegeist.patch"
 apply_once "$PARENT/pi-mono" "$ROOT/patches/pi-mono-v0.60.0-sitegeist.patch"
