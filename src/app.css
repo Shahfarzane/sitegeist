@@ -121,6 +121,13 @@ select,
 		border-color 120ms ease;
 }
 
+/* Native checkboxes, radios and ranges follow the monochrome accent instead of browser blue. */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+	accent-color: var(--color-foreground);
+}
+
 * {
 	scrollbar-width: thin;
 	scrollbar-color: var(--color-border) transparent;
