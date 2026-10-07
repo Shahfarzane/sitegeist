@@ -26,6 +26,10 @@
 - Manifest `key` is the private fork's CRX signing key (id `lnncppjiohlpejgcbdgoihplimdckddn`); the bridge's native messaging manifest allows that id.
 - `typescript@^5.9.3` is a devDependency, so `tsc` no longer resolves to a global TypeScript 7.
 - Side panel redesign (monochrome): neutral gray tokens, no hardcoded hues, grayscale charts; dialogs are full-height sheets below 640px (mini-lit patch `patches/mini-lit-v0.2.1-sitegeist.patch`, applied by `scripts/setup-siblings.sh`).
+- Settings is a drill-in list of sections (Providers, Custom providers, Skills, Bridge, Costs, Proxy, About) instead of a seven-tab strip that overflowed the panel; Esc goes back, then closes.
+- Header: Sessions, chat title, New chat and an overflow menu (Share this tab, Record a skill, Download chat, Light/Dark/System theme, Settings); a Stop control stays visible while recording.
+- Chat: per-message usage on hover, a finished thinking block reads Thinking, send/stop is the one filled composer control; Sessions sheet has a one-line total and icon actions.
+- First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb and suggestion pills are grayscale.
 
 ### Fixed
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
@@ -48,6 +52,8 @@
 - Type errors in `CustomProviderEditDialog` (missing i18n keys) and `CustomProvidersTab` (`remove` shadowed `HTMLElement.remove`).
 - Manifest: fixed extension `key` (stable id `lnncppjiohlpejgcbdgoihplimdckddn`), new permissions `tabGroups`, `nativeMessaging`, `alarms`.
 - `sitegeist install` writes the native messaging manifest for Helium (`net.imput.helium`) on macOS.
+- The welcome screen never rendered on a new chat: the message was appended without an agent event, so the message list kept its old empty array.
+- Escape while the overflow menu is open closes the menu instead of also aborting a running agent.
 
 ## [1.0.0] - 2026-03-15
 
