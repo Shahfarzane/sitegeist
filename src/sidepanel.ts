@@ -16,7 +16,6 @@ import {
 	createStreamFn,
 	ModelSelector,
 	ProxyTab,
-	SettingsDialog,
 	// PersistentStorageDialog,
 	setAppStorage,
 	setShowJsonMode,
@@ -37,6 +36,7 @@ import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
 import { RecordSkillDialog } from "./dialogs/RecordSkillDialog.js";
 import { SessionCostDialog } from "./dialogs/SessionCostDialog.js";
 import { SitegeistSessionListDialog } from "./dialogs/SessionListDialog.js";
+import { type SettingsSection, SettingsSheet } from "./dialogs/SettingsSheet.js";
 import { SkillsTab } from "./dialogs/SkillsTab.js";
 import { UpdateNotificationDialog } from "./dialogs/UpdateNotificationDialog.js";
 import { WelcomeSetupDialog } from "./dialogs/WelcomeSetupDialog.js";
@@ -365,21 +365,27 @@ async function hasAnyApiKey(): Promise<boolean> {
 	return providers.length > 0;
 }
 
-function openApiKeysDialog(): Promise<void> {
+function settingsSections(): SettingsSection[] {
+	return [
+		{ label: "Providers", hint: "Subscriptions and API keys", tab: new ApiKeysOAuthTab() },
+		{ label: "Custom providers", hint: "OpenAI- or Anthropic-compatible endpoints", tab: new CustomProvidersTab() },
+		{ label: "Skills", hint: "Site scripts the agent can reuse", tab: new SkillsTab() },
+		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
+		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },
+		{ label: "Proxy", hint: "CORS proxy for providers that need one", tab: new ProxyTab() },
+		{ label: "About", hint: "Version and links", tab: new AboutTab() },
+	];
+}
+
+/** Settings sheet; resolves when it closes. `section` opens straight into one section. */
+function openSettings(section?: string): Promise<void> {
 	return new Promise((resolve) => {
-		SettingsDialog.open(
-			[
-				new ApiKeysOAuthTab(),
-				new CustomProvidersTab(),
-				new CostsTab(),
-				new SkillsTab(),
-				new BridgeTab(),
-				new ProxyTab(),
-				new AboutTab(),
-			],
-			resolve,
-		);
+		SettingsSheet.open(settingsSections(), { section, onClose: resolve });
 	});
+}
+
+function openApiKeysDialog(): Promise<void> {
+	return openSettings("Providers");
 }
 
 // Export getter for message transformer
@@ -947,16 +953,7 @@ const renderApp = () => {
 						variant: "ghost",
 						size: "sm",
 						children: icon(Settings, "sm"),
-						onClick: () =>
-							SettingsDialog.open([
-								new ApiKeysOAuthTab(),
-								new CustomProvidersTab(),
-								new CostsTab(),
-								new SkillsTab(),
-								new BridgeTab(),
-								new ProxyTab(),
-								new AboutTab(),
-							]),
+						onClick: () => void openSettings(),
 						title: "Settings",
 					})}
 				</div>
