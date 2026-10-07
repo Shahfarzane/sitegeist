@@ -38,6 +38,7 @@ and signed releases install under the same id.
 2. Build, sign and publish: `scripts/release-crx.sh` (append ssh hosts, e.g. `m3`, to
    publish there too). It writes the `.crx` and `updates.xml` to
    `~/.local/share/sitegeist/extension/`, the `file://` update URL baked into the release.
+   The version is `<major>.<minor>.<commits on HEAD>`, so nothing needs committing.
 3. First time on a Mac: open `release/sitegeist-chrome-policy.mobileconfig` and install it
    in System Settings > General > Device Management. It puts the id on Chrome's
    `ExtensionInstallAllowlist`; without it, Google Chrome on macOS disables off-store
@@ -46,10 +47,14 @@ and signed releases install under the same id.
    `~/.local/share/sitegeist/extension/sitegeist-<version>.crx` onto the page.
 5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider.
 
-Later releases: run `scripts/release-crx.sh` again. It ends with `sitegeist update`, which
-makes every running browser with the extension connected check `updates.xml` and reload
-into the new version right away; browsers that are closed pick it up on their own schedule. A
-production build bumps the version, so commit `static/manifest.chrome.json` afterwards.
+Later releases are automatic: `scripts/install-auto-release.sh m3` installs a launchd agent
+that runs `scripts/auto-release.sh` every 10 minutes. When `origin/main` moves it builds
+the new commit (only from a clean `main` checkout), signs, publishes here and to each ssh
+host (retrying hosts that are asleep), and ends with `sitegeist update`, which makes every
+running browser with the extension connected reload into the new version. Browsers that are
+closed pick it up on Chrome's own schedule. Log: `~/Library/Logs/sitegeist-auto-release.log`.
+To start a new minor line, change the first two numbers of the version in
+`static/manifest.chrome.json`.
 
 For development, `npm run build` and Load unpacked `dist-chrome/` work as before and
 replace the installed release (same id, same data).

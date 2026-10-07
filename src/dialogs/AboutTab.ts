@@ -11,8 +11,9 @@ export class AboutTab extends SettingsTab {
 	}
 
 	render(): TemplateResult {
-		// Get version from the manifest
-		const version = chrome.runtime.getManifest().version;
+		// Releases carry "1.2.250 (abc1234)" as version_name: the build and the commit it came from.
+		const manifest = chrome.runtime.getManifest();
+		const version = manifest.version_name ?? manifest.version;
 
 		return html`
 			<div class="flex flex-col gap-4">
