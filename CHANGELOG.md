@@ -57,6 +57,7 @@
 - The welcome screen never rendered on a new chat: the message was appended without an agent event, so the message list kept its old empty array.
 - Escape while the overflow menu is open closes the menu instead of also aborting a running agent.
 - Dialog text without an explicit color was black in dark mode (dialogs mount on body, outside the themed app root); body now carries the theme colors. Destructive buttons are outlined with red text instead of filled red.
+- `release-crx.sh` aborted silently on a clean checkout (a `[ ... ] && echo` in the version name returned 1 under `set -e`), so automatic releases stopped after the first; both scripts now log the failing line.
 
 ### Removed
 - Upstream update check (About tab and the disabled startup prompt against `sitegeist.ai/uploads/version.json`) and `UpdateNotificationDialog`: the fork's version numbers differ and its updates come from signed releases.

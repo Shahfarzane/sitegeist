@@ -13,6 +13,7 @@
 # First install on a Mac: install release/sitegeist-chrome-policy.mobileconfig (System
 # Settings > General > Device Management), then drag the .crx onto chrome://extensions.
 set -euo pipefail
+trap 'echo "release-crx.sh: failed at line $LINENO" >&2' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UPDATE_DIR="$HOME/.local/share/sitegeist/extension"
@@ -21,7 +22,10 @@ KEY_ITEM="sitegeist CRX signing key"
 cd "$ROOT"
 BASE="$(node -p "require('./static/manifest.chrome.json').version.split('.').slice(0, 2).join('.')")"
 VERSION="$BASE.$(git rev-list --count HEAD)"
-NAME="$VERSION ($(git rev-parse --short HEAD)$( [ -n "$(git status --porcelain)" ] && echo ", modified"))"
+# A plain `[ ... ] && echo` here would return 1 on a clean tree and abort under set -e.
+MODIFIED=""
+if [ -n "$(git status --porcelain)" ]; then MODIFIED=", modified"; fi
+NAME="$VERSION ($(git rev-parse --short HEAD)$MODIFIED)"
 SITEGEIST_VERSION="$VERSION" SITEGEIST_VERSION_NAME="$NAME" npm run build
 
 KEY_DIR="$(mktemp -d)"
