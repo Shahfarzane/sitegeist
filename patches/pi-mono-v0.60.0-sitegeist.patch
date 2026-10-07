@@ -83,7 +83,7 @@ index 1050b855..1744424d 100644
  		const statusText =
  			this.status.status === "connected"
 diff --git a/packages/web-ui/src/components/MessageEditor.ts b/packages/web-ui/src/components/MessageEditor.ts
-index f0987c4d..8a196db8 100644
+index f0987c4d..4ee65951 100644
 --- a/packages/web-ui/src/components/MessageEditor.ts
 +++ b/packages/web-ui/src/components/MessageEditor.ts
 @@ -5,12 +5,24 @@ import type { Model } from "@mariozechner/pi-ai";
@@ -306,15 +306,58 @@ index f0987c4d..8a196db8 100644
  										className: "h-8 text-xs truncate",
  									})}
  								`
-@@ -389,7 +534,7 @@ export class MessageEditor extends LitElement {
+@@ -376,21 +521,24 @@ export class MessageEditor extends LitElement {
+ 							this.isStreaming
+ 								? html`
+ 									${Button({
+-										variant: "ghost",
++										variant: "default",
+ 										size: "icon",
+ 										onClick: this.onAbort,
+-										children: icon(Square, "sm"),
++										children: icon(Square, "xs"),
+ 										className: "h-8 w-8",
++										title: "Stop",
+ 									})}
+ 								`
+ 								: html`
+ 									${Button({
+-										variant: "ghost",
++										// The one filled control in the composer, once there is something to send.
++										variant: (this.value.trim() || this.attachments.length > 0) && !this.processingFiles ? "default" : "ghost",
  										size: "icon",
  										onClick: this.handleSend,
  										disabled: (!this.value.trim() && this.attachments.length === 0) || this.processingFiles,
 -										children: html`<div style="transform: rotate(-45deg)">${icon(Send, "sm")}</div>`,
 +										children: icon(ArrowUp, "sm"),
  										className: "h-8 w-8",
++										title: "Send",
  									})}
  								`
+ 						}
+diff --git a/packages/web-ui/src/components/Messages.ts b/packages/web-ui/src/components/Messages.ts
+index 485c5134..d1f8292b 100644
+--- a/packages/web-ui/src/components/Messages.ts
++++ b/packages/web-ui/src/components/Messages.ts
+@@ -138,14 +138,15 @@ export class AssistantMessage extends LitElement {
+ 			}
+ 		}
+ 
++		// Per-message usage shows on hover; the running total stays in the stats row below the composer.
+ 		return html`
+-			<div>
++			<div class="group">
+ 				${orderedParts.length ? html` <div class="px-4 flex flex-col gap-3">${orderedParts}</div> ` : ""}
+ 				${
+ 					this.message.usage && !this.isStreaming
+ 						? this.onCostClick
+-							? html` <div class="px-4 mt-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
+-							: html` <div class="px-4 mt-2 text-xs text-muted-foreground">${formatUsage(this.message.usage)}</div> `
++							? html` <div class="px-4 mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-foreground" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
++							: html` <div class="px-4 mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">${formatUsage(this.message.usage)}</div> `
+ 						: ""
+ 				}
+ 				${
 diff --git a/packages/web-ui/src/components/ProviderKeyInput.ts b/packages/web-ui/src/components/ProviderKeyInput.ts
 index 61dac606..795f2f1a 100644
 --- a/packages/web-ui/src/components/ProviderKeyInput.ts
@@ -328,6 +371,19 @@ index 61dac606..795f2f1a 100644
  								: ""
  					}
  					${this.failed ? Badge({ children: i18n("✗ Invalid"), variant: "destructive" }) : ""}
+diff --git a/packages/web-ui/src/components/ThinkingBlock.ts b/packages/web-ui/src/components/ThinkingBlock.ts
+index 8dd7ce45..5ecec004 100644
+--- a/packages/web-ui/src/components/ThinkingBlock.ts
++++ b/packages/web-ui/src/components/ThinkingBlock.ts
+@@ -34,7 +34,7 @@ export class ThinkingBlock extends LitElement {
+ 					@click=${this.toggleExpanded}
+ 				>
+ 					<span class="transition-transform inline-block ${this.isExpanded ? "rotate-90" : ""}">${icon(ChevronRight, "sm")}</span>
+-					<span class="${shimmerClasses}">Thinking...</span>
++					<span class="${shimmerClasses}">${this.isStreaming ? "Thinking..." : "Thinking"}</span>
+ 				</div>
+ 				${this.isExpanded ? html`<markdown-block .content=${this.content} .isThinking=${true}></markdown-block>` : ""}
+ 			</div>
 diff --git a/packages/web-ui/src/dialogs/ModelSelector.ts b/packages/web-ui/src/dialogs/ModelSelector.ts
 index 192c3c53..26a38133 100644
 --- a/packages/web-ui/src/dialogs/ModelSelector.ts
