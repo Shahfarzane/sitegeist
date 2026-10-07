@@ -10,8 +10,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { NATIVE_HOST_NAME } from "../../src/bridge/protocol.ts";
 
-/** Stable id from the `key` in static/manifest.chrome.json. */
-export const EXTENSION_ID = "bbkgpflnkggdfabgjhofdmdopgjopamc";
+/**
+ * Stable id from the `key` in static/manifest.chrome.json: the public half of the CRX
+ * signing key ("sitegeist CRX signing key" in 1Password DEV), so unpacked builds and
+ * signed .crx releases share it.
+ */
+export const EXTENSION_ID = "lnncppjiohlpejgcbdgoihplimdckddn";
 
 function browserDirs(): string[] {
 	const home = homedir();
