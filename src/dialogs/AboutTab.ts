@@ -69,7 +69,7 @@ export class AboutTab extends SettingsTab {
 							`
 						: this.updateAvailable
 							? html`
-									<div class="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+									<div class="p-3 rounded-lg bg-secondary border border-border">
 										<div class="flex items-start justify-between gap-3">
 											<div class="flex-1">
 												<div class="text-sm font-medium text-foreground mb-1">
@@ -81,7 +81,7 @@ export class AboutTab extends SettingsTab {
 											</div>
 											<button
 												@click=${this.openUpdatePage}
-												class="px-3 py-1.5 text-xs font-medium rounded-md bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-foreground transition-colors"
+												class="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
 											>
 												${i18n("Update")}
 											</button>
@@ -90,7 +90,7 @@ export class AboutTab extends SettingsTab {
 								`
 							: !this.error
 								? html`
-										<div class="text-xs text-green-600 dark:text-green-400">
+										<div class="text-xs text-muted-foreground">
 											✓ ${i18n("You're up to date")}
 										</div>
 									`

@@ -14,26 +14,116 @@
 /* biome-ignore lint/correctness/noInvalidPositionAtImportRule: fuck you */
 @import "tailwindcss";
 
+/*
+ * Monochrome tokens. Neutral grays only; the one accent is the foreground color on the
+ * primary action, and red is reserved for destructive text. Overrides mini-lit's theme
+ * (whose accent-foreground is blue in light and amber in dark).
+ */
+:root {
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.17 0 0);
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.17 0 0);
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.17 0 0);
+	--primary: oklch(0.2 0 0);
+	--primary-foreground: oklch(0.985 0 0);
+	--secondary: oklch(0.965 0 0);
+	--secondary-foreground: oklch(0.2 0 0);
+	--muted: oklch(0.965 0 0);
+	--muted-foreground: oklch(0.52 0 0);
+	--accent: oklch(0.95 0 0);
+	--accent-foreground: oklch(0.17 0 0);
+	--destructive: oklch(0.55 0.2 27);
+	--destructive-foreground: oklch(0.985 0 0);
+	--border: oklch(0.92 0 0);
+	--input: oklch(0.9 0 0);
+	--ring: oklch(0.6 0 0);
+	--chart-1: oklch(0.3 0 0);
+	--chart-2: oklch(0.45 0 0);
+	--chart-3: oklch(0.6 0 0);
+	--chart-4: oklch(0.72 0 0);
+	--chart-5: oklch(0.82 0 0);
+	--sidebar: oklch(0.985 0 0);
+	--sidebar-foreground: oklch(0.17 0 0);
+	--sidebar-primary: oklch(0.2 0 0);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.95 0 0);
+	--sidebar-accent-foreground: oklch(0.17 0 0);
+	--sidebar-border: oklch(0.92 0 0);
+	--sidebar-ring: oklch(0.6 0 0);
+	--radius: 0.5rem;
+	--shadow-2xs: none;
+	--shadow-xs: none;
+	--shadow-sm: none;
+	--shadow: none;
+	--shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.08);
+	--shadow-lg: 0 8px 24px -4px hsl(0 0% 0% / 0.12);
+	--shadow-xl: 0 8px 24px -4px hsl(0 0% 0% / 0.12);
+	--shadow-2xl: 0 12px 32px -6px hsl(0 0% 0% / 0.16);
+}
+
+.dark {
+	--background: oklch(0.16 0 0);
+	--foreground: oklch(0.96 0 0);
+	--card: oklch(0.19 0 0);
+	--card-foreground: oklch(0.96 0 0);
+	--popover: oklch(0.21 0 0);
+	--popover-foreground: oklch(0.96 0 0);
+	--primary: oklch(0.95 0 0);
+	--primary-foreground: oklch(0.18 0 0);
+	--secondary: oklch(0.225 0 0);
+	--secondary-foreground: oklch(0.96 0 0);
+	--muted: oklch(0.225 0 0);
+	--muted-foreground: oklch(0.68 0 0);
+	--accent: oklch(0.26 0 0);
+	--accent-foreground: oklch(0.96 0 0);
+	--destructive: oklch(0.68 0.17 22);
+	--destructive-foreground: oklch(0.96 0 0);
+	--border: oklch(0.27 0 0);
+	--input: oklch(0.3 0 0);
+	--ring: oklch(0.5 0 0);
+	--chart-1: oklch(0.92 0 0);
+	--chart-2: oklch(0.78 0 0);
+	--chart-3: oklch(0.64 0 0);
+	--chart-4: oklch(0.5 0 0);
+	--chart-5: oklch(0.38 0 0);
+	--sidebar: oklch(0.19 0 0);
+	--sidebar-foreground: oklch(0.96 0 0);
+	--sidebar-primary: oklch(0.95 0 0);
+	--sidebar-primary-foreground: oklch(0.18 0 0);
+	--sidebar-accent: oklch(0.26 0 0);
+	--sidebar-accent-foreground: oklch(0.96 0 0);
+	--sidebar-border: oklch(0.27 0 0);
+	--sidebar-ring: oklch(0.5 0 0);
+	--shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.4);
+	--shadow-lg: 0 8px 24px -4px hsl(0 0% 0% / 0.5);
+	--shadow-xl: 0 8px 24px -4px hsl(0 0% 0% / 0.5);
+	--shadow-2xl: 0 12px 32px -6px hsl(0 0% 0% / 0.6);
+}
+
 body {
-	font-size: 16px;
+	font-size: 14px;
+	line-height: 1.5;
 	-webkit-font-smoothing: antialiased;
 }
 
-/* Smooth color transitions for theme switching */
-*,
-*::before,
-*::after {
+/* Hover and press feedback is near-instant; only interactive elements animate color. */
+button,
+a,
+input,
+textarea,
+select,
+[role="menuitem"] {
 	transition:
-		background-color 0.3s ease,
-		color 0.3s ease,
-		border-color 0.3s ease,
-		fill 0.3s ease,
-		stroke 0.3s ease;
+		background-color 120ms ease,
+		color 120ms ease,
+		border-color 120ms ease;
 }
 
 * {
 	scrollbar-width: thin;
-	scrollbar-color: var(--color-border) rgba(0, 0, 0, 0);
+	scrollbar-color: var(--color-border) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -48,10 +138,6 @@ body {
 *::-webkit-scrollbar-thumb {
 	background-color: var(--color-border);
 	border-radius: 4px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-	background-color: rgba(0, 0, 0, 0);
 }
 
 /* Welcome message animations */
@@ -114,49 +200,16 @@ body {
 }
 
 .tutorial-pill {
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	position: relative;
-	overflow: hidden;
-	background: linear-gradient(135deg, rgba(217, 79, 0, 0.15), rgba(255, 107, 0, 0.15), rgba(212, 165, 0, 0.15));
-	border: 1px solid rgba(255, 107, 0, 0.3);
-	backdrop-filter: blur(10px);
-}
-
-.tutorial-pill::before {
-	content: "";
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	background: linear-gradient(90deg, transparent, rgba(255, 107, 0, 0.4), transparent);
-	background-size: 200% 100%;
-	animation: shimmer 3s ease-in-out infinite;
-	opacity: 0;
-	transition: opacity 0.3s;
-}
-
-.tutorial-pill:hover::before {
-	opacity: 1;
+	background: var(--color-background);
+	border: 1px solid var(--color-border);
 }
 
 .tutorial-pill:hover {
-	transform: translateY(-2px) scale(1.03);
-	background: linear-gradient(135deg, rgba(217, 79, 0, 0.25), rgba(255, 107, 0, 0.25), rgba(212, 165, 0, 0.25));
-	box-shadow: 0 8px 20px -4px rgba(255, 107, 0, 0.5);
-	border-color: rgba(255, 107, 0, 0.5);
+	background: var(--color-accent);
 }
 
-.tutorial-pill:active {
-	transform: translateY(-1px) scale(1.01);
-}
-
-/* User message with fancy pill styling */
+/* User messages: a quiet filled block, no border. */
 .user-message-container {
-	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-	position: relative;
-	background: linear-gradient(135deg, rgba(217, 79, 0, 0.12), rgba(255, 107, 0, 0.12), rgba(212, 165, 0, 0.12));
-	border: 1px solid rgba(255, 107, 0, 0.25);
-	backdrop-filter: blur(10px);
+	background: var(--color-secondary);
 	max-width: 100%;
 }

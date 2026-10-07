@@ -64,6 +64,24 @@ index b8f6550e..02e7ca03 100644
  							.onSend=${(input: string, attachments: Attachment[]) => {
  								this.sendMessage(input, attachments);
  							}}
+diff --git a/packages/web-ui/src/components/CustomProviderCard.ts b/packages/web-ui/src/components/CustomProviderCard.ts
+index 1050b855..1744424d 100644
+--- a/packages/web-ui/src/components/CustomProviderCard.ts
++++ b/packages/web-ui/src/components/CustomProviderCard.ts
+@@ -30,10 +30,10 @@ export class CustomProviderCard extends LitElement {
+ 
+ 		const statusIcon =
+ 			this.status.status === "connected"
+-				? html`<span class="text-green-500">●</span>`
++				? html`<span class="text-foreground">●</span>`
+ 				: this.status.status === "checking"
+-					? html`<span class="text-yellow-500">●</span>`
+-					: html`<span class="text-red-500">●</span>`;
++					? html`<span class="text-muted-foreground">●</span>`
++					: html`<span class="text-destructive">●</span>`;
+ 
+ 		const statusText =
+ 			this.status.status === "connected"
 diff --git a/packages/web-ui/src/components/MessageEditor.ts b/packages/web-ui/src/components/MessageEditor.ts
 index f0987c4d..8a196db8 100644
 --- a/packages/web-ui/src/components/MessageEditor.ts
@@ -297,8 +315,21 @@ index f0987c4d..8a196db8 100644
  										className: "h-8 w-8",
  									})}
  								`
+diff --git a/packages/web-ui/src/components/ProviderKeyInput.ts b/packages/web-ui/src/components/ProviderKeyInput.ts
+index 61dac606..795f2f1a 100644
+--- a/packages/web-ui/src/components/ProviderKeyInput.ts
++++ b/packages/web-ui/src/components/ProviderKeyInput.ts
+@@ -122,7 +122,7 @@ export class ProviderKeyInput extends LitElement {
+ 						this.testing
+ 							? Badge({ children: i18n("Testing..."), variant: "secondary" })
+ 							: this.hasKey
+-								? html`<span class="text-green-600 dark:text-green-400">✓</span>`
++								? html`<span class="text-foreground">✓</span>`
+ 								: ""
+ 					}
+ 					${this.failed ? Badge({ children: i18n("✗ Invalid"), variant: "destructive" }) : ""}
 diff --git a/packages/web-ui/src/dialogs/ModelSelector.ts b/packages/web-ui/src/dialogs/ModelSelector.ts
-index 192c3c53..80357256 100644
+index 192c3c53..26a38133 100644
 --- a/packages/web-ui/src/dialogs/ModelSelector.ts
 +++ b/packages/web-ui/src/dialogs/ModelSelector.ts
 @@ -3,7 +3,8 @@ import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
@@ -402,6 +433,15 @@ index 192c3c53..80357256 100644
  				${Input({
  					placeholder: i18n("Search models..."),
  					value: this.searchQuery,
+@@ -346,7 +392,7 @@ export class ModelSelector extends DialogBase {
+ 							<div class="flex items-center justify-between gap-2 mb-1">
+ 								<div class="flex items-center gap-2 flex-1 min-w-0">
+ 									<span class="text-sm font-medium text-foreground truncate">${id}</span>
+-									${isCurrent ? html`<span class="text-green-500">✓</span>` : ""}
++									${isCurrent ? html`<span class="text-foreground">✓</span>` : ""}
+ 								</div>
+ 								${Badge(provider, "outline")}
+ 							</div>
 diff --git a/packages/web-ui/src/index.ts b/packages/web-ui/src/index.ts
 index 48284c74..c40d71a9 100644
 --- a/packages/web-ui/src/index.ts
@@ -424,6 +464,28 @@ index 48284c74..c40d71a9 100644
  export { PersistentStorageDialog } from "./dialogs/PersistentStorageDialog.js";
  export { ProvidersModelsTab } from "./dialogs/ProvidersModelsTab.js";
  export { SessionListDialog } from "./dialogs/SessionListDialog.js";
+diff --git a/packages/web-ui/src/tools/renderer-registry.ts b/packages/web-ui/src/tools/renderer-registry.ts
+index 0d19781d..fd8dffb3 100644
+--- a/packages/web-ui/src/tools/renderer-registry.ts
++++ b/packages/web-ui/src/tools/renderer-registry.ts
+@@ -48,7 +48,7 @@ export function renderHeader(
+ 		case "complete":
+ 			return html`
+ 				<div class="flex items-center gap-2 text-sm text-muted-foreground">
+-					${statusIcon(toolIcon, "text-green-600 dark:text-green-500")}
++					${statusIcon(toolIcon, "text-muted-foreground")}
+ 					${text}
+ 				</div>
+ 			`;
+@@ -109,7 +109,7 @@ export function renderCollapsibleHeader(
+ 
+ 	const toolIconColor =
+ 		state === "complete"
+-			? "text-green-600 dark:text-green-500"
++			? "text-muted-foreground"
+ 			: state === "error"
+ 				? "text-destructive"
+ 				: "text-foreground";
 diff --git a/packages/web-ui/src/utils/i18n.ts b/packages/web-ui/src/utils/i18n.ts
 index 1f50a7d0..8379569a 100644
 --- a/packages/web-ui/src/utils/i18n.ts

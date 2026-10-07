@@ -1,3 +1,4 @@
+import { chartPalette } from "../utils/chart-palette.js";
 import "@mariozechner/mini-lit/dist/MarkdownBlock.js";
 import { DialogBase } from "@mariozechner/mini-lit/dist/DialogBase.js";
 import { icon } from "@mariozechner/mini-lit/dist/icons.js";
@@ -128,6 +129,7 @@ export class SessionCostDialog extends DialogBase {
 		const textColor = styles.getPropertyValue("--color-foreground").trim();
 		const gridColor = styles.getPropertyValue("--color-border").trim();
 
+		const palette = chartPalette(4);
 		const config: ChartConfiguration = {
 			type: "bar",
 			data: {
@@ -136,22 +138,22 @@ export class SessionCostDialog extends DialogBase {
 					{
 						label: "Input Cost",
 						data: this.costEntries.map((entry) => entry.inputCost),
-						backgroundColor: "rgb(99, 102, 241)", // indigo
+						backgroundColor: palette[0],
 					},
 					{
 						label: "Output Cost",
 						data: this.costEntries.map((entry) => entry.outputCost),
-						backgroundColor: "rgb(34, 197, 94)", // green
+						backgroundColor: palette[1],
 					},
 					{
 						label: "Cache Read Cost",
 						data: this.costEntries.map((entry) => entry.cacheReadCost),
-						backgroundColor: "rgb(251, 146, 60)", // orange
+						backgroundColor: palette[2],
 					},
 					{
 						label: "Cache Write Cost",
 						data: this.costEntries.map((entry) => entry.cacheWriteCost),
-						backgroundColor: "rgb(168, 85, 247)", // purple
+						backgroundColor: palette[3],
 					},
 				],
 			},
@@ -334,14 +336,10 @@ export class SessionCostDialog extends DialogBase {
 													</td>
 													<td class="px-3 py-2 text-muted-foreground">
 														<span
-															class="inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
-																entry.stopReason === "stop"
-																	? "bg-green-500/20 text-green-700 dark:text-green-300"
-																	: entry.stopReason === "toolUse"
-																		? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
-																		: entry.stopReason === "length"
-																			? "bg-yellow-500/20 text-yellow-700 dark:text-yellow-300"
-																			: "bg-red-500/20 text-red-700 dark:text-red-300"
+															class="inline-block px-2 py-0.5 rounded text-[10px] font-medium border border-border ${
+																entry.stopReason === "stop" || entry.stopReason === "toolUse"
+																	? "text-muted-foreground"
+																	: "text-destructive"
 															}"
 														>
 															${entry.stopReason}

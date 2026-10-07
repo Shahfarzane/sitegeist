@@ -43,16 +43,16 @@ export class Toast extends LitElement {
 					? icon(AlertCircle, "sm")
 					: icon(AlertCircle, "sm");
 
-		const bgColor = this.type === "success" ? "bg-green-600" : this.type === "error" ? "bg-destructive" : "bg-muted";
+		const tone = this.type === "error" ? "text-destructive" : "text-foreground";
 
 		return html`
 			<div class="fixed top-4 right-4 z-[9999] ${this.isExiting ? "animate-out slide-out-to-right duration-300" : "animate-in slide-in-from-right duration-300"}">
-				<div class="min-w-[300px] max-w-[400px] flex items-center gap-3 px-4 py-3 ${bgColor} text-white rounded-lg shadow-lg border border-border">
-					${iconEl}
+				<div class="min-w-[240px] max-w-[360px] flex items-center gap-3 px-3 py-2.5 bg-popover text-popover-foreground rounded-lg shadow-lg border border-border">
+					<span class=${tone}>${iconEl}</span>
 					<span class="flex-1 text-sm font-medium">${this.message}</span>
 					<button
 						@click=${() => this.dismiss()}
-						class="hover:bg-white/20 rounded p-1 transition-colors"
+						class="text-muted-foreground hover:text-foreground hover:bg-accent rounded p-1"
 					>
 						${icon(X, "sm")}
 					</button>

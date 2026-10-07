@@ -114,7 +114,7 @@ export class ApiKeysOAuthTab extends SettingsTab {
 					<div class="text-xs text-muted-foreground mt-1">
 						${
 							status === "logged-in"
-								? html`<span class="text-green-600 dark:text-green-400">Connected</span>`
+								? html`<span class="text-foreground">Connected</span>`
 								: status === "logging-in"
 									? this.deviceCode
 										? html`<span>Enter code: <strong class="text-foreground font-mono">${this.deviceCode}</strong></span>`
