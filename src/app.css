@@ -188,9 +188,9 @@ input[type="range"] {
 
 .orb-container {
 	background-color: var(--background);
-	/* Responsive sizing: scale with viewport height, capped at 400px */
-	width: min(400px, 30vh);
-	height: min(400px, 30vh);
+	/* Scale with viewport height, capped so the welcome screen stays compact */
+	width: min(240px, 26vh);
+	height: min(240px, 26vh);
 	display: block;
 	/* Ensure it maintains aspect ratio */
 	aspect-ratio: 1 / 1;

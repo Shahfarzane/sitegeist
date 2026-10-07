@@ -2,7 +2,7 @@ import type { Agent } from "@mariozechner/pi-agent-core";
 import type { AgentInterface, MessageRenderer } from "@mariozechner/pi-web-ui";
 import { registerMessageRenderer } from "@mariozechner/pi-web-ui";
 import { html, LitElement, type TemplateResult } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import "../components/OrbAnimation.js";
 
 export interface TutorialPrompt {
@@ -13,6 +13,12 @@ export interface TutorialPrompt {
 export interface WelcomeMessage {
 	role: "welcome";
 	tutorials: TutorialPrompt[];
+}
+
+/** First-run hooks: whether any provider is connected, and the flow that connects one. */
+export interface WelcomeOnboarding {
+	hasProvider: () => Promise<boolean>;
+	connect: () => Promise<void>;
 }
 
 declare module "@mariozechner/pi-agent-core" {
@@ -27,6 +33,9 @@ export class WelcomeMessageElement extends LitElement {
 	@property({ attribute: false }) agent!: Agent;
 	@property({ attribute: false }) agentInterface!: AgentInterface;
 	@property({ attribute: false }) message!: WelcomeMessage;
+	@property({ attribute: false }) onboarding?: WelcomeOnboarding;
+	// Unknown until checked, so the connect prompt does not flash for configured users.
+	@state() private needsProvider: boolean | undefined;
 
 	private taglineWords = ["automate", "write", "transform", "research", "scrape", "create"];
 	private currentWordIndex = 0;
@@ -36,8 +45,18 @@ export class WelcomeMessageElement extends LitElement {
 		return this;
 	}
 
+	private async checkProvider() {
+		this.needsProvider = this.onboarding ? !(await this.onboarding.hasProvider()) : false;
+	}
+
+	private async connect() {
+		await this.onboarding?.connect();
+		await this.checkProvider();
+	}
+
 	override connectedCallback() {
 		super.connectedCallback();
+		void this.checkProvider();
 		// Rotate tagline word every 2 seconds
 		this.intervalId = window.setInterval(() => {
 			this.currentWordIndex = (this.currentWordIndex + 1) % this.taglineWords.length;
@@ -63,45 +82,59 @@ export class WelcomeMessageElement extends LitElement {
 
 	override render(): TemplateResult {
 		return html`
-			<div class="welcome-orb-container my-8 flex flex-col items-center justify-center">
-				<!-- Title and tagline first -->
-				<div class="text-center mb-8">
-					<h1 class="text-5xl font-bold mb-4">Sitegeist</h1>
-					<p class="text-xl text-muted-foreground">
-						Your AI companion for the web to
-						<span
-							class="rotating-word inline-block min-w-[120px] text-left font-semibold text-foreground"
-							key=${this.currentWordIndex}
-							>${this.taglineWords[this.currentWordIndex]}</span
-						>
-					</p>
-				</div>
+			<div class="welcome-orb-container my-6 flex flex-col items-center justify-center text-center">
+				<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sitegeist</h1>
+				<p class="mt-1 text-sm text-muted-foreground">
+					Your AI companion for the web to
+					<span class="rotating-word inline-block min-w-[72px] text-left font-medium text-foreground" key=${this.currentWordIndex}
+						>${this.taglineWords[this.currentWordIndex]}</span
+					>
+				</p>
 
-				<!-- Three.js Orb Animation -->
-				<div class="flex items-center justify-center -my-8 mb-4">
+				<div class="flex items-center justify-center my-2">
 					<orb-animation></orb-animation>
 				</div>
 
-				<!-- Tutorial pills -->
-				<div class="flex flex-wrap gap-3 justify-center max-w-lg px-6 mt-4">
-					${this.tutorials.map(
-						(tutorial, index) => html`
-							<button
-								class="tutorial-pill px-6 py-3 text-sm font-medium text-foreground rounded-full cursor-pointer"
-								@click=${() => this.selectTutorial(tutorial.prompt)}
-								style="animation-delay: ${index * 0.1}s;"
-							>
-								${tutorial.label}
-							</button>
-						`,
-					)}
-				</div>
+				${
+					this.needsProvider === undefined
+						? ""
+						: this.needsProvider
+							? html`
+									<p class="text-sm text-muted-foreground max-w-xs">
+										Connect a model provider (a Claude, ChatGPT, Copilot or Gemini subscription, or an API key) to get started.
+									</p>
+									<button
+										class="mt-4 inline-flex items-center h-9 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+										@click=${() => this.connect()}
+									>
+										Connect a provider
+									</button>
+								`
+							: html`
+									<div class="flex flex-wrap gap-2 justify-center max-w-sm px-4">
+										${this.tutorials.map(
+											(tutorial) => html`
+												<button
+													class="tutorial-pill px-3 py-1.5 text-xs font-medium text-foreground rounded-full cursor-pointer"
+													@click=${() => this.selectTutorial(tutorial.prompt)}
+												>
+													${tutorial.label}
+												</button>
+											`,
+										)}
+									</div>
+								`
+				}
 			</div>
 		`;
 	}
 }
 
-export function createWelcomeRenderer(agent: Agent, agentInterface: AgentInterface): MessageRenderer<WelcomeMessage> {
+export function createWelcomeRenderer(
+	agent: Agent,
+	agentInterface: AgentInterface,
+	onboarding?: WelcomeOnboarding,
+): MessageRenderer<WelcomeMessage> {
 	return {
 		render: (message) => {
 			// Only show if no conversation started yet
@@ -114,13 +147,14 @@ export function createWelcomeRenderer(agent: Agent, agentInterface: AgentInterfa
 				.agent=${agent}
 				.agentInterface=${agentInterface}
 				.message=${message}
+				.onboarding=${onboarding}
 			></welcome-message>`;
 		},
 	};
 }
 
-export function registerWelcomeRenderer(agent: Agent, agentInterface: AgentInterface) {
-	registerMessageRenderer("welcome", createWelcomeRenderer(agent, agentInterface));
+export function registerWelcomeRenderer(agent: Agent, agentInterface: AgentInterface, onboarding?: WelcomeOnboarding) {
+	registerMessageRenderer("welcome", createWelcomeRenderer(agent, agentInterface, onboarding));
 }
 
 export function createWelcomeMessage(tutorials: TutorialPrompt[]): WelcomeMessage {

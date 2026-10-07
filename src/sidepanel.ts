@@ -40,7 +40,6 @@ import { SitegeistSessionListDialog } from "./dialogs/SessionListDialog.js";
 import { type SettingsSection, SettingsSheet } from "./dialogs/SettingsSheet.js";
 import { SkillsTab } from "./dialogs/SkillsTab.js";
 import { UpdateNotificationDialog } from "./dialogs/UpdateNotificationDialog.js";
-import { WelcomeSetupDialog } from "./dialogs/WelcomeSetupDialog.js";
 import { browserMessageTransformer } from "./messages/message-transformer.js";
 import {
 	createNavigationMessage,
@@ -776,7 +775,15 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 
 	// Register custom message renderers after agentInterface is available
 	if (chatPanel.agentInterface) {
-		registerWelcomeRenderer(agent, chatPanel.agentInterface);
+		registerWelcomeRenderer(agent, chatPanel.agentInterface, {
+			hasProvider: hasAnyApiKey,
+			connect: async () => {
+				await openSettings("Providers");
+				await refreshDiscoveredModels(storage, { wait: true }).catch(() => {});
+				await selectDefaultModelForAvailableProvider();
+				renderApp();
+			},
+		});
 
 		// Thinking level now lives inside the model picker, not as a separate
 		// dropdown in the input toolbar.
@@ -1232,22 +1239,16 @@ async function initApp() {
 	// No session - create new agent with welcome message
 	await createAgent();
 
-	// Add welcome message for new sessions
+	// Add welcome message for new sessions. With no provider connected it carries the
+	// "Connect a provider" prompt (see registerWelcomeRenderer), so nothing is forced open.
 	if (agent) {
 		const welcomeMessage = createWelcomeMessage(tutorials);
 		agent.appendMessage(welcomeMessage);
+		// appendMessage emits no agent event, so the message list would keep the old array.
+		chatPanel.agentInterface?.requestUpdate();
 	}
 
 	renderApp();
-
-	// If no API keys configured, show welcome dialog, open settings, then auto-select model
-	if (!(await hasAnyApiKey())) {
-		await WelcomeSetupDialog.show();
-		await openApiKeysDialog();
-		await refreshDiscoveredModels(storage, { wait: true }).catch(() => {});
-		await selectDefaultModelForAvailableProvider();
-		renderApp();
-	}
 }
 
 // Register custom user message renderer early, before any session loads
