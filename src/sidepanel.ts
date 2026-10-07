@@ -1,7 +1,6 @@
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { Input } from "@mariozechner/mini-lit/dist/Input.js";
-import "@mariozechner/mini-lit/dist/ThemeToggle.js";
 import {
 	Agent,
 	type AgentEvent,
@@ -26,6 +25,8 @@ import { isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
 import { BrowserSession, listSessions, sessionIdForTab, sessionOwningTab } from "./browser/session.js";
+import "./components/OverflowMenu.js";
+import type { MenuEntry } from "./components/OverflowMenu.js";
 import { Toast } from "./components/Toast.js";
 import { AboutTab } from "./dialogs/AboutTab.js";
 import { ApiKeyOrOAuthDialog } from "./dialogs/ApiKeyOrOAuthDialog.js";
@@ -63,6 +64,7 @@ import { BrowserJsRuntimeProvider, NavigateRuntimeProvider } from "./tools/repl/
 import { syncCustomProviderCorsRules } from "./utils/custom-provider-cors.js";
 import { downloadChatMarkdown } from "./utils/export-chat.js";
 import * as port from "./utils/port.js";
+import { watchSystemTheme } from "./utils/theme.js";
 import "./utils/i18n-extension.js";
 import "./utils/live-reload.js";
 import { tutorials } from "./tutorials.js";
@@ -106,6 +108,7 @@ setCdpMessageHandler(async (message) => {
 // ============================================================================
 const storage = new SitegeistAppStorage();
 setAppStorage(storage);
+watchSystemTheme();
 
 // ============================================================================
 // APP STATE
@@ -840,36 +843,28 @@ const newSession = () => {
 const renderApp = () => {
 	const appHtml = html`
 		<div class="w-full h-full flex flex-col bg-background text-foreground overflow-hidden">
-			<!-- Header -->
-			<div class="flex items-center justify-between border-b border-border shrink-0">
-				<div class="flex items-center gap-2 px-3 py-2">
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(History, "sm"),
-						onClick: () => {
-							SitegeistSessionListDialog.open(
-								(sessionId: string) => {
-									loadSession(sessionId);
-								},
-								(deletedSessionId: string) => {
-									// Only reload if the current session was deleted
-									if (deletedSessionId === currentSessionId) {
-										newSession();
-									}
-								},
-							);
-						},
-						title: "Sessions",
-					})}
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(Plus, "sm"),
-						onClick: newSession,
-						title: "New Session",
-					})}
-
+			<!-- Header: sessions, title, new chat, and everything else behind the overflow menu -->
+			<div class="flex items-center gap-1 h-11 px-1.5 border-b border-border shrink-0">
+				${Button({
+					variant: "ghost",
+					size: "icon",
+					children: icon(History, "sm"),
+					onClick: () => {
+						SitegeistSessionListDialog.open(
+							(sessionId: string) => {
+								loadSession(sessionId);
+							},
+							(deletedSessionId: string) => {
+								// Only reload if the current session was deleted
+								if (deletedSessionId === currentSessionId) {
+									newSession();
+								}
+							},
+						);
+					},
+					title: "Sessions",
+				})}
+				<div class="flex-1 min-w-0 flex items-center">
 					${
 						currentTitle
 							? isEditingTitle
@@ -877,7 +872,7 @@ const renderApp = () => {
 									${Input({
 										type: "text",
 										value: currentTitle,
-										className: "text-sm w-48",
+										className: "text-sm w-full",
 										/*
 										TODO need to add this in Input in mini-lit
 										onBlur: async (e: Event) => {
@@ -906,7 +901,7 @@ const renderApp = () => {
 									})}
 								</div>`
 								: html`<button
-									class="px-2 py-1 text-xs text-foreground hover:bg-secondary rounded transition-colors truncate max-w-[150px]"
+									class="px-2 py-1 text-sm font-medium text-foreground hover:bg-accent rounded-md truncate max-w-full"
 									@click=${() => {
 										isEditingTitle = true;
 										renderApp();
@@ -922,41 +917,45 @@ const renderApp = () => {
 								>
 									${currentTitle}
 								</button>`
-							: html``
+							: html`<span class="px-2 text-sm text-muted-foreground">New chat</span>`
 					}
 				</div>
-				<div class="flex items-center gap-1 px-2">
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(Link, "sm"),
-						onClick: shareActiveTab,
-						title: "Share the tab you are viewing with the agent",
-					})}
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(isRecording ? Square : Circle, "sm"),
-						className: isRecording ? "text-destructive animate-pulse" : "",
-						onClick: toggleRecording,
-						title: isRecording ? "Stop recording and save as skill" : "Record actions on this page as a skill",
-					})}
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(Download, "sm"),
-						onClick: downloadCurrentChat,
-						title: "Download chat (Markdown)",
-					})}
-					<theme-toggle></theme-toggle>
-					${Button({
-						variant: "ghost",
-						size: "sm",
-						children: icon(Settings, "sm"),
-						onClick: () => void openSettings(),
-						title: "Settings",
-					})}
-				</div>
+				${
+					isRecording
+						? html`<button
+								class="flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium text-destructive hover:bg-accent"
+								title="Stop recording and save as skill"
+								@click=${toggleRecording}
+							>
+								<span class="size-1.5 rounded-full bg-destructive animate-pulse"></span>
+								Stop
+							</button>`
+						: ""
+				}
+				${Button({
+					variant: "ghost",
+					size: "icon",
+					children: icon(Plus, "sm"),
+					onClick: newSession,
+					title: "New chat",
+				})}
+				<overflow-menu
+					.entries=${
+						[
+							{ label: "Share this tab", icon: Link, onSelect: shareActiveTab },
+							{
+								label: isRecording ? "Stop recording" : "Record a skill",
+								icon: isRecording ? Square : Circle,
+								onSelect: toggleRecording,
+							},
+							{ label: "Download chat", icon: Download, onSelect: downloadCurrentChat },
+							"separator",
+							"theme",
+							"separator",
+							{ label: "Settings", icon: Settings, onSelect: () => void openSettings() },
+						] satisfies MenuEntry[]
+					}
+				></overflow-menu>
 			</div>
 
 			<!-- Chat Panel -->
@@ -996,7 +995,7 @@ window.addEventListener(
 	(e) => {
 		// Escape key to abort streaming - works globally in sidepanel
 		// Use capturing phase to intercept before MessageEditor handles it
-		if (e.key === "Escape" && agent?.state.isStreaming) {
+		if (e.key === "Escape" && agent?.state.isStreaming && !document.querySelector("overflow-menu[open]")) {
 			e.preventDefault();
 			e.stopPropagation();
 			agent.abort();
