@@ -160,6 +160,7 @@ export const BRIDGE_METHODS = [
 	"scroll",
 	"fill",
 	"evaluate",
+	"cdp",
 	"wait",
 	"console.read",
 	"network.read",

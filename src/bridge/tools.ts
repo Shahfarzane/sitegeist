@@ -7,6 +7,7 @@
 import {
 	captureScreenshot,
 	scroll as cdpScroll,
+	cdpSend,
 	click,
 	drag,
 	enableConsoleCapture,
@@ -83,6 +84,33 @@ function requireStr(params: Params, key: string): string {
 	const v = str(params, key);
 	if (!v) throw new BridgeError(ERR.BAD_PARAMS, `${key} is required`);
 	return v;
+}
+
+/**
+ * Raw CDP stays inside the session's own tab: commands that reach other targets or
+ * browser-wide state (every site's cookies, cache, storage) would bypass the per-site
+ * permission model, so they are refused. Page.navigate goes through the permission check.
+ */
+const CDP_DENIED_PREFIXES = ["Target.", "Browser.", "Storage.", "SystemInfo."];
+const CDP_DENIED_METHODS = new Set([
+	"Network.getAllCookies",
+	"Network.clearBrowserCookies",
+	"Network.clearBrowserCache",
+	"Page.close",
+	"Page.navigateToHistoryEntry",
+	"Page.setDownloadBehavior",
+]);
+
+function checkCdpMethod(method: string): void {
+	if (!/^[A-Z][A-Za-z]+\.[a-z][A-Za-z]+$/.test(method)) {
+		throw new BridgeError(ERR.BAD_PARAMS, `method must look like Domain.command, got "${method}"`);
+	}
+	if (CDP_DENIED_METHODS.has(method) || CDP_DENIED_PREFIXES.some((p) => method.startsWith(p))) {
+		throw new BridgeError(
+			ERR.PERMISSION_DENIED,
+			`${method} is not available through the bridge: it reaches beyond this session's tab. Use navigate, tabs_create or tabs_close for tab changes.`,
+		);
+	}
 }
 
 async function resolveTab(ctx: HandlerContext, params: Params, attach: boolean): Promise<number> {
@@ -376,6 +404,23 @@ export const handlers: Record<string, Handler> = {
 		}
 		const tabId = await resolveTab(ctx, params, true);
 		return { value: await injectScript(tabId, code) };
+	},
+
+	/** Any Chrome DevTools Protocol command on the session's current tab. */
+	cdp: async (ctx, params) => {
+		const method = requireStr(params, "method");
+		checkCdpMethod(method);
+		const cdpParams = params.params ?? {};
+		if (typeof cdpParams !== "object" || Array.isArray(cdpParams)) {
+			throw new BridgeError(ERR.BAD_PARAMS, "params must be an object");
+		}
+		if (method === "Page.navigate") {
+			const url = str(cdpParams as Params, "url");
+			if (!url) throw new BridgeError(ERR.BAD_PARAMS, "Page.navigate needs params.url");
+			await ctx.checkUrl(url);
+		}
+		const tabId = await resolveTab(ctx, params, true);
+		return { tabId, result: await cdpSend(tabId, method, cdpParams as Params) };
 	},
 
 	wait: async (ctx, params) => {

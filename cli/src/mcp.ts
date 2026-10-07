@@ -13,6 +13,9 @@ import { VERSION } from "./version.ts";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
+/** Raw CDP results can be megabytes (DOM.getDocument depth -1, base64 captures). */
+const CDP_RESULT_MAX_CHARS = 100_000;
+
 function text(value: unknown): Content[] {
 	return [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }];
 }
@@ -412,6 +415,26 @@ export async function runMcpServer(): Promise<void> {
 			inputSchema: { code: z.string(), tabId, world: z.enum(["user", "main"]).optional() },
 		},
 		(args) => call("evaluate", args),
+	);
+	server.registerTool(
+		"cdp",
+		{
+			description:
+				"Send a raw Chrome DevTools Protocol command to your current tab and return its result (e.g. Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, DOM.getDocument, Performance.getMetrics, Input.dispatchMouseEvent). The tab is already attached; enable domains first if a command needs it. Page.navigate asks for site permission like navigate does. Commands that reach other tabs or browser-wide state (Target.*, Browser.*, Storage.*, Network.getAllCookies, clearing cache or cookies) are refused. Events are not streamed: use read_console and read_network. Prefer the dedicated tools when one fits.",
+			inputSchema: {
+				method: z.string().describe("CDP method, e.g. Emulation.setDeviceMetricsOverride"),
+				params: z.record(z.unknown()).optional().describe("Command parameters as in the CDP docs"),
+				tabId,
+			},
+		},
+		async (args) => {
+			const res = await call("cdp", args);
+			const first = res.content[0];
+			if (!res.isError && first?.type === "text" && first.text.length > CDP_RESULT_MAX_CHARS) {
+				first.text = `${first.text.slice(0, CDP_RESULT_MAX_CHARS)}\n[truncated: ${first.text.length} chars total; narrow the command (depth, selectors, clip)]`;
+			}
+			return res;
+		},
 	);
 	server.registerTool(
 		"wait",

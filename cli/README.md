@@ -65,5 +65,10 @@ mode to "allow any site" there. pi: set `SITEGEIST_AUTO_ALLOW=1` to auto-approve
 
 `tabs_context`, `tabs_create`, `tabs_close`, `tabs_select`, `tabs_show`, `navigate`,
 `screenshot`, `read_page`, `get_page_text`, `get_page_html`, `find`, `click`, `hover`,
-`type`, `press`, `fill`, `scroll`, `drag`, `run_js`, `wait`, `read_console`,
+`type`, `press`, `fill`, `scroll`, `drag`, `actions`, `run_js`, `cdp`, `wait`, `read_console`,
 `read_network`. `tabs_show` is the only tool that changes what the user sees.
+
+`cdp` sends a raw Chrome DevTools Protocol command to the session's current tab (emulation,
+headers, PDF, DOM, performance, input). `Page.navigate` goes through the site permission
+check; commands that reach other tabs or browser-wide state (`Target.*`, `Browser.*`,
+`Storage.*`, `Network.getAllCookies`, clearing cache or cookies) are refused.

@@ -134,7 +134,7 @@ Extension:
   `tabGroups`, `nativeMessaging`, `alarms`.
 - Fixed the type errors in the custom provider dialogs.
 
-CLI (`cli/`, package `sitegeist`): native host, socket client, MCP server with 22 tools,
+CLI (`cli/`, package `sitegeist`): native host, socket client, MCP server with 24 tools (including raw `cdp`),
 installer for all Chromium browser directories (macOS, Linux, Windows registry), pi
 extension generator.
 
