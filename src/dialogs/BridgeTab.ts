@@ -127,7 +127,7 @@ export class BridgeTab extends SettingsTab {
 								<div class="text-sm font-medium text-foreground">Waiting for your answer</div>
 								${this.pending.map(
 									(p) => html`
-										<div class="p-3 rounded-lg border border-orange-500/40 bg-orange-500/10 space-y-2">
+										<div class="p-3 rounded-lg border border-border bg-secondary space-y-2">
 											<div class="text-sm text-foreground"><span class="font-medium">${p.clientName}</span> wants to open <span class="font-mono">${p.host}</span></div>
 											<div class="text-xs text-muted-foreground break-all">${p.url}</div>
 											<div class="flex gap-2 flex-wrap">

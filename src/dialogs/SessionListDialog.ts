@@ -458,7 +458,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 						${Badge({
 							children: `$${stats.totalCost.toFixed(4)}`,
 							variant: "secondary",
-							className: stats.totalCost > 0.01 ? "text-orange-500" : "text-green-600",
+							className: "text-muted-foreground",
 						})}
 					</div>
 
@@ -488,7 +488,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 														<span class="font-medium">${this.formatDate(session.lastModified)}</span>
 														<span>${session.messageCount} ${i18n("messages")}</span>
 														<span>${formatUsage(session.usage)}</span>
-														<span class="font-semibold ${cost > 0.01 ? "text-orange-500" : "text-green-600"}">
+														<span class="font-medium text-foreground">
 															$${cost.toFixed(4)}
 														</span>
 													</div>

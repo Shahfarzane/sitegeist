@@ -612,7 +612,7 @@ export const skillRenderer: ToolRenderer<SkillParams, SkillResultDetails> = {
 						lastUpdated: "",
 					};
 
-					const statusIcon = html`<span class="inline-block text-green-600 dark:text-green-500">${icon(Sparkles, "sm")}</span>`;
+					const statusIcon = html`<span class="inline-block text-muted-foreground">${icon(Sparkles, "sm")}</span>`;
 
 					return {
 						content: html`
@@ -638,7 +638,7 @@ export const skillRenderer: ToolRenderer<SkillParams, SkillResultDetails> = {
 
 					// Get domain from first skill
 					const domain = skills[0]?.domainPatterns?.[0] || "";
-					const statusIcon = html`<span class="inline-block text-green-600 dark:text-green-500">${icon(Sparkles, "sm")}</span>`;
+					const statusIcon = html`<span class="inline-block text-muted-foreground">${icon(Sparkles, "sm")}</span>`;
 
 					return {
 						content: html`
@@ -758,7 +758,7 @@ export const skillRenderer: ToolRenderer<SkillParams, SkillResultDetails> = {
 				case "delete": {
 					// Show "Deleted skill" with pill in header row
 					const skillName = params.name;
-					const statusIcon = html`<span class="inline-block text-green-600 dark:text-green-500">${icon(Sparkles, "sm")}</span>`;
+					const statusIcon = html`<span class="inline-block text-muted-foreground">${icon(Sparkles, "sm")}</span>`;
 					return {
 						content: html`
 						<div class="flex items-center gap-2 text-sm text-muted-foreground">

@@ -41,7 +41,7 @@ export function TabPill(tab: TabInfo, clickable = true): TemplateResult {
 		>
 			<img src="${faviconUrl}" alt="" class="w-4 h-4 flex-shrink-0" />
 			<span class="text-foreground truncate max-w-[200px]">${tab.title}</span>
-			${tab.active ? html`<span class="text-green-600 dark:text-green-500 text-[10px] font-medium">●</span>` : ""}
+			${tab.active ? html`<span class="text-foreground text-[10px] font-medium">●</span>` : ""}
 		</div>
 	`;
 }

@@ -931,7 +931,7 @@ const renderApp = () => {
 						variant: "ghost",
 						size: "sm",
 						children: icon(isRecording ? Square : Circle, "sm"),
-						className: isRecording ? "text-red-500 animate-pulse" : "",
+						className: isRecording ? "text-destructive animate-pulse" : "",
 						onClick: toggleRecording,
 						title: isRecording ? "Stop recording and save as skill" : "Record actions on this page as a skill",
 					})}

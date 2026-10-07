@@ -3,6 +3,7 @@ import { SettingsTab } from "@mariozechner/pi-web-ui";
 import { Chart, type ChartConfiguration, registerables } from "chart.js";
 import { html, type PropertyValues } from "lit";
 import { getSitegeistStorage } from "../storage/app-storage.js";
+import { chartPalette } from "../utils/chart-palette.js";
 
 // Register Chart.js components
 Chart.register(...registerables);
@@ -164,17 +165,7 @@ export class CostsTab extends SettingsTab {
 					}
 				}
 
-				// Color palette for different models
-				const colors = [
-					"rgb(99, 102, 241)", // indigo
-					"rgb(244, 63, 94)", // rose
-					"rgb(34, 197, 94)", // green
-					"rgb(251, 146, 60)", // orange
-					"rgb(168, 85, 247)", // purple
-					"rgb(14, 165, 233)", // sky
-					"rgb(234, 179, 8)", // yellow
-					"rgb(236, 72, 153)", // pink
-				];
+				const colors = chartPalette(modelKeys.size);
 
 				// Create dataset for each model
 				const datasets = Array.from(modelKeys).map((modelKey, index) => {
@@ -244,14 +235,7 @@ export class CostsTab extends SettingsTab {
 						datasets: [
 							{
 								data: Object.values(this.byProvider),
-								backgroundColor: [
-									"rgb(99, 102, 241)", // indigo
-									"rgb(244, 63, 94)", // rose
-									"rgb(34, 197, 94)", // green
-									"rgb(251, 146, 60)", // orange
-									"rgb(168, 85, 247)", // purple
-									"rgb(14, 165, 233)", // sky
-								],
+								backgroundColor: chartPalette(Object.keys(this.byProvider).length),
 								borderWidth: 0,
 							},
 						],
