@@ -56,6 +56,9 @@
 - Escape while the overflow menu is open closes the menu instead of also aborting a running agent.
 - Dialog text without an explicit color was black in dark mode (dialogs mount on body, outside the themed app root); body now carries the theme colors. Destructive buttons are outlined with red text instead of filled red.
 
+### Removed
+- Upstream update check (About tab and the disabled startup prompt against `sitegeist.ai/uploads/version.json`) and `UpdateNotificationDialog`: the fork's version numbers differ and its updates come from signed releases.
+
 ## [1.0.0] - 2026-03-15
 
 ### Added
