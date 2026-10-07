@@ -1,0 +1,49 @@
+diff --git a/src/Dialog.ts b/src/Dialog.ts
+index 3905aec..0d09b4f 100644
+--- a/src/Dialog.ts
++++ b/src/Dialog.ts
+@@ -59,13 +59,15 @@ export const Dialog = fc<DialogProps>(
+          }, 0);
+       }
+ 
++      // Below the sm breakpoint (a browser side panel, a phone) the dialog is a sheet that
++      // fills the viewport edge to edge; wider viewports get the centered card at width x height.
+       return html`
+          <!-- Backdrop -->
+          <div class="fixed inset-0 ${backdropClassName} z-40" @click=${handleBackdropClick}>
+             <!-- Modal -->
+             <div
+-               class="fixed z-50 bg-background rounded-lg shadow-xl flex flex-col border border-border ${className}"
+-               style="top: 50%; left: 50%; transform: translate(-50%, -50%); width: ${width}; height: ${height};"
++               class="fixed z-50 inset-0 bg-background flex flex-col overflow-y-auto sm:overflow-visible sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[var(--dialog-width)] sm:h-[var(--dialog-height)] sm:rounded-lg sm:border sm:border-border sm:shadow-xl ${className}"
++               style="--dialog-width: ${width}; --dialog-height: ${height};"
+                @click=${(e: Event) => e.stopPropagation()}
+             >
+                ${children}
+@@ -74,7 +76,7 @@ export const Dialog = fc<DialogProps>(
+                <button
+                   type="button"
+                   @click=${() => onClose?.()}
+-                  class="absolute top-4 right-4 rounded-sm text-muted-foreground opacity-70 transition-all hover:opacity-100 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:pointer-events-none cursor-pointer"
++                  class="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none cursor-pointer"
+                   aria-label="${i18n("Close")}"
+                >
+                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+@@ -91,7 +93,7 @@ export const Dialog = fc<DialogProps>(
+ export const DialogHeader = fc<DialogHeaderProps>(({ title, description, className = "" }) => {
+    return html`
+       <div class="pr-8 ${className}">
+-         <h2 class="text-lg font-semibold text-foreground${description ? " mb-2" : ""}">${title}</h2>
++         <h2 class="text-base font-semibold text-foreground${description ? " mb-1" : ""}">${title}</h2>
+          ${description ? html`<p class="text-sm text-muted-foreground">${description}</p>` : ""}
+       </div>
+    `;
+@@ -99,7 +101,7 @@ export const DialogHeader = fc<DialogHeaderProps>(({ title, description, classNa
+ 
+ // Dialog content wrapper
+ export const DialogContent = fc<DialogContentProps>(({ children, className = "" }) => {
+-   return html` <div class="p-6 flex flex-col gap-4 ${className}">${children}</div> `;
++   return html` <div class="p-4 sm:p-6 flex flex-col gap-4 ${className}">${children}</div> `;
+ });
+ 
+ // Dialog footer for action buttons

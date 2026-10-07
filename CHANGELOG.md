@@ -25,6 +25,7 @@
 - Removed upstream working notes from the repository root (`db.md`, `gmail.md`, `plan.md`).
 - Manifest `key` is the private fork's CRX signing key (id `lnncppjiohlpejgcbdgoihplimdckddn`); the bridge's native messaging manifest allows that id.
 - `typescript@^5.9.3` is a devDependency, so `tsc` no longer resolves to a global TypeScript 7.
+- Side panel redesign (monochrome): neutral gray tokens, no hardcoded hues, grayscale charts; dialogs are full-height sheets below 640px (mini-lit patch `patches/mini-lit-v0.2.1-sitegeist.patch`, applied by `scripts/setup-siblings.sh`).
 
 ### Fixed
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
