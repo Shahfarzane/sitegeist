@@ -3,7 +3,7 @@
 	"minimum_chrome_version": "141",
 	"name": "sitegeist",
 	"description": "Your AI companion for the web - Research, automate, create",
-	"version": "1.2.1",
+	"version": "1.2.2",
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzAtNxsR6dCW90JCnKqLo3vSRPfm1LJgKDHxo/3F9thwy22EZKNbwLplvVopITTsNBVRmGH4mz2NUBD5rzNqYuHb4BgmqVcsjtbnORC6rcXcIAKcApXYNZXrGJLGi4cK+4a0nGsNZaUW5ok7cA88+81+lUSBRiF22DpkDH1VDmTPdGF0lBE7ZKiqLgAY/VarO99CvI6/brOhVF8Ul/Xprr6z/YYKwnyxTfipzXoAXzfuGG/9ZNiaWU2BSI8Rw0pNI8sshwu0O0hDeS/0GVeSk5mlcWKF2W0kDy3XG4057+Ax7BnGWgwJIa/nM9JV4a/KXjMBNqw+ZkT8Eprark8TJbwIDAQAB",
 	"action": {
 		"default_title": "Click to open side panel"
