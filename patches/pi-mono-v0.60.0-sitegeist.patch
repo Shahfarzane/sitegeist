@@ -1,0 +1,454 @@
+diff --git a/packages/ai/src/models.ts b/packages/ai/src/models.ts
+index 101c83f2..8c563a26 100644
+--- a/packages/ai/src/models.ts
++++ b/packages/ai/src/models.ts
+@@ -36,6 +36,28 @@ export function getModels<TProvider extends KnownProvider>(
+ 	return models ? (Array.from(models.values()) as Model<ModelApi<TProvider, keyof (typeof MODELS)[TProvider]>>[]) : [];
+ }
+ 
++export function registerModels(provider: string, models: Model<Api>[]): void {
++	const providerModels = new Map<string, Model<Api>>();
++	for (const model of models) providerModels.set(model.id, model);
++	modelRegistry.set(provider, providerModels);
++}
++
++export function resetProviderModels(provider: string): void {
++	const generated = (MODELS as Record<string, Record<string, Model<Api>>>)[provider];
++	if (!generated) {
++		modelRegistry.delete(provider);
++		return;
++	}
++	const providerModels = new Map<string, Model<Api>>();
++	for (const [id, model] of Object.entries(generated)) providerModels.set(id, model);
++	modelRegistry.set(provider, providerModels);
++}
++
++export function getGeneratedModels(provider: string): Model<Api>[] {
++	const generated = (MODELS as Record<string, Record<string, Model<Api>>>)[provider];
++	return generated ? Object.values(generated) : [];
++}
++
+ export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
+ 	usage.cost.input = (model.cost.input / 1000000) * usage.input;
+ 	usage.cost.output = (model.cost.output / 1000000) * usage.output;
+diff --git a/packages/web-ui/src/components/AgentInterface.ts b/packages/web-ui/src/components/AgentInterface.ts
+index b8f6550e..02e7ca03 100644
+--- a/packages/web-ui/src/components/AgentInterface.ts
++++ b/packages/web-ui/src/components/AgentInterface.ts
+@@ -2,7 +2,7 @@ import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/
+ import { html, LitElement } from "lit";
+ import { customElement, property, query } from "lit/decorators.js";
+ import { ModelSelector } from "../dialogs/ModelSelector.js";
+-import type { MessageEditor } from "./MessageEditor.js";
++import type { MessageEditor, SlashCommandProvider } from "./MessageEditor.js";
+ import "./MessageEditor.js";
+ import "./MessageList.js";
+ import "./Messages.js"; // Import for side effects to register the custom elements
+@@ -34,6 +34,10 @@ export class AgentInterface extends LitElement {
+ 	@property({ attribute: false }) onCostClick?: () => void;
+ 	// Optional callback to override model selector behavior
+ 	@property({ attribute: false }) onModelSelect?: () => void;
++	// Optional completions for "/" tokens typed in the message editor
++	@property({ attribute: false }) slashCommandProvider?: SlashCommandProvider;
++	// Optional text recalled by ArrowUp in an empty message editor
++	@property({ attribute: false }) historyProvider?: () => string | undefined;
+ 
+ 	// References
+ 	@query("message-editor") private _messageEditor!: MessageEditor;
+@@ -368,6 +372,8 @@ export class AgentInterface extends LitElement {
+ 							.showAttachmentButton=${this.enableAttachments}
+ 							.showModelSelector=${this.enableModelSelector}
+ 							.showThinkingSelector=${this.enableThinkingSelector}
++							.slashCommandProvider=${this.slashCommandProvider}
++							.historyProvider=${this.historyProvider}
+ 							.onSend=${(input: string, attachments: Attachment[]) => {
+ 								this.sendMessage(input, attachments);
+ 							}}
+diff --git a/packages/web-ui/src/components/MessageEditor.ts b/packages/web-ui/src/components/MessageEditor.ts
+index f0987c4d..8a196db8 100644
+--- a/packages/web-ui/src/components/MessageEditor.ts
++++ b/packages/web-ui/src/components/MessageEditor.ts
+@@ -5,12 +5,24 @@ import type { Model } from "@mariozechner/pi-ai";
+ import { html, LitElement } from "lit";
+ import { customElement, property, state } from "lit/decorators.js";
+ import { createRef, ref } from "lit/directives/ref.js";
+-import { Brain, Loader2, Paperclip, Send, Sparkles, Square } from "lucide";
++import { ArrowUp, Brain, Loader2, Paperclip, Square } from "lucide";
+ import { type Attachment, loadAttachment } from "../utils/attachment-utils.js";
+ import { i18n } from "../utils/i18n.js";
+ import "./AttachmentTile.js";
+ import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
+ 
++/** An entry in the "/" completion menu of the message editor. */
++export interface SlashCommandItem {
++	id: string;
++	title: string;
++	description?: string;
++	hint?: string;
++	/** Text that replaces the typed "/query" token. */
++	value: string;
++}
++
++export type SlashCommandProvider = (query: string) => SlashCommandItem[] | Promise<SlashCommandItem[]>;
++
+ @customElement("message-editor")
+ export class MessageEditor extends LitElement {
+ 	private _value = "";
+@@ -39,6 +51,8 @@ export class MessageEditor extends LitElement {
+ 	@property() onModelSelect?: () => void;
+ 	@property() onThinkingChange?: (level: "off" | "minimal" | "low" | "medium" | "high") => void;
+ 	@property() onFilesChange?: (files: Attachment[]) => void;
++	@property() slashCommandProvider?: SlashCommandProvider;
++	@property() historyProvider?: () => string | undefined;
+ 	@property() attachments: Attachment[] = [];
+ 	@property() maxFiles = 10;
+ 	@property() maxFileSize = 20 * 1024 * 1024; // 20MB
+@@ -47,7 +61,11 @@ export class MessageEditor extends LitElement {
+ 
+ 	@state() processingFiles = false;
+ 	@state() isDragging = false;
++	@state() private slashItems: SlashCommandItem[] = [];
++	@state() private slashIndex = 0;
++	private slashRequest = 0;
+ 	private fileInputRef = createRef<HTMLInputElement>();
++	private slashMenuRef = createRef<HTMLDivElement>();
+ 
+ 	protected override createRenderRoot(): HTMLElement | DocumentFragment {
+ 		return this;
+@@ -57,9 +75,103 @@ export class MessageEditor extends LitElement {
+ 		const textarea = e.target as HTMLTextAreaElement;
+ 		this.value = textarea.value;
+ 		this.onInput?.(this.value);
++		this.updateSlashMenu();
+ 	};
+ 
++	/** The "/query" token ending at the caret, if the caret sits in one. */
++	private findSlashToken(): { start: number; end: number; query: string } | undefined {
++		const textarea = this.textareaRef.value;
++		if (!textarea || textarea.selectionStart !== textarea.selectionEnd) return undefined;
++		const end = textarea.selectionStart;
++		const match = /(^|\s)\/(\S*)$/.exec(this.value.slice(0, end));
++		if (!match) return undefined;
++		return { start: end - match[2].length - 1, end, query: match[2] };
++	}
++
++	private async updateSlashMenu() {
++		const token = this.slashCommandProvider ? this.findSlashToken() : undefined;
++		const request = ++this.slashRequest;
++		if (!token || !this.slashCommandProvider) {
++			this.slashItems = [];
++			return;
++		}
++		let items: SlashCommandItem[] = [];
++		try {
++			items = await this.slashCommandProvider(token.query);
++		} catch (error) {
++			console.error("Slash command provider failed:", error);
++		}
++		// A newer keystroke started another lookup; drop this stale result.
++		if (request !== this.slashRequest) return;
++		this.slashItems = items;
++		this.slashIndex = 0;
++	}
++
++	private closeSlashMenu() {
++		this.slashRequest++;
++		this.slashItems = [];
++		this.slashIndex = 0;
++	}
++
++	private applySlashItem(item: SlashCommandItem) {
++		// Recompute the token: the caret may have moved since the menu opened.
++		const token = this.findSlashToken();
++		this.closeSlashMenu();
++		if (!token) return;
++		const insert = `${item.value} `;
++		this.value = this.value.slice(0, token.start) + insert + this.value.slice(token.end);
++		this.onInput?.(this.value);
++		this.placeCaret(token.start + insert.length);
++	}
++
++	private placeCaret(position: number) {
++		this.updateComplete.then(() => {
++			const textarea = this.textareaRef.value;
++			if (!textarea) return;
++			textarea.focus();
++			textarea.setSelectionRange(position, position);
++		});
++	}
++
++	private moveSlashSelection(delta: number) {
++		const count = this.slashItems.length;
++		this.slashIndex = (this.slashIndex + delta + count) % count;
++		this.updateComplete.then(() => {
++			const selected = this.slashMenuRef.value?.querySelectorAll("[data-slash-item]")[this.slashIndex];
++			selected?.scrollIntoView({ block: "nearest" });
++		});
++	}
++
+ 	private handleKeyDown = (e: KeyboardEvent) => {
++		if (this.slashItems.length > 0 && !e.isComposing) {
++			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
++				e.preventDefault();
++				this.moveSlashSelection(e.key === "ArrowDown" ? 1 : -1);
++				return;
++			}
++			if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
++				e.preventDefault();
++				this.applySlashItem(this.slashItems[this.slashIndex]);
++				return;
++			}
++			if (e.key === "Escape") {
++				e.preventDefault();
++				this.closeSlashMenu();
++				return;
++			}
++		}
++
++		if (e.key === "ArrowUp" && this.historyProvider && !this.value) {
++			const previous = this.historyProvider();
++			if (previous) {
++				e.preventDefault();
++				this.value = previous;
++				this.onInput?.(this.value);
++				this.placeCaret(previous.length);
++			}
++			return;
++		}
++
+ 		if (e.key === "Enter" && !e.shiftKey) {
+ 			e.preventDefault();
+ 			if (!this.isStreaming && !this.processingFiles && (this.value.trim() || this.attachments.length > 0)) {
+@@ -232,6 +344,39 @@ export class MessageEditor extends LitElement {
+ 		}
+ 	}
+ 
++	private renderSlashMenu() {
++		if (this.slashItems.length === 0) return "";
++		return html`
++			<div
++				class="absolute bottom-full left-0 right-0 mb-2 z-20 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
++				${ref(this.slashMenuRef)}
++			>
++				${this.slashItems.map(
++					(item, index) => html`
++						<div
++							data-slash-item
++							class="px-3 py-2 cursor-pointer flex items-center justify-between gap-3 ${index === this.slashIndex ? "bg-accent" : "hover:bg-muted"}"
++							@mousedown=${(e: MouseEvent) => {
++								// Keep textarea focus so the caret position survives the click.
++								e.preventDefault();
++								this.applySlashItem(item);
++							}}
++							@mouseenter=${() => {
++								this.slashIndex = index;
++							}}
++						>
++							<div class="min-w-0">
++								<div class="text-sm font-medium truncate">${item.title}</div>
++								${item.description ? html`<div class="text-xs text-muted-foreground truncate">${item.description}</div>` : ""}
++							</div>
++							${item.hint ? html`<span class="text-xs text-muted-foreground shrink-0">${item.hint}</span>` : ""}
++						</div>
++					`,
++				)}
++			</div>
++		`;
++	}
++
+ 	override render() {
+ 		// Check if current model supports thinking/reasoning
+ 		const model = this.currentModel;
+@@ -255,6 +400,8 @@ export class MessageEditor extends LitElement {
+ 						: ""
+ 				}
+ 
++				${this.renderSlashMenu()}
++
+ 				<!-- Attachments -->
+ 				${
+ 					this.attachments.length > 0
+@@ -283,6 +430,7 @@ export class MessageEditor extends LitElement {
+ 					@input=${this.handleTextareaInput}
+ 					@keydown=${this.handleKeyDown}
+ 					@paste=${this.handlePaste}
++					@blur=${() => this.closeSlashMenu()}
+ 					${ref(this.textareaRef)}
+ 				></textarea>
+ 
+@@ -363,10 +511,7 @@ export class MessageEditor extends LitElement {
+ 												this.onModelSelect?.();
+ 											});
+ 										},
+-										children: html`
+-											${icon(Sparkles, "sm")}
+-											<span class="ml-1">${this.currentModel.id}</span>
+-										`,
++										children: html`<span>${this.currentModel.id}</span>`,
+ 										className: "h-8 text-xs truncate",
+ 									})}
+ 								`
+@@ -389,7 +534,7 @@ export class MessageEditor extends LitElement {
+ 										size: "icon",
+ 										onClick: this.handleSend,
+ 										disabled: (!this.value.trim() && this.attachments.length === 0) || this.processingFiles,
+-										children: html`<div style="transform: rotate(-45deg)">${icon(Send, "sm")}</div>`,
++										children: icon(ArrowUp, "sm"),
+ 										className: "h-8 w-8",
+ 									})}
+ 								`
+diff --git a/packages/web-ui/src/dialogs/ModelSelector.ts b/packages/web-ui/src/dialogs/ModelSelector.ts
+index 192c3c53..80357256 100644
+--- a/packages/web-ui/src/dialogs/ModelSelector.ts
++++ b/packages/web-ui/src/dialogs/ModelSelector.ts
+@@ -3,7 +3,8 @@ import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
+ import { Button } from "@mariozechner/mini-lit/dist/Button.js";
+ import { DialogHeader } from "@mariozechner/mini-lit/dist/Dialog.js";
+ import { DialogBase } from "@mariozechner/mini-lit/dist/DialogBase.js";
+-import { getModels, getProviders, type Model, modelsAreEqual } from "@mariozechner/pi-ai";
++import type { ThinkingLevel } from "@mariozechner/pi-agent-core";
++import { getModels, getProviders, type Model, modelsAreEqual, supportsXhigh } from "@mariozechner/pi-ai";
+ import { html, type PropertyValues, type TemplateResult } from "lit";
+ import { customElement, state } from "lit/decorators.js";
+ import { createRef, ref } from "lit/directives/ref.js";
+@@ -15,6 +16,12 @@ import { formatModelCost } from "../utils/format.js";
+ import { i18n } from "../utils/i18n.js";
+ import { discoverModels } from "../utils/model-discovery.js";
+ 
++/** Thinking level control shown inside the selector when the caller passes it to open(). */
++export interface ModelSelectorThinkingOptions {
++	level: ThinkingLevel;
++	onChange: (level: ThinkingLevel) => void;
++}
++
+ /**
+  * Score a query against a text using subsequence matching.
+  * All query characters must appear in order in the text.
+@@ -56,8 +63,10 @@ export class ModelSelector extends DialogBase {
+ 	@state() selectedIndex = 0;
+ 	@state() private navigationMode: "mouse" | "keyboard" = "mouse";
+ 	@state() private customProviderModels: Model<any>[] = [];
++	@state() private thinkingLevel?: ThinkingLevel;
+ 
+ 	private onSelectCallback?: (model: Model<any>) => void;
++	private onThinkingChange?: (level: ThinkingLevel) => void;
+ 	private allowedProviders?: Set<string>;
+ 	private scrollContainerRef = createRef<HTMLDivElement>();
+ 	private searchInputRef = createRef<HTMLInputElement>();
+@@ -69,6 +78,7 @@ export class ModelSelector extends DialogBase {
+ 		currentModel: Model<any> | null,
+ 		onSelect: (model: Model<any>) => void,
+ 		allowedProviders?: string[],
++		thinking?: ModelSelectorThinkingOptions,
+ 	) {
+ 		const selector = new ModelSelector();
+ 		selector.currentModel = currentModel;
+@@ -76,6 +86,10 @@ export class ModelSelector extends DialogBase {
+ 		if (allowedProviders) {
+ 			selector.allowedProviders = new Set(allowedProviders);
+ 		}
++		if (thinking) {
++			selector.thinkingLevel = thinking.level;
++			selector.onThinkingChange = thinking.onChange;
++		}
+ 		selector.open();
+ 		selector.loadCustomProviders();
+ 	}
+@@ -262,6 +276,38 @@ export class ModelSelector extends DialogBase {
+ 		return filteredModels;
+ 	}
+ 
++	private renderThinkingLevels(): TemplateResult | string {
++		const model = this.currentModel;
++		if (!this.onThinkingChange || this.thinkingLevel === undefined || !model?.reasoning) return "";
++		const levels: Array<{ value: ThinkingLevel; label: string }> = [
++			{ value: "off", label: i18n("Off") },
++			{ value: "minimal", label: i18n("Minimal") },
++			{ value: "low", label: i18n("Low") },
++			{ value: "medium", label: i18n("Medium") },
++			{ value: "high", label: i18n("High") },
++		];
++		if (supportsXhigh(model)) levels.push({ value: "xhigh", label: i18n("Extra high") });
++		return html`
++			<div class="flex flex-col gap-2">
++				<span class="text-xs text-muted-foreground inline-flex items-center gap-1">${icon(Brain, "sm")} ${i18n("Thinking")}</span>
++				<div class="flex flex-wrap gap-1">
++					${levels.map(({ value, label }) =>
++						Button({
++							variant: this.thinkingLevel === value ? "default" : "secondary",
++							size: "sm",
++							onClick: () => {
++								this.thinkingLevel = value;
++								this.onThinkingChange?.(value);
++							},
++							className: "rounded-full",
++							children: label,
++						}),
++					)}
++				</div>
++			</div>
++		`;
++	}
++
+ 	private scrollToSelected() {
+ 		requestAnimationFrame(() => {
+ 			const scrollContainer = this.scrollContainerRef.value;
+@@ -280,7 +326,7 @@ export class ModelSelector extends DialogBase {
+ 		return html`
+ 			<!-- Header and Search -->
+ 			<div class="p-6 pb-4 flex flex-col gap-4 border-b border-border flex-shrink-0">
+-				${DialogHeader({ title: i18n("Select Model") })}
++				${DialogHeader({ title: i18n("Select Model") })} ${this.renderThinkingLevels()}
+ 				${Input({
+ 					placeholder: i18n("Search models..."),
+ 					value: this.searchQuery,
+diff --git a/packages/web-ui/src/index.ts b/packages/web-ui/src/index.ts
+index 48284c74..c40d71a9 100644
+--- a/packages/web-ui/src/index.ts
++++ b/packages/web-ui/src/index.ts
+@@ -10,7 +10,7 @@ export { ConsoleBlock } from "./components/ConsoleBlock.js";
+ export { CustomProviderCard } from "./components/CustomProviderCard.js";
+ export { ExpandableSection } from "./components/ExpandableSection.js";
+ export { Input } from "./components/Input.js";
+-export { MessageEditor } from "./components/MessageEditor.js";
++export { MessageEditor, type SlashCommandItem, type SlashCommandProvider } from "./components/MessageEditor.js";
+ export { MessageList } from "./components/MessageList.js";
+ // Message components
+ export type { ArtifactMessage, UserMessageWithAttachments } from "./components/Messages.js";
+@@ -57,7 +57,7 @@ export { ApiKeyPromptDialog } from "./dialogs/ApiKeyPromptDialog.js";
+ export { AttachmentOverlay } from "./dialogs/AttachmentOverlay.js";
+ export { CustomProviderDialog } from "./dialogs/CustomProviderDialog.js";
+ // Dialogs
+-export { ModelSelector } from "./dialogs/ModelSelector.js";
++export { ModelSelector, type ModelSelectorThinkingOptions } from "./dialogs/ModelSelector.js";
+ export { PersistentStorageDialog } from "./dialogs/PersistentStorageDialog.js";
+ export { ProvidersModelsTab } from "./dialogs/ProvidersModelsTab.js";
+ export { SessionListDialog } from "./dialogs/SessionListDialog.js";
+diff --git a/packages/web-ui/src/utils/i18n.ts b/packages/web-ui/src/utils/i18n.ts
+index 1f50a7d0..8379569a 100644
+--- a/packages/web-ui/src/utils/i18n.ts
++++ b/packages/web-ui/src/utils/i18n.ts
+@@ -148,6 +148,7 @@ declare module "@mariozechner/mini-lit" {
+ 		Low: string;
+ 		Medium: string;
+ 		High: string;
++		"Extra high": string;
+ 		"Storage Permission Required": string;
+ 		"This app needs persistent storage to save your conversations": string;
+ 		"Why is this needed?": string;
+@@ -360,6 +361,7 @@ export const translations = {
+ 		Low: "Low",
+ 		Medium: "Medium",
+ 		High: "High",
++		"Extra high": "Extra high",
+ 		"Storage Permission Required": "Storage Permission Required",
+ 		"This app needs persistent storage to save your conversations":
+ 			"This app needs persistent storage to save your conversations",
+@@ -579,6 +581,7 @@ export const translations = {
+ 		Low: "Niedrig",
+ 		Medium: "Mittel",
+ 		High: "Hoch",
++		"Extra high": "Sehr hoch",
+ 		"Storage Permission Required": "Speicherberechtigung erforderlich",
+ 		"This app needs persistent storage to save your conversations":
+ 			"Diese App benötigt dauerhaften Speicher, um Ihre Konversationen zu speichern",

@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,20 +19,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Clone mini-lit
-        run: git clone --depth 1 https://github.com/badlogic/mini-lit.git ../mini-lit
-
-      - name: Clone pi-mono
-        run: git clone --depth 1 https://github.com/badlogic/pi-mono.git ../pi-mono
-
-      - name: Install mini-lit
-        run: cd ../mini-lit && npm install && npm run build
-
-      - name: Install pi-mono
-        run: cd ../pi-mono && npm install && npm run build
-
-      - name: Install sitegeist
-        run: npm install
+      - name: Set up mini-lit and pi-mono
+        run: scripts/setup-siblings.sh
 
       - name: Build extension
         run: npm run build
@@ -46,7 +35,15 @@ jobs:
         id: version
         run: echo "version=$(node -p "require('./dist-chrome/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
+      - name: Upload zip
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sitegeist-${{ steps.version.outputs.version }}
+          path: sitegeist.zip
+
       - name: Extract changelog
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           node -e "
             const fs = require('fs');
@@ -62,6 +59,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
 
       - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           gh release create ${{ github.ref_name }} sitegeist.zip \
             --title "Sitegeist ${{ steps.version.outputs.version }}" \

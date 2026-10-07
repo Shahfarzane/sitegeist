@@ -125,21 +125,21 @@ Full list of changes: `CHANGELOG.md`.
 
 ## Development
 
-Clone this repo plus its sibling dependencies into the same parent directory:
+The extension builds against two sibling repos in the same parent directory:
 
 ```
 parent/
-  mini-lit/          # https://github.com/badlogic/mini-lit
-  pi-mono/           # https://github.com/badlogic/pi-mono
+  mini-lit/          # https://github.com/badlogic/mini-lit at v0.2.1
+  pi-mono/           # https://github.com/earendil-works/pi at v0.60.0 + patch
   sitegeist/         # this repo
 ```
 
-Install dependencies in each repo:
+`scripts/setup-siblings.sh` clones both, applies `patches/pi-mono-v0.60.0-sitegeist.patch`,
+installs dependencies and builds the declarations. Re-running it is safe. pi-mono must stay
+on v0.60.0: upstream main renamed the packages to `@earendil-works/*` and dropped web-ui.
 
 ```bash
-(cd ../mini-lit && npm install)
-(cd ../pi-mono && npm install)
-npm install
+scripts/setup-siblings.sh
 (cd cli && npm install)
 ```
 
@@ -149,8 +149,9 @@ Start all dev watchers (mini-lit, pi-mono, sitegeist extension, marketing site):
 ./dev.sh
 ```
 
-This fork needs one addition in `../pi-mono/packages/ai/src/models.ts` that upstream pi-ai
-does not have yet (runtime model discovery registers into its model registry):
+The patch adds pi-mono APIs that upstream never published. In
+`../pi-mono/packages/ai/src/models.ts` (runtime model discovery registers into its model
+registry):
 
 ```ts
 export function registerModels(provider: string, models: Model<Api>[]): void {
@@ -179,13 +180,6 @@ export function getGeneratedModels(provider: string): Model<Api>[] {
 The composer tweaks (ArrowUp prompt recall via `historyProvider`, plain model-id button,
 arrow send button) live in `../pi-mono/packages/web-ui/src/components/MessageEditor.ts`
 and `AgentInterface.ts`; the sitegeist side only sets `agentInterface.historyProvider`.
-
-Without the watchers, build the sibling declarations once so type checking resolves:
-
-```bash
-(cd ../pi-mono/packages/ai && npx tsc -p tsconfig.build.json)
-(cd ../pi-mono/packages/web-ui && npx tsc -p tsconfig.build.json)
-```
 
 Rebuild the extension and reload it from the terminal:
 

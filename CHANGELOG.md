@@ -12,6 +12,7 @@
 - Foreground guard: popups opened by agent tabs no longer steal focus.
 - Dynamic model discovery: provider model lists are fetched at runtime (Anthropic, OpenAI, ChatGPT/Codex, Gemini, GitHub Copilot, OpenRouter, Mistral, Groq, xAI, Cerebras, Hugging Face), enriched from the generated table and models.dev, cached in IndexedDB.
 - Bridge for external agents: `cli/` ships the `sitegeist` command (`sitegeist mcp`, `install`, `status`, `allow`, `reload`, `debug`, `pi-extension`). Harnesses reach the browser through a native messaging host and a user-only unix socket; each harness gets its own tab group. Settings > Bridge controls site permissions.
+- `scripts/setup-siblings.sh` and `patches/pi-mono-v0.60.0-sitegeist.patch`: reproducible sibling setup (mini-lit v0.2.1, pi v0.60.0 plus the unpublished pi-ai and pi-web-ui APIs this fork uses).
 
 ### Changed
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
@@ -19,6 +20,7 @@
 - Browser sessions persist in `chrome.storage.local` (they and their groups survive extension reloads), grouping retries when Chromium refuses a tab edit, and the panel adopts the tab it opens on even when that is a New Tab page.
 - Side panel is bound to a tab, not a window (Claude-in-Chrome model): each task lives on the tab its panel was opened on via `sidepanel.html?tabId=<tab>`, and the manifest declares no default panel, so a tab shows the panel only when a task owns it. Two tasks = two tabs, each with its own panel; put them in two windows to see both at once. The window-session lock and the "locked" landing page are gone; `src/utils/port.ts` is now lifecycle-only. While a task is mid-run its panel stays on the window's active tab so switching tabs doesn't tear the agent down.
 - Removed upstream working notes from the repository root (`db.md`, `gmail.md`, `plan.md`).
+- `typescript@^5.9.3` is a devDependency, so `tsc` no longer resolves to a global TypeScript 7.
 
 ### Fixed
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.

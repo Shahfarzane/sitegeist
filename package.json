@@ -44,6 +44,7 @@
 		"concurrently": "^9.2.1",
 		"esbuild": "^0.25.10",
 		"husky": "^9.1.7",
+		"typescript": "^5.9.3",
 		"ws": "^8.18.0"
 	}
 }
