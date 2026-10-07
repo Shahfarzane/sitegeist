@@ -80,7 +80,6 @@ export class CustomProvidersTab extends SettingsTab {
 			<div class="flex flex-col gap-4">
 				<div class="flex items-start justify-between gap-4">
 					<div>
-						<h3 class="text-sm font-semibold text-foreground mb-2">Custom Providers</h3>
 						<p class="text-sm text-muted-foreground">
 							Add OpenAI- or Anthropic-compatible endpoints (e.g. OpenRouter, Together, or a self-hosted server)
 							by base URL and API key. Defined models appear in the model selector. Keys are stored locally.

@@ -81,14 +81,12 @@ export class BridgeTab extends SettingsTab {
 	render(): TemplateResult {
 		return html`
 			<div class="flex flex-col gap-5">
-				<div class="space-y-1">
-					<h3 class="text-lg font-semibold text-foreground">Bridge</h3>
-					<p class="text-sm text-muted-foreground">
-						Lets coding agents on this computer (Claude Code, Codex, omp, pi) drive the browser through
-						Sitegeist. Each agent gets its own tab group and works in the background. Set up with
-						<code class="text-xs">npx sitegeist mcp</code>.
-					</p>
-				</div>
+				<p class="text-sm text-muted-foreground">
+					Lets coding agents on this computer (Claude Code, Codex, omp, pi) drive the browser through
+					Sitegeist. Each agent gets its own tab group and works in the background. Connect a harness with
+					<code class="text-xs">sitegeist mcp</code>, e.g.
+					<code class="text-xs">claude mcp add sitegeist -- sitegeist mcp</code>.
+				</p>
 
 				<label class="flex items-center gap-2 text-sm text-foreground">
 					<input
