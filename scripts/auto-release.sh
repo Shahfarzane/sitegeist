@@ -11,6 +11,7 @@
 #   browsers; each ssh host gets the same files, and a host that is asleep is retried on the
 #   next run without rebuilding
 set -euo pipefail
+trap 'echo "$(date "+%F %T") auto-release.sh: failed at line $LINENO" >&2' ERR
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_DIR="$HOME/.local/share/sitegeist"
