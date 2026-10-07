@@ -29,10 +29,29 @@ This fork (0xSero/sitegeist) adds three things to upstream (badlogic/sitegeist):
 
 ## Install the extension
 
-1. Download or build (`npm run build`) the unpacked extension in `dist-chrome/`.
-2. Open `chrome://extensions` (or `brave://extensions`), enable Developer mode, click
-   Load unpacked, select `dist-chrome/`.
-3. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider.
+This private fork ships as a self-signed `.crx` (extension id
+`lnncppjiohlpejgcbdgoihplimdckddn`). The signing key is "sitegeist CRX signing key" in
+1Password DEV; `static/manifest.chrome.json` carries its public half, so unpacked builds
+and signed releases install under the same id.
+
+1. Prepare the sibling repos once per machine: `scripts/setup-siblings.sh`.
+2. Build, sign and publish: `scripts/release-crx.sh` (append ssh hosts, e.g. `m3`, to
+   publish there too). It writes the `.crx` and `updates.xml` to
+   `~/.local/share/sitegeist/extension/`, the `file://` update URL baked into the release.
+3. First time on a Mac: open `release/sitegeist-chrome-policy.mobileconfig` and install it
+   in System Settings > General > Device Management. It puts the id on Chrome's
+   `ExtensionInstallAllowlist`; without it, Google Chrome on macOS disables off-store
+   extensions. Restart Chrome and check `chrome://policy`.
+4. Open `chrome://extensions`, enable Developer mode, and drag
+   `~/.local/share/sitegeist/extension/sitegeist-<version>.crx` onto the page.
+5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider.
+
+Later releases: run `scripts/release-crx.sh` again. Chrome polls `updates.xml` every few
+hours (or press Update in `chrome://extensions`) and installs any higher version. A
+production build bumps the version, so commit `static/manifest.chrome.json` afterwards.
+
+For development, `npm run build` and Load unpacked `dist-chrome/` work as before and
+replace the installed release (same id, same data).
 
 No toggles are required. In-page JavaScript runs through the `userScripts` API when the
 browser exposes it (an isolated world whose CSP blocks network access from injected code)
@@ -111,7 +130,7 @@ Extension:
 - `src/bridge/`: native messaging port, one browser session per connected harness,
   request routing, site permissions, diagnostics (`bridge.debug`, `bridge.bench`,
   `bridge.reload`). Settings gained a Bridge tab.
-- Manifest: fixed `key` (stable id `bbkgpflnkggdfabgjhofdmdopgjopamc`), new permissions
+- Manifest: fixed `key` (stable id `lnncppjiohlpejgcbdgoihplimdckddn`), new permissions
   `tabGroups`, `nativeMessaging`, `alarms`.
 - Fixed the type errors in the custom provider dialogs.
 
@@ -216,7 +235,8 @@ Builds the static site and uploads it to `sitegeist.ai`. Requires SSH access to
 ```
 
 Bumps the version in `static/manifest.chrome.json`, commits, tags, and pushes. GitHub
-Actions builds the extension and creates a release.
+Actions builds the extension and creates a release with the unpacked zip (no signing key in
+CI). For the signed `.crx`, use `scripts/release-crx.sh` (see Install the extension).
 
 ## License
 

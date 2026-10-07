@@ -12,3 +12,4 @@ version.json
 docs/*.html
 cli/node_modules
 cli/dist
+release/
