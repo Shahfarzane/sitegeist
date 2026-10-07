@@ -14,6 +14,7 @@
 - Bridge for external agents: `cli/` ships the `sitegeist` command (`sitegeist mcp`, `install`, `status`, `allow`, `reload`, `debug`, `pi-extension`). Harnesses reach the browser through a native messaging host and a user-only unix socket; each harness gets its own tab group. Settings > Bridge controls site permissions.
 - Private distribution as a self-signed `.crx`: `scripts/pack-crx.mjs` (CRX3 signing with Node crypto, `updates.xml`, macOS policy profile that allowlists the id) and `scripts/release-crx.sh` (build, sign with the key from 1Password DEV, publish to the local `file://` update folder, optionally to ssh hosts).
 - `scripts/setup-siblings.sh` and `patches/pi-mono-v0.60.0-sitegeist.patch`: reproducible sibling setup (mini-lit v0.2.1, pi v0.60.0 plus the unpublished pi-ai and pi-web-ui APIs this fork uses).
+- `cdp` bridge method and MCP tool: any Chrome DevTools Protocol command on the session's current tab, through the existing debugger attachment. `Page.navigate` asks for site permission; commands that reach other targets or browser-wide state are refused; results over 100k characters are truncated.
 
 ### Changed
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
