@@ -1,4 +1,4 @@
-import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
+import { icon } from "@mariozechner/mini-lit";
 import { DialogContent, DialogHeader } from "@mariozechner/mini-lit/dist/Dialog.js";
 import { DialogBase } from "@mariozechner/mini-lit/dist/DialogBase.js";
 import i18n from "@mariozechner/mini-lit/dist/i18n.js";
@@ -6,11 +6,15 @@ import { formatUsage, getAppStorage, type SessionData, type SessionMetadata } fr
 import Fuse from "fuse.js";
 import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { Download, Trash2, Upload } from "lucide";
 
 type ExportedSession = {
 	session: SessionData;
 	metadata: SessionMetadata;
 };
+
+const TOOL_BUTTON =
+	"inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 @customElement("sitegeist-session-list-dialog")
 export class SitegeistSessionListDialog extends DialogBase {
@@ -363,40 +367,47 @@ export class SitegeistSessionListDialog extends DialogBase {
 			${DialogContent({
 				className: "h-full flex flex-col",
 				children: html`
-					${DialogHeader({
-						title: i18n("Sessions"),
-						description: i18n("Load a previous conversation"),
-					})}
+					${DialogHeader({ title: i18n("Sessions") })}
 
-					<!-- Action buttons -->
-					<div class="flex gap-2 mt-4">
-						<button
-							class="flex-1 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background text-foreground hover:bg-secondary transition-colors"
-							@click=${() => this.handleImport()}
-						>
-							${i18n("Import")}
+					<!-- Search, totals, and library actions -->
+					<input
+						type="text"
+						placeholder=${i18n("Search sessions...")}
+						.value=${this.searchQuery}
+						@input=${(e: InputEvent) => {
+							this.searchQuery = (e.target as HTMLInputElement).value;
+						}}
+						class="w-full h-9 px-3 text-sm rounded-md border border-input bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					/>
+					<div class="flex items-center gap-1 -mt-1">
+						<span class="flex-1 min-w-0 truncate text-xs text-muted-foreground">
+							${stats.totalSessions} ${stats.totalSessions === 1 ? "session" : "sessions"} ·
+							${stats.totalMessages} ${stats.totalMessages === 1 ? "message" : "messages"} · $${stats.totalCost.toFixed(2)}
+						</span>
+						<button class=${TOOL_BUTTON} title=${i18n("Import")} aria-label=${i18n("Import")} @click=${() => this.handleImport()}>
+							${icon(Upload, "sm")}
 						</button>
-						<button
-							class="flex-1 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background text-foreground hover:bg-secondary transition-colors"
-							@click=${() => this.handleExport()}
-						>
-							${i18n("Export All")}
+						<button class=${TOOL_BUTTON} title=${i18n("Export All")} aria-label=${i18n("Export All")} @click=${() => this.handleExport()}>
+							${icon(Download, "sm")}
 						</button>
 						<div class="relative delete-menu-container">
 							<button
-								class="px-3 py-2 text-sm font-medium rounded-md border border-border bg-background text-foreground hover:bg-secondary transition-colors"
+								class=${TOOL_BUTTON}
+								title=${i18n("Delete Old")}
+								aria-label=${i18n("Delete Old")}
+								aria-haspopup="menu"
 								@click=${() => {
 									this.showDeleteMenu = !this.showDeleteMenu;
 								}}
 							>
-								${i18n("Delete Old")}
+								${icon(Trash2, "sm")}
 							</button>
 							${
 								this.showDeleteMenu
 									? html`
-										<div class="absolute right-0 top-full mt-1 w-48 rounded-md border border-border bg-background shadow-lg z-50">
+										<div class="absolute right-0 top-full mt-1 w-48 rounded-lg border border-border bg-popover p-1 shadow-lg z-50">
 											<button
-												class="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10 transition-colors rounded-t-md font-medium"
+												class="w-full px-3 py-2 text-left text-sm text-destructive hover:bg-accent rounded-md"
 												@click=${() => {
 													this.showDeleteMenu = false;
 													this.handleDeleteAll();
@@ -405,7 +416,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 												${i18n("All sessions")}
 											</button>
 											<button
-												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-secondary transition-colors border-t border-border"
+												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent rounded-md"
 												@click=${() => {
 													this.showDeleteMenu = false;
 													this.handleDeleteOlderThan(7);
@@ -414,7 +425,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 												${i18n("Older than 7 days")}
 											</button>
 											<button
-												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-secondary transition-colors"
+												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent rounded-md"
 												@click=${() => {
 													this.showDeleteMenu = false;
 													this.handleDeleteOlderThan(30);
@@ -423,7 +434,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 												${i18n("Older than 30 days")}
 											</button>
 											<button
-												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-secondary transition-colors rounded-b-md"
+												class="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-accent rounded-md"
 												@click=${() => {
 													this.showDeleteMenu = false;
 													this.handleDeleteOlderThan(90);
@@ -438,31 +449,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 						</div>
 					</div>
 
-					<!-- Search bar -->
-					<div class="mt-3">
-						<input
-							type="text"
-							placeholder=${i18n("Search sessions...")}
-							.value=${this.searchQuery}
-							@input=${(e: InputEvent) => {
-								this.searchQuery = (e.target as HTMLInputElement).value;
-							}}
-							class="w-full px-3 py-2 text-sm rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-						/>
-					</div>
-
-					<!-- Stats pills -->
-					<div class="flex items-center gap-2 mt-3">
-						${Badge({ children: `${stats.totalSessions} ${i18n("Sessions").toLowerCase()}`, variant: "secondary" })}
-						${Badge({ children: `${stats.totalMessages} ${i18n("messages")}`, variant: "secondary" })}
-						${Badge({
-							children: `$${stats.totalCost.toFixed(4)}`,
-							variant: "secondary",
-							className: "text-muted-foreground",
-						})}
-					</div>
-
-					<div class="flex-1 overflow-y-auto mt-4 space-y-2">
+					<div class="flex-1 overflow-y-auto space-y-2">
 						${
 							this.loading
 								? html`<div class="text-center py-8 text-muted-foreground">${i18n("Loading...")}</div>`
@@ -471,7 +458,6 @@ export class SitegeistSessionListDialog extends DialogBase {
 											${this.searchQuery ? "No matching sessions" : i18n("No sessions yet")}
 										</div>`
 									: filteredSessions.map((session) => {
-											const cost = session.usage.cost.total;
 											return html`
 											<div
 												class="group flex items-start gap-3 p-4 rounded-lg border border-border hover:bg-secondary/50 cursor-pointer transition-colors"
@@ -480,7 +466,7 @@ export class SitegeistSessionListDialog extends DialogBase {
 												<div class="flex-1 min-w-0">
 													<!-- Title -->
 													<div class="flex items-center gap-2 mb-2">
-														<div class="font-semibold text-foreground truncate">${session.title}</div>
+														<div class="text-sm font-medium text-foreground truncate">${session.title}</div>
 													</div>
 
 													<!-- Stats row -->
@@ -488,9 +474,6 @@ export class SitegeistSessionListDialog extends DialogBase {
 														<span class="font-medium">${this.formatDate(session.lastModified)}</span>
 														<span>${session.messageCount} ${i18n("messages")}</span>
 														<span>${formatUsage(session.usage)}</span>
-														<span class="font-medium text-foreground">
-															$${cost.toFixed(4)}
-														</span>
 													</div>
 
 													<!-- Preview text - always show if available -->
