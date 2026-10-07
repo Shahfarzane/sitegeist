@@ -521,12 +521,6 @@ export function startBridge(): void {
 		}
 	});
 	chrome.action.onClicked.addListener(() => connect());
-	// Chrome applies a downloaded update only once the extension is idle, and the native port
-	// keeps the worker alive for as long as the browser runs: reload to apply it now.
-	chrome.runtime.onUpdateAvailable.addListener((details) => {
-		trace(`update ${details.version} available, reloading`);
-		chrome.runtime.reload();
-	});
 	connect();
 }
 
