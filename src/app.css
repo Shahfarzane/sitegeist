@@ -102,7 +102,10 @@
 	--shadow-2xl: 0 12px 32px -6px hsl(0 0% 0% / 0.6);
 }
 
+/* Dialogs mount on <body>, outside the app root, so body carries the theme colors too. */
 body {
+	color: var(--color-foreground);
+	background-color: var(--color-background);
 	font-size: 14px;
 	line-height: 1.5;
 	-webkit-font-smoothing: antialiased;

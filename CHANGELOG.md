@@ -54,6 +54,7 @@
 - `sitegeist install` writes the native messaging manifest for Helium (`net.imput.helium`) on macOS.
 - The welcome screen never rendered on a new chat: the message was appended without an agent event, so the message list kept its old empty array.
 - Escape while the overflow menu is open closes the menu instead of also aborting a running agent.
+- Dialog text without an explicit color was black in dark mode (dialogs mount on body, outside the themed app root); body now carries the theme colors. Destructive buttons are outlined with red text instead of filled red.
 
 ## [1.0.0] - 2026-03-15
 
