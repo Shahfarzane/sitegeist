@@ -15,6 +15,7 @@
 - Private distribution as a self-signed `.crx`: `scripts/pack-crx.mjs` (CRX3 signing with Node crypto, `updates.xml`, macOS policy profile that allowlists the id) and `scripts/release-crx.sh` (build, sign with the key from 1Password DEV, publish to the local `file://` update folder, optionally to ssh hosts).
 - `scripts/setup-siblings.sh` and `patches/pi-mono-v0.60.0-sitegeist.patch`: reproducible sibling setup (mini-lit v0.2.1, pi v0.60.0 plus the unpublished pi-ai and pi-web-ui APIs this fork uses).
 - `cdp` bridge method and MCP tool: any Chrome DevTools Protocol command on the session's current tab, through the existing debugger attachment. `Page.navigate` asks for site permission; commands that reach other targets or browser-wide state are refused; results over 100k characters are truncated.
+- `sitegeist update` (bridge method `bridge.update`): every running browser checks its update URL now; the extension reloads as soon as an update is downloaded (the native port keeps the worker alive, so Chrome's apply-when-idle never happened). `scripts/release-crx.sh` calls it locally and on each ssh host.
 
 ### Changed
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.

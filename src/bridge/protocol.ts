@@ -168,6 +168,7 @@ export const BRIDGE_METHODS = [
 	"permission.allow",
 	"permission.setMode",
 	"bridge.reload",
+	"bridge.update",
 	"bridge.activate",
 	"bridge.debug",
 	"bridge.bench",
