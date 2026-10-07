@@ -31,6 +31,7 @@ function browserDirs(): string[] {
 			join(base, "Arc", "User Data"),
 			join(base, "Vivaldi"),
 			join(base, "com.operasoftware.Opera"),
+			join(base, "net.imput.helium"),
 		];
 	}
 	if (process.platform === "linux") {

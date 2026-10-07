@@ -44,6 +44,7 @@
 - The side panel no longer requires the "Allow User Scripts" toggle: page injection (`browserjs()`, overlay, element picker, image extraction) runs through `userScripts` when available and through the debugger's `Runtime.evaluate` otherwise, with a CDP-binding shim standing in for `chrome.runtime.sendMessage` (`src/browser/inject.ts`). `userScripts` moved to `optional_permissions`.
 - Type errors in `CustomProviderEditDialog` (missing i18n keys) and `CustomProvidersTab` (`remove` shadowed `HTMLElement.remove`).
 - Manifest: fixed extension `key` (stable id `lnncppjiohlpejgcbdgoihplimdckddn`), new permissions `tabGroups`, `nativeMessaging`, `alarms`.
+- `sitegeist install` writes the native messaging manifest for Helium (`net.imput.helium`) on macOS.
 
 ## [1.0.0] - 2026-03-15
 
