@@ -26,6 +26,8 @@ for host in "$@"; do
 		<string>$host</string>"
 done
 
+# Standard priority: Background pins the job to efficiency cores with throttled I/O, which
+# stretched a 20-second build to half an hour. Releases are short and only run when main moves.
 # launchd starts jobs with a minimal PATH: node and npm (Homebrew node@24), git, ssh,
 # op-agents (~/.local/bin, signing key from 1Password) and the sitegeist CLI must resolve.
 cat >"$PLIST" <<EOF
@@ -50,9 +52,7 @@ cat >"$PLIST" <<EOF
 	<key>RunAtLoad</key>
 	<true/>
 	<key>ProcessType</key>
-	<string>Background</string>
-	<key>LowPriorityIO</key>
-	<true/>
+	<string>Standard</string>
 	<key>StandardOutPath</key>
 	<string>$LOG</string>
 	<key>StandardErrorPath</key>
