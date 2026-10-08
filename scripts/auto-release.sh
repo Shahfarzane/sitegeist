@@ -31,7 +31,17 @@ if [ "$released" != "$target" ]; then
 		exit 0
 	fi
 	git merge -q --ff-only origin/main
-	if [ -z "$released" ] || ! git diff --quiet "$released" "$target" -- patches package.json package-lock.json scripts/setup-siblings.sh; then
+	# Fork checkouts (workspace submodules) follow their pushed sitegeist branch when clean.
+	for sibling in mini-lit pi-mono; do
+		dir="$ROOT/../$sibling"
+		if [ -n "$(git -C "$dir" remote get-url origin 2>/dev/null | grep Shahfarzane)" ] &&
+			[ "$(git -C "$dir" rev-parse --abbrev-ref HEAD)" = sitegeist ] && [ -z "$(git -C "$dir" status --porcelain)" ]; then
+			git -C "$dir" pull -q --ff-only origin sitegeist || log "$sibling: cannot fast-forward to origin/sitegeist"
+		fi
+	done
+	# Rerun setup when patches or dependencies changed, or when installs were wiped.
+	if [ -z "$released" ] || ! git diff --quiet "$released" "$target" -- patches package.json package-lock.json scripts/setup-siblings.sh scripts/siblings.conf ||
+		[ ! -d node_modules ] || [ ! -d ../mini-lit/dist ] || [ ! -d ../pi-mono/node_modules ]; then
 		./scripts/setup-siblings.sh
 	fi
 	./scripts/release-crx.sh

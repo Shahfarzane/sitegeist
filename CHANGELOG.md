@@ -18,6 +18,7 @@
 - `sitegeist update` (bridge method `bridge.update`): every running browser checks its update URL now; the extension reloads as soon as an update is downloaded (the native port keeps the worker alive, so Chrome's apply-when-idle never happened). `scripts/release-crx.sh` calls it locally and on each ssh host.
 - Automatic releases: `scripts/auto-release.sh` (launchd agent via `scripts/install-auto-release.sh`) builds, signs and publishes every new commit on `origin/main` to this Mac and the given ssh hosts. Release versions are `<major>.<minor>.<commit count>` with the commit in `version_name` (shown in About), so no version bump is committed.
 - The extension checks its update URL when the browser starts and every 30 minutes (and still reloads as soon as an update is downloaded), so a browser that was closed or asleep during a release catches up right away instead of on Chrome's multi-hour schedule.
+- Sibling forks and workspace: the mini-lit and pi-mono changes are commits on private forks (Shahfarzane/mini-lit, Shahfarzane/pi-mono, branch `sitegeist`), and Shahfarzane/sitegeist-workspace holds all three repos as submodules. `scripts/sibling-patches.sh export|check` keeps `patches/` generated from the forks (checked in `./check.sh`); `scripts/siblings.conf` holds the tags and URLs. `auto-release.sh` fast-forwards clean fork checkouts and reinstalls dependencies when they are missing.
 
 ### Changed
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.

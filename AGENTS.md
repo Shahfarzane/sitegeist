@@ -18,6 +18,7 @@ If the user did not give you a concrete task, read README.md first.
 - `@mariozechner/mini-lit`, `@mariozechner/pi-ai`, `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core` are linked via `file:` to sibling repos `../mini-lit` and `../pi-mono`
 - Changes to those packages require rebuilding them (the dev watcher handles this)
 - If you need to modify upstream code, edit it in `../pi-mono` or `../mini-lit` directly and rebuild
+- Those siblings are private forks (Shahfarzane/pi-mono, Shahfarzane/mini-lit, branch `sitegeist`): commit and push changes there, then run `scripts/sibling-patches.sh export` and commit `patches/` in this repo (`./check.sh` fails while they differ)
 
 ## Changelog
 Location: `CHANGELOG.md`

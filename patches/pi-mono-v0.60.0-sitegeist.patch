@@ -1,5 +1,5 @@
 diff --git a/packages/ai/src/models.ts b/packages/ai/src/models.ts
-index 101c83f2..8c563a26 100644
+index 101c83f2c..8c563a264 100644
 --- a/packages/ai/src/models.ts
 +++ b/packages/ai/src/models.ts
 @@ -36,6 +36,28 @@ export function getModels<TProvider extends KnownProvider>(
@@ -32,7 +32,7 @@ index 101c83f2..8c563a26 100644
  	usage.cost.input = (model.cost.input / 1000000) * usage.input;
  	usage.cost.output = (model.cost.output / 1000000) * usage.output;
 diff --git a/packages/web-ui/src/components/AgentInterface.ts b/packages/web-ui/src/components/AgentInterface.ts
-index b8f6550e..02e7ca03 100644
+index b8f6550ec..02e7ca033 100644
 --- a/packages/web-ui/src/components/AgentInterface.ts
 +++ b/packages/web-ui/src/components/AgentInterface.ts
 @@ -2,7 +2,7 @@ import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/
@@ -65,7 +65,7 @@ index b8f6550e..02e7ca03 100644
  								this.sendMessage(input, attachments);
  							}}
 diff --git a/packages/web-ui/src/components/CustomProviderCard.ts b/packages/web-ui/src/components/CustomProviderCard.ts
-index 1050b855..1744424d 100644
+index 1050b8553..1744424df 100644
 --- a/packages/web-ui/src/components/CustomProviderCard.ts
 +++ b/packages/web-ui/src/components/CustomProviderCard.ts
 @@ -30,10 +30,10 @@ export class CustomProviderCard extends LitElement {
@@ -83,7 +83,7 @@ index 1050b855..1744424d 100644
  		const statusText =
  			this.status.status === "connected"
 diff --git a/packages/web-ui/src/components/MessageEditor.ts b/packages/web-ui/src/components/MessageEditor.ts
-index f0987c4d..4ee65951 100644
+index f0987c4d1..7a6b045d3 100644
 --- a/packages/web-ui/src/components/MessageEditor.ts
 +++ b/packages/web-ui/src/components/MessageEditor.ts
 @@ -5,12 +5,24 @@ import type { Model } from "@mariozechner/pi-ai";
@@ -306,7 +306,7 @@ index f0987c4d..4ee65951 100644
  										className: "h-8 text-xs truncate",
  									})}
  								`
-@@ -376,21 +521,24 @@ export class MessageEditor extends LitElement {
+@@ -376,21 +521,27 @@ export class MessageEditor extends LitElement {
  							this.isStreaming
  								? html`
  									${Button({
@@ -324,7 +324,10 @@ index f0987c4d..4ee65951 100644
  									${Button({
 -										variant: "ghost",
 +										// The one filled control in the composer, once there is something to send.
-+										variant: (this.value.trim() || this.attachments.length > 0) && !this.processingFiles ? "default" : "ghost",
++										variant:
++											(this.value.trim() || this.attachments.length > 0) && !this.processingFiles
++												? "default"
++												: "ghost",
  										size: "icon",
  										onClick: this.handleSend,
  										disabled: (!this.value.trim() && this.attachments.length === 0) || this.processingFiles,
@@ -336,7 +339,7 @@ index f0987c4d..4ee65951 100644
  								`
  						}
 diff --git a/packages/web-ui/src/components/Messages.ts b/packages/web-ui/src/components/Messages.ts
-index 485c5134..d1f8292b 100644
+index 485c51340..d1f8292b2 100644
 --- a/packages/web-ui/src/components/Messages.ts
 +++ b/packages/web-ui/src/components/Messages.ts
 @@ -138,14 +138,15 @@ export class AssistantMessage extends LitElement {
@@ -359,7 +362,7 @@ index 485c5134..d1f8292b 100644
  				}
  				${
 diff --git a/packages/web-ui/src/components/ProviderKeyInput.ts b/packages/web-ui/src/components/ProviderKeyInput.ts
-index 61dac606..795f2f1a 100644
+index 61dac6068..795f2f1ab 100644
 --- a/packages/web-ui/src/components/ProviderKeyInput.ts
 +++ b/packages/web-ui/src/components/ProviderKeyInput.ts
 @@ -122,7 +122,7 @@ export class ProviderKeyInput extends LitElement {
@@ -372,7 +375,7 @@ index 61dac606..795f2f1a 100644
  					}
  					${this.failed ? Badge({ children: i18n("✗ Invalid"), variant: "destructive" }) : ""}
 diff --git a/packages/web-ui/src/components/ThinkingBlock.ts b/packages/web-ui/src/components/ThinkingBlock.ts
-index 8dd7ce45..5ecec004 100644
+index 8dd7ce45e..5ecec004d 100644
 --- a/packages/web-ui/src/components/ThinkingBlock.ts
 +++ b/packages/web-ui/src/components/ThinkingBlock.ts
 @@ -34,7 +34,7 @@ export class ThinkingBlock extends LitElement {
@@ -385,7 +388,7 @@ index 8dd7ce45..5ecec004 100644
  				${this.isExpanded ? html`<markdown-block .content=${this.content} .isThinking=${true}></markdown-block>` : ""}
  			</div>
 diff --git a/packages/web-ui/src/dialogs/ModelSelector.ts b/packages/web-ui/src/dialogs/ModelSelector.ts
-index 192c3c53..26a38133 100644
+index 192c3c536..26a381339 100644
 --- a/packages/web-ui/src/dialogs/ModelSelector.ts
 +++ b/packages/web-ui/src/dialogs/ModelSelector.ts
 @@ -3,7 +3,8 @@ import { Badge } from "@mariozechner/mini-lit/dist/Badge.js";
@@ -499,7 +502,7 @@ index 192c3c53..26a38133 100644
  								${Badge(provider, "outline")}
  							</div>
 diff --git a/packages/web-ui/src/index.ts b/packages/web-ui/src/index.ts
-index 48284c74..c40d71a9 100644
+index 48284c742..c40d71a9e 100644
 --- a/packages/web-ui/src/index.ts
 +++ b/packages/web-ui/src/index.ts
 @@ -10,7 +10,7 @@ export { ConsoleBlock } from "./components/ConsoleBlock.js";
@@ -521,7 +524,7 @@ index 48284c74..c40d71a9 100644
  export { ProvidersModelsTab } from "./dialogs/ProvidersModelsTab.js";
  export { SessionListDialog } from "./dialogs/SessionListDialog.js";
 diff --git a/packages/web-ui/src/tools/renderer-registry.ts b/packages/web-ui/src/tools/renderer-registry.ts
-index 0d19781d..fd8dffb3 100644
+index 0d19781d6..5ff211de7 100644
 --- a/packages/web-ui/src/tools/renderer-registry.ts
 +++ b/packages/web-ui/src/tools/renderer-registry.ts
 @@ -48,7 +48,7 @@ export function renderHeader(
@@ -533,17 +536,21 @@ index 0d19781d..fd8dffb3 100644
  					${text}
  				</div>
  			`;
-@@ -109,7 +109,7 @@ export function renderCollapsibleHeader(
+@@ -108,11 +108,7 @@ export function renderCollapsibleHeader(
+ 	};
  
  	const toolIconColor =
- 		state === "complete"
+-		state === "complete"
 -			? "text-green-600 dark:text-green-500"
-+			? "text-muted-foreground"
- 			: state === "error"
- 				? "text-destructive"
- 				: "text-foreground";
+-			: state === "error"
+-				? "text-destructive"
+-				: "text-foreground";
++		state === "complete" ? "text-muted-foreground" : state === "error" ? "text-destructive" : "text-foreground";
+ 
+ 	return html`
+ 		<button @click=${toggleContent} class="flex items-center justify-between gap-2 text-sm text-muted-foreground w-full text-left hover:text-foreground transition-colors cursor-pointer">
 diff --git a/packages/web-ui/src/utils/i18n.ts b/packages/web-ui/src/utils/i18n.ts
-index 1f50a7d0..8379569a 100644
+index 1f50a7d08..8379569af 100644
 --- a/packages/web-ui/src/utils/i18n.ts
 +++ b/packages/web-ui/src/utils/i18n.ts
 @@ -148,6 +148,7 @@ declare module "@mariozechner/mini-lit" {

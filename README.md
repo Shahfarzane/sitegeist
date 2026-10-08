@@ -150,23 +150,29 @@ Full list of changes: `CHANGELOG.md`.
 
 ## Development
 
-The extension builds against two sibling repos in the same parent directory:
+The extension builds against two sibling repos in the same parent directory. The private
+workspace repo holds all three as submodules:
 
 ```
-parent/
-  mini-lit/          # https://github.com/badlogic/mini-lit at v0.2.1
-  pi-mono/           # https://github.com/earendil-works/pi at v0.60.0 + patch
-  sitegeist/         # this repo
+sitegeist-workspace/   # https://github.com/Shahfarzane/sitegeist-workspace (private)
+  sitegeist/           # this repo
+  mini-lit/            # https://github.com/Shahfarzane/mini-lit, branch sitegeist (badlogic/mini-lit v0.2.1 + changes)
+  pi-mono/             # https://github.com/Shahfarzane/pi-mono, branch sitegeist (earendil-works/pi v0.60.0 + changes)
 ```
-
-`scripts/setup-siblings.sh` clones both, applies `patches/pi-mono-v0.60.0-sitegeist.patch`,
-installs dependencies and builds the declarations. Re-running it is safe. pi-mono must stay
-on v0.60.0: upstream main renamed the packages to `@earendil-works/*` and dropped web-ui.
 
 ```bash
-scripts/setup-siblings.sh
-(cd cli && npm install)
+git clone --recurse-submodules https://github.com/Shahfarzane/sitegeist-workspace.git
+cd sitegeist-workspace/sitegeist
+scripts/setup-siblings.sh      # installs everything, builds mini-lit, pi-mono declarations, the CLI
 ```
+
+Sibling changes are commits on the forks' `sitegeist` branch. After committing and pushing
+one, run `scripts/sibling-patches.sh export` and commit the updated `patches/` here; the
+pre-commit check fails while they differ. The patches let `scripts/setup-siblings.sh`
+rebuild the siblings from the public upstream tags where the forks are not available (CI,
+a fresh machine without GitHub access): it clones the tag and applies the patch. pi-mono
+must stay on v0.60.0: upstream main renamed the packages to `@earendil-works/*` and dropped
+web-ui.
 
 Start all dev watchers (mini-lit, pi-mono, sitegeist extension, marketing site):
 
