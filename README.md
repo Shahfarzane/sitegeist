@@ -72,7 +72,7 @@ Requires Chrome 141+ or the equivalent Chromium release.
 ```bash
 cd cli && npm install && npm run build && npm link   # until published to npm
 sitegeist install                                     # native-messaging manifest for every Chromium browser found
-claude mcp add sitegeist -- sitegeist mcp             # Claude Code
+claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp   # Claude Code (install prints the exact paths)
 sitegeist pi-extension                                # pi: writes ~/.pi/agent/extensions/sitegeist.ts
 sitegeist status                                      # is the extension reachable?
 ```

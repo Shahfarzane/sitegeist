@@ -60,6 +60,7 @@
 - Dialog text without an explicit color was black in dark mode (dialogs mount on body, outside the themed app root); body now carries the theme colors. Destructive buttons are outlined with red text instead of filled red.
 - `release-crx.sh` aborted silently on a clean checkout (a `[ ... ] && echo` in the version name returned 1 under `set -e`), so automatic releases stopped after the first; both scripts now log the failing line.
 - The release job ran at launchd's Background priority (efficiency cores, throttled I/O), so a release that needed a dependency reinstall took over half an hour; it now runs at Standard priority.
+- The bridge host died after `brew upgrade`: the launcher pinned Node's versioned Cellar path (`node@24/24.21.0_1`), which Homebrew deletes on the next revision. It now uses the stable `opt/` path; a launcher whose Node or script is missing counts as not installed, so `sitegeist mcp` rewrites it on start, and `sitegeist status` reports it. `sitegeist install` prints the `claude mcp add` command with absolute paths (GUI apps do not inherit the shell PATH).
 
 ### Removed
 - Upstream update check (About tab and the disabled startup prompt against `sitegeist.ai/uploads/version.json`) and `UpdateNotificationDialog`: the fork's version numbers differ and its updates come from signed releases.

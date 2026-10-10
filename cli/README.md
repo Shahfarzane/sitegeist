@@ -37,9 +37,15 @@ it needs no extra step. Reload the extension once after the first install.
 ## Harness setup
 
 ```bash
-claude mcp add sitegeist -- sitegeist mcp
+claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp
 sitegeist pi-extension
 ```
+
+Register with absolute paths: GUI apps such as the Claude desktop app do not inherit the shell
+`PATH`, so a plain `sitegeist mcp` (whose shebang is `#!/usr/bin/env node`) can fail to start
+there without an error. `sitegeist install` prints the exact command for the current machine.
+The host launcher uses Homebrew's stable `opt/` path for Node, and `sitegeist mcp` rewrites a
+launcher whose Node or script has gone missing, so `brew upgrade` does not break the bridge.
 
 Codex (`~/.codex/config.toml`):
 
