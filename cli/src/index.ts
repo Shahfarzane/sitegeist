@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeClient, listSockets } from "./client.ts";
 import { runNativeHost } from "./host.ts";
-import { install, isInstalled } from "./install.ts";
+import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
 import { runMcpServer } from "./mcp.ts";
 import { writePiExtension } from "./pi-extension.ts";
 import { VERSION } from "./version.ts";
@@ -23,8 +23,8 @@ Usage:
   sitegeist pi-extension    Write a pi extension to ~/.pi/agent/extensions/sitegeist.ts
   sitegeist host            (internal) native messaging host, spawned by the browser
 
-Harness setup:
-  claude mcp add sitegeist -- sitegeist mcp
+Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegeist install\` prints them):
+  claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp
   codex:  [mcp_servers.sitegeist]  command = "sitegeist"  args = ["mcp"]
   omp:    add an MCP server entry running "sitegeist mcp"
   pi:     sitegeist pi-extension
@@ -33,6 +33,11 @@ Harness setup:
 async function status(): Promise<void> {
 	const sockets = listSockets();
 	console.log(`native host manifest: ${isInstalled() ? "installed" : "missing (run: sitegeist install)"}`);
+	const problem = launcherProblem();
+	if (problem) {
+		console.log(`host launcher: broken, ${problem} (run: sitegeist install)`);
+		process.exitCode = 1;
+	}
 	if (sockets.length === 0) {
 		console.log("bridge sockets: none. Is the sitegeist extension loaded in a running Chromium browser?");
 		process.exitCode = 1;
@@ -71,6 +76,7 @@ async function main(): Promise<void> {
 			for (const f of result.skipped) console.log(`current ${f}`);
 			if (result.written.length + result.skipped.length === 0) console.log("no Chromium browser profile directories found");
 			console.log("Reload the sitegeist extension once if it was loaded before this install.");
+			console.log(`Claude Code (every project): claude mcp add --scope user sitegeist -- ${mcpCommand().join(" ")}`);
 			return;
 		}
 		case "status":

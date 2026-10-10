@@ -84,8 +84,8 @@ export class BridgeTab extends SettingsTab {
 				<p class="text-sm text-muted-foreground">
 					Lets coding agents on this computer (Claude Code, Codex, omp, pi) drive the browser through
 					Sitegeist. Each agent gets its own tab group and works in the background. Connect a harness with
-					<code class="text-xs">sitegeist mcp</code>, e.g.
-					<code class="text-xs">claude mcp add sitegeist -- sitegeist mcp</code>.
+					<code class="text-xs">sitegeist mcp</code>; <code class="text-xs">sitegeist install</code> prints the
+					exact <code class="text-xs">claude mcp add</code> command for this machine.
 				</p>
 
 				<label class="flex items-center gap-2 text-sm text-foreground">
