@@ -53,7 +53,7 @@ import {
 } from "./messages/NavigationMessage.js";
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
-import { refreshDiscoveredModels } from "./models/registry.js";
+import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
 import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
@@ -308,7 +308,6 @@ const DEFAULT_MODELS: Record<string, string> = {
 	"minimax-cn": "MiniMax-M2.1",
 	mistral: "devstral-medium-latest",
 	openai: "gpt-4o-mini",
-	"openai-codex": "gpt-5.5",
 	opencode: "claude-opus-4-6",
 	"opencode-go": "kimi-k2.5",
 	openrouter: "openai/gpt-5.1-codex",
@@ -317,33 +316,45 @@ const DEFAULT_MODELS: Record<string, string> = {
 	zai: "glm-4.6",
 };
 
+/**
+ * Default model for the providers the user has keys for: a listed default first, else the
+ * first model of the first provider that has any (discovered lists come in the provider's
+ * own order, so that is the provider's default).
+ */
+function defaultModelFor(providers: string[]): Model<any> | undefined {
+	for (const provider of providers) {
+		const modelId = DEFAULT_MODELS[provider];
+		const model = modelId ? getModel(provider as any, modelId) : undefined;
+		if (model) return model;
+	}
+	for (const provider of providers) {
+		const models = getModels(provider as any);
+		if (models.length > 0) return models[0];
+	}
+	return undefined;
+}
+
+/**
+ * A saved model its provider no longer lists (retired, or hidden from the provider's picker)
+ * gives way to that provider's default. Only a discovered list is trusted for this; static
+ * tables and custom providers keep the saved model.
+ */
+async function stillOffered(saved: Model<any>): Promise<Model<any>> {
+	if (!(await applyCachedModels(storage, saved.provider))) return saved;
+	if (getModels(saved.provider as any).some((m) => m.id === saved.id)) return saved;
+	return defaultModelFor([saved.provider]) ?? saved;
+}
+
 async function selectDefaultModelForAvailableProvider() {
 	const providers = await getProvidersWithKeys();
 	if (providers.length === 0 || !agent) return;
 
-	// Try each provider with keys and find a default model
-	for (const provider of providers) {
-		const modelId = DEFAULT_MODELS[provider];
-		if (modelId) {
-			const model = getModel(provider as any, modelId);
-			if (model) {
-				agent.setModel(model);
-				await storage.settings.set("lastUsedModel", model);
-				renderApp();
-				return;
-			}
-		}
-	}
-
-	// If no default found, try the first model for the first provider with a key
-	for (const provider of providers) {
-		const models = getModels(provider as any);
-		if (models.length > 0) {
-			agent.setModel(models[0]);
-			await storage.settings.set("lastUsedModel", models[0]);
-			renderApp();
-			return;
-		}
+	const model = defaultModelFor(providers);
+	if (model) {
+		agent.setModel(model);
+		await storage.settings.set("lastUsedModel", model);
+		renderApp();
+		return;
 	}
 
 	// Fall back to the first model of a custom provider (not in the built-in registry)
@@ -572,20 +583,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 	if (!initialState?.model) {
 		const savedModel = await storage.settings.get<Model<any>>("lastUsedModel");
 		if (savedModel) {
-			defaultModel = savedModel;
+			defaultModel = await stillOffered(savedModel);
 		} else {
-			// Try to find a default model for a provider the user already has a key for
-			const providersWithKeys = await getProvidersWithKeys();
-			for (const provider of providersWithKeys) {
-				const modelId = DEFAULT_MODELS[provider];
-				if (modelId) {
-					const model = getModel(provider as any, modelId);
-					if (model) {
-						defaultModel = model;
-						break;
-					}
-				}
-			}
+			// A default model for a provider the user already has a key for
+			defaultModel = defaultModelFor(await getProvidersWithKeys());
 		}
 	}
 	// Final fallback

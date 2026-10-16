@@ -5,6 +5,8 @@ export interface DiscoveredProviderEntry {
 	provider: string;
 	fetchedAt: number;
 	models: Model<any>[];
+	/** Discovery rules the list was made with (DISCOVERY_VERSION); an older list is refetched. */
+	version?: number;
 	/** Last error, kept so the UI can explain why the static list is in use. */
 	error?: string;
 }

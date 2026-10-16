@@ -20,6 +20,8 @@ export interface DiscoveredModel {
 	maxTokens?: number;
 	cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 	headers?: Record<string, string>;
+	/** The provider's own picker order, lower first; the first one becomes the provider's default. */
+	priority?: number;
 }
 
 export interface DiscoveryCredential {
@@ -170,19 +172,28 @@ interface CodexListResponse {
 	models: Array<{
 		slug: string;
 		display_name?: string;
-		visibility?: string;
+		/** "list" shows in Codex's picker; "hide" and "none" are internal or retired. */
+		visibility?: "list" | "hide" | "none";
+		priority?: number;
 		supported_reasoning_levels?: Array<{ effort: string }>;
 		input_modalities?: string[];
 	}>;
 }
 
+/**
+ * The backend only returns models whose minimum client version this one meets, so an old
+ * value hides current models and keeps retired ones. Track the latest Codex CLI release
+ * (github.com/openai/codex/releases).
+ */
+const CODEX_CLIENT_VERSION = "0.163.0";
+
 const openaiCodex: Adapter = async ({ token, accountId }, signal) => {
-	const url = "https://chatgpt.com/backend-api/codex/models?client_version=0.154.0";
+	const url = `https://chatgpt.com/backend-api/codex/models?client_version=${CODEX_CLIENT_VERSION}`;
 	const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
 	if (accountId) headers["chatgpt-account-id"] = accountId;
 	const data = await getJson<CodexListResponse>(url, headers, signal);
 	return data.models
-		.filter((m) => m.visibility !== "hidden")
+		.filter((m) => (m.visibility ?? "list") === "list")
 		.map((m) => ({
 			id: m.slug,
 			name: m.display_name,
@@ -190,6 +201,7 @@ const openaiCodex: Adapter = async ({ token, accountId }, signal) => {
 			baseUrl: "https://chatgpt.com/backend-api",
 			reasoning: (m.supported_reasoning_levels?.length ?? 0) > 0,
 			input: m.input_modalities?.includes("image") === false ? ["text"] : ["text", "image"],
+			priority: m.priority,
 		}));
 };
 
