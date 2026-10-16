@@ -24,7 +24,13 @@ import { Circle, Download, History, Link, Plus, Settings, Square } from "lucide"
 import { isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
-import { BrowserSession, listSessions, sessionIdForTab, sessionOwningTab } from "./browser/session.js";
+import {
+	BrowserSession,
+	isReleasedByUser,
+	listSessions,
+	sessionIdForTab,
+	sessionOwningTab,
+} from "./browser/session.js";
 import "./components/OverflowMenu.js";
 import type { MenuEntry } from "./components/OverflowMenu.js";
 import { Toast } from "./components/Toast.js";
@@ -171,9 +177,11 @@ async function openBrowserSession(id: string): Promise<void> {
 	// this task's panel; other tabs are unaffected.
 	if (homeTabId !== undefined) {
 		await browserSession.setHomeTab(homeTabId);
-		// A tab an external agent is driving stays with that agent; the panel only binds to it.
+		// A tab an external agent is driving stays with that agent, and a tab the user took out
+		// of the group stays theirs until they share it again; the panel only binds to either.
 		const owner = await sessionOwningTab(homeTabId);
-		if (!owner || owner.id === browserSession.id || !owner.id.startsWith("bridge-"))
+		const agentsTab = owner !== undefined && owner.id !== browserSession.id && owner.id.startsWith("bridge-");
+		if (!agentsTab && !(await isReleasedByUser(homeTabId)))
 			// Only start on the home tab; re-opening (e.g. the rename on first save) must not yank
 			// the agent back from a tab it switched to.
 			await browserSession.adopt(homeTabId, browserSession.currentTabId === undefined);

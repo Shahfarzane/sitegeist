@@ -10,12 +10,14 @@
  * State is mirrored to chrome.storage.local so it survives sidepanel reloads, service
  * worker restarts and extension reloads (Chrome's tab groups do too). Tab and group ids
  * that no longer exist are dropped on reconcile, which is what happens after a browser
- * restart.
+ * restart. A tab the user takes out of the group (or a group the user ungroups) is handed
+ * back to the user for good: the session stops driving it and never regroups it.
  */
 
 import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport } from "./cdp.js";
 
 const STORAGE_KEY = "browser_sessions";
+const RELEASED_KEY = "browser_released_tabs";
 const GROUP_PREFIX = "Sitegeist";
 const GROUP_COLORS: `${chrome.tabGroups.Color}`[] = [
 	"blue",
@@ -34,7 +36,7 @@ export interface TabInfo {
 	title: string;
 	current: boolean;
 	favicon?: string;
-	/** False when the tab sits outside the session's group (dragged out, or grouping failed). */
+	/** False when the tab sits outside the session's group (grouping failed, e.g. a pinned tab). */
 	inGroup: boolean;
 }
 
@@ -45,6 +47,8 @@ interface PersistedSession {
 	windowId: number;
 	groupId?: number;
 	tabIds: number[];
+	/** Owned tabs that have been in the group; one found outside it again was taken out by the user. */
+	groupedTabIds?: number[];
 	currentTabId?: number;
 	/** The tab the panel that owns this session was opened on (Claude-style per-tab binding). */
 	homeTabId?: number;
@@ -61,6 +65,41 @@ async function readTable(): Promise<SessionTable> {
 
 async function writeTable(table: SessionTable): Promise<void> {
 	await chrome.storage.local.set({ [STORAGE_KEY]: table });
+}
+
+/**
+ * Tabs the user took out of an agent's group (Ungroup, dragged out, pinned). Kept outside the
+ * session table so it survives the owning session being dropped: a side panel reopening on
+ * such a tab must not pull it back into a group.
+ */
+async function readReleased(): Promise<number[]> {
+	const data = await chrome.storage.local.get(RELEASED_KEY);
+	return (data[RELEASED_KEY] as number[] | undefined) ?? [];
+}
+
+async function markReleased(tabId: number): Promise<void> {
+	const released = await readReleased();
+	if (!released.includes(tabId)) await chrome.storage.local.set({ [RELEASED_KEY]: [...released, tabId] });
+}
+
+export async function unmarkReleased(tabId: number): Promise<void> {
+	const released = await readReleased();
+	if (released.includes(tabId))
+		await chrome.storage.local.set({ [RELEASED_KEY]: released.filter((id) => id !== tabId) });
+}
+
+/** True when the user took this tab back from an agent; automatic adoption must leave it alone. */
+export async function isReleasedByUser(tabId: number): Promise<boolean> {
+	return (await readReleased()).includes(tabId);
+}
+
+/** Forget released tabs that no longer exist (tab ids are only unique within a browser run). */
+export async function forgetReleasedTabs(liveTabIds?: Set<number>): Promise<void> {
+	const live =
+		liveTabIds ?? new Set((await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[])).map((t) => t.id ?? -1));
+	const released = await readReleased();
+	const kept = released.filter((id) => live.has(id));
+	if (kept.length !== released.length) await chrome.storage.local.set({ [RELEASED_KEY]: kept });
 }
 
 /** Chromium refuses tab edits while a tab is being dragged or animated; retry briefly. */
@@ -161,6 +200,7 @@ export async function pruneSessions(
 		const inst = instances.get(s.id);
 		const state = inst ? (inst as unknown as { state: PersistedSession }).state : s;
 		state.tabIds = state.tabIds.filter((id) => liveTabs.has(id));
+		if (state.groupedTabIds) state.groupedTabIds = state.groupedTabIds.filter((id) => state.tabIds.includes(id));
 		if (state.currentTabId !== undefined && !liveTabs.has(state.currentTabId))
 			state.currentTabId = state.tabIds[state.tabIds.length - 1];
 		if (state.homeTabId !== undefined && !liveTabs.has(state.homeTabId)) state.homeTabId = undefined;
@@ -194,6 +234,7 @@ export async function pruneSessions(
 		table[state.id] = state;
 	}
 	await writeTable(table);
+	await forgetReleasedTabs(new Set(liveTabs.keys()));
 	return { dropped, closedTabs };
 }
 
@@ -385,13 +426,46 @@ export class BrowserSession {
 			}
 			this.state.tabIds = alive;
 		}
-		// Tabs that fell out of the group (or never made it in) go back, so the user always sees
-		// an agent's tabs together.
+		// Records from before groupedTabIds existed: their tabs were all grouped at some point.
+		this.state.groupedTabIds = (this.state.groupedTabIds ?? alive).filter((id) => alive.includes(id));
+		// A tab that was in the group and is not any more was taken out by the user (Ungroup on
+		// the tab or the whole group, dragged out, pinned): hand it back. Putting it back made
+		// ungrouping impossible. Tabs that never made it in (grouping failed) get another try.
+		// Classify against the group as it is now, before groupTab may start a new one.
+		const groupId = this.state.groupId;
+		const neverGrouped: number[] = [];
 		for (const id of alive) {
 			const tab = await tabExists(id);
-			if (tab && (this.state.groupId === undefined || tab.groupId !== this.state.groupId)) await this.groupTab(id);
+			if (!tab) continue;
+			if (groupId !== undefined && tab.groupId === groupId) await this.markGrouped(id);
+			else if (this.state.groupedTabIds.includes(id)) await this.handBack(id);
+			else neverGrouped.push(id);
 		}
+		for (const id of neverGrouped) await this.groupTab(id);
 		await this.persist();
+	}
+
+	/** Remember that a tab sits in the group (it was put there, or the user dragged it back in). */
+	private async markGrouped(tabId: number): Promise<void> {
+		const grouped = this.state.groupedTabIds ?? [];
+		if (grouped.includes(tabId)) return;
+		this.state.groupedTabIds = [...grouped, tabId];
+		await unmarkReleased(tabId);
+	}
+
+	/** True when a tab this session had grouped now sits outside the group. */
+	private leftGroup(tab: chrome.tabs.Tab): boolean {
+		if (tab.id === undefined || !(this.state.groupedTabIds ?? []).includes(tab.id)) return false;
+		return this.state.groupId === undefined || tab.groupId !== this.state.groupId;
+	}
+
+	/** The user took a tab out of the group: stop driving it and do not re-adopt it on our own. */
+	private async handBack(tabId: number): Promise<void> {
+		this.state.tabIds = this.state.tabIds.filter((id) => id !== tabId);
+		this.state.groupedTabIds = (this.state.groupedTabIds ?? []).filter((id) => id !== tabId);
+		if (this.state.currentTabId === tabId) this.state.currentTabId = this.state.tabIds[this.state.tabIds.length - 1];
+		await markReleased(tabId);
+		await detachTab(tabId, true);
 	}
 
 	private groupTitle(): string {
@@ -434,7 +508,10 @@ export class BrowserSession {
 			const win = await chrome.windows.get(tab.windowId).catch(() => undefined);
 			if (win && win.type !== "normal") return; // popups and app windows have no tab strip
 			const group = await this.liveGroup();
-			if (group && tab.groupId === group.id) return;
+			if (group && tab.groupId === group.id) {
+				await this.markGrouped(tabId);
+				return;
+			}
 			if (group) {
 				try {
 					if (group.windowId !== tab.windowId) {
@@ -442,6 +519,7 @@ export class BrowserSession {
 						tab = await chrome.tabs.get(tabId);
 					}
 					await withGroupRetry(() => chrome.tabs.group({ tabIds: [tabId], groupId: group.id }));
+					await this.markGrouped(tabId);
 					return;
 				} catch (err) {
 					console.warn("[BrowserSession] joining group failed, starting a new one:", err);
@@ -453,6 +531,7 @@ export class BrowserSession {
 				chrome.tabs.group({ tabIds: [tabId], createProperties: { windowId: tab.windowId } }),
 			);
 			this.state.windowId = tab.windowId;
+			await this.markGrouped(tabId);
 			await chrome.tabGroups.update(this.state.groupId, { title: this.groupTitle(), color: this.state.color });
 		} catch (err) {
 			// A closing window or a tab being dragged must not fail the tool; the tab stays owned.
@@ -499,6 +578,8 @@ export class BrowserSession {
 			table[s.id] = target;
 		}
 		await writeTable(table);
+		// Adopting is a deliberate hand-over, so it overrides an earlier "taken back".
+		await unmarkReleased(tabId);
 		if (!this.state.tabIds.includes(tabId)) this.state.tabIds.push(tabId);
 		if (makeCurrent) this.state.currentTabId = tabId;
 		await this.groupTab(tabId);
@@ -509,6 +590,7 @@ export class BrowserSession {
 	async replaceTabId(oldId: number, newId: number): Promise<void> {
 		if (!this.state.tabIds.includes(oldId)) return;
 		this.state.tabIds = this.state.tabIds.map((id) => (id === oldId ? newId : id));
+		this.state.groupedTabIds = (this.state.groupedTabIds ?? []).filter((id) => id !== oldId);
 		if (this.state.currentTabId === oldId) this.state.currentTabId = newId;
 		if (this.state.homeTabId === oldId) this.state.homeTabId = newId;
 		await this.groupTab(newId);
@@ -518,6 +600,7 @@ export class BrowserSession {
 	/** Release a tab without closing it. */
 	async release(tabId: number): Promise<void> {
 		this.state.tabIds = this.state.tabIds.filter((id) => id !== tabId);
+		this.state.groupedTabIds = (this.state.groupedTabIds ?? []).filter((id) => id !== tabId);
 		if (this.state.currentTabId === tabId) this.state.currentTabId = this.state.tabIds[this.state.tabIds.length - 1];
 		await detachTab(tabId, true);
 		try {
@@ -542,9 +625,11 @@ export class BrowserSession {
 	async setCurrent(tabId: number): Promise<chrome.tabs.Tab> {
 		if (!this.state.tabIds.includes(tabId)) throw new Error(`Tab ${tabId} is not owned by this session`);
 		const tab = await tabExists(tabId);
-		if (!tab) {
+		if (!tab || this.leftGroup(tab)) {
 			await this.reconcile();
-			throw new Error(`Tab ${tabId} no longer exists`);
+			throw new Error(
+				tab ? `Tab ${tabId} was taken out of your group by the user` : `Tab ${tabId} no longer exists`,
+			);
 		}
 		this.state.currentTabId = tabId;
 		await this.persist();
@@ -555,7 +640,8 @@ export class BrowserSession {
 	async currentTab(): Promise<chrome.tabs.Tab | undefined> {
 		if (this.state.currentTabId === undefined) return undefined;
 		const tab = await tabExists(this.state.currentTabId);
-		if (!tab) {
+		// Gone, or the user took it out of the group: reconcile picks another tab (or none).
+		if (!tab || this.leftGroup(tab)) {
 			await this.reconcile();
 			return this.state.currentTabId === undefined ? undefined : await tabExists(this.state.currentTabId);
 		}
