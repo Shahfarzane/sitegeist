@@ -78,13 +78,15 @@ function harnessName(): string {
 
 /**
  * The browser session this server drives. Always set: without one every reconnect
- * (extension reload, worker restart) got a fresh session and lost its tabs. One MCP
- * server process serves one harness session, so the process identity is the fallback.
+ * (extension reload, worker restart) got a fresh session and lost its tabs. Claude Code
+ * gives stdio servers CLAUDE_CODE_SESSION_ID, so every server process in one chat (a
+ * subagent that declares sitegeist inline starts a fresh one per run) shares one tab
+ * group. The process identity is the fallback.
  */
 function sessionKey(): string {
 	return (
 		process.env.SITEGEIST_SESSION ||
-		process.env.CLAUDE_SESSION_ID ||
+		process.env.CLAUDE_CODE_SESSION_ID ||
 		process.env.CODEX_THREAD_ID ||
 		process.env.OMP_SESSION_ID ||
 		process.env.PI_SESSION_ID ||

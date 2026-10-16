@@ -57,6 +57,31 @@ args = ["mcp"]
 
 omp: add an MCP server entry that runs `sitegeist mcp`.
 
+### Claude Code on demand
+
+To keep `sitegeist mcp` out of sessions that never use the browser, declare it inline in a
+user subagent instead of with `claude mcp add`. The server starts when the subagent runs and
+stops when it finishes, and the main conversation carries no sitegeist tools. Repeated runs in
+one chat share a tab group (keyed on `CLAUDE_CODE_SESSION_ID`). `~/.claude/agents/sitegeist-browser.md`:
+
+```markdown
+---
+name: sitegeist-browser
+description: Drives the user's real browser through sitegeist. Use when the user asks for sitegeist or their own browser.
+tools: mcp__sitegeist
+mcpServers:
+  - sitegeist:
+      type: stdio
+      command: /opt/homebrew/opt/node@24/bin/node
+      args: ["/opt/homebrew/bin/sitegeist", "mcp"]
+---
+
+Do the browser task you are given with the sitegeist tools and report what you found.
+```
+
+Inline servers in `~/.claude/agents/` need no folder trust. A new `agents` directory is picked
+up from the next session on.
+
 ## Permissions
 
 By default the extension asks before an agent opens a new site. MCP clients that support
