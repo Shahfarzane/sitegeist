@@ -703,6 +703,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		},
 		onBeforeSend: async () => {
 			if (!agent) return;
+			browserSession?.userAskedAgain();
 
 			// The session's current tab (nothing if the session has no tab yet)
 			const tab = await browserSession?.currentTab();
