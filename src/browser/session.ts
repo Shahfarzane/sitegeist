@@ -11,7 +11,9 @@
  * worker restarts and extension reloads (Chrome's tab groups do too). Tab and group ids
  * that no longer exist are dropped on reconcile, which is what happens after a browser
  * restart. A tab the user takes out of the group (or a group the user ungroups) is handed
- * back to the user for good: the session stops driving it and never regroups it.
+ * back to the user for good: the session stops driving it and never regroups it. Removing
+ * the whole group while the agent is working (delete, close, ungroup) means "stop": the
+ * agent's next attempt to open a tab is refused instead of starting a new group.
  */
 
 import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport } from "./cdp.js";
@@ -19,6 +21,10 @@ import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport } from
 const STORAGE_KEY = "browser_sessions";
 const RELEASED_KEY = "browser_released_tabs";
 const GROUP_PREFIX = "Sitegeist";
+/** Tool calls closer together than this belong to one agent run. */
+const RUN_GAP_MS = 2 * 60 * 1000;
+const GROUP_REMOVED_MESSAGE =
+	"The user removed your tab group, which means: stop using the browser. Do not open new tabs; end your turn and report what you have. Open a tab again only when the user asks in a new message.";
 const GROUP_COLORS: `${chrome.tabGroups.Color}`[] = [
 	"blue",
 	"cyan",
@@ -281,16 +287,30 @@ async function tabExists(tabId: number): Promise<chrome.tabs.Tab | undefined> {
 }
 
 export class NoTabError extends Error {
-	constructor() {
-		super("This session has no tab yet. Call navigate with a URL first (it opens a tab in your group).");
+	constructor(
+		message = "This session has no tab yet. Call navigate with a URL first (it opens a tab in your group).",
+	) {
+		super(message);
 	}
 }
 
 /** One live instance per session id in this context, so concurrent clients share state. */
 const instances = new Map<string, BrowserSession>();
 
+chrome.tabGroups.onRemoved.addListener((group) => {
+	for (const session of instances.values()) session.onGroupRemoved(group.id);
+});
+
 export class BrowserSession {
 	private state: PersistedSession;
+	/** Last time a tool used this session in this context. */
+	private activeAt = 0;
+	/** Our group while we take its last tab out ourselves; Chrome removing it then is not the user. */
+	private releasingGroupId?: number;
+	/** The group reconcile last found gone, so its removal event still finds this session. */
+	private lostGroupId?: number;
+	/** When the user removed our group mid-run; the agent's next request for a tab is refused once. */
+	private groupRemovedAt?: number;
 
 	private constructor(state: PersistedSession) {
 		this.state = state;
@@ -491,9 +511,32 @@ export class BrowserSession {
 		try {
 			return await chrome.tabGroups.get(this.state.groupId);
 		} catch {
+			this.lostGroupId = this.state.groupId;
 			this.state.groupId = undefined;
 			return undefined;
 		}
+	}
+
+	/**
+	 * Chrome removed a tab group. When it was ours and the agent is mid-run, the user took it away
+	 * (deleted, closed or ungrouped it, or closed its last tab): opening a new group would undo that.
+	 */
+	onGroupRemoved(groupId: number): void {
+		if (groupId !== this.state.groupId && groupId !== this.lostGroupId) return;
+		if (groupId === this.releasingGroupId) return;
+		if (Date.now() - this.activeAt < RUN_GAP_MS) this.groupRemovedAt = Date.now();
+	}
+
+	/** The user asked for more work: a group they removed before no longer means "stop". */
+	userAskedAgain(): void {
+		this.groupRemovedAt = undefined;
+	}
+
+	/** Refuse once after the user removed our group mid-run, so the agent stops instead of regrouping. */
+	private refuseAfterGroupRemoved(): void {
+		const at = this.groupRemovedAt;
+		this.groupRemovedAt = undefined;
+		if (at !== undefined && Date.now() - at < RUN_GAP_MS) throw new NoTabError(GROUP_REMOVED_MESSAGE);
 	}
 
 	/**
@@ -558,6 +601,8 @@ export class BrowserSession {
 	 * tab loads it directly (callers wait for the load); without one it starts blank.
 	 */
 	async createTab(url?: string): Promise<chrome.tabs.Tab> {
+		this.activeAt = Date.now();
+		this.refuseAfterGroupRemoved();
 		const windowId = await this.targetWindowId();
 		const tab = await chrome.tabs.create({ url: url ?? "about:blank", windowId, active: false });
 		if (tab.id === undefined) throw new Error("Failed to create tab");
@@ -603,6 +648,11 @@ export class BrowserSession {
 		this.state.groupedTabIds = (this.state.groupedTabIds ?? []).filter((id) => id !== tabId);
 		if (this.state.currentTabId === tabId) this.state.currentTabId = this.state.tabIds[this.state.tabIds.length - 1];
 		await detachTab(tabId, true);
+		const groupId = this.state.groupId;
+		if (groupId !== undefined) {
+			const members = await chrome.tabs.query({ groupId }).catch(() => [] as chrome.tabs.Tab[]);
+			if (members.every((t) => t.id === tabId)) this.releasingGroupId = groupId;
+		}
 		try {
 			await chrome.tabs.ungroup(tabId);
 		} catch {
@@ -623,6 +673,7 @@ export class BrowserSession {
 
 	/** Make an owned tab the one tools act on. Does not focus anything. */
 	async setCurrent(tabId: number): Promise<chrome.tabs.Tab> {
+		this.activeAt = Date.now();
 		if (!this.state.tabIds.includes(tabId)) throw new Error(`Tab ${tabId} is not owned by this session`);
 		const tab = await tabExists(tabId);
 		if (!tab || this.leftGroup(tab)) {
@@ -638,6 +689,7 @@ export class BrowserSession {
 
 	/** The tab tools act on, or undefined when the session has no tabs yet. */
 	async currentTab(): Promise<chrome.tabs.Tab | undefined> {
+		this.activeAt = Date.now();
 		if (this.state.currentTabId === undefined) return undefined;
 		const tab = await tabExists(this.state.currentTabId);
 		// Gone, or the user took it out of the group: reconcile picks another tab (or none).
@@ -655,6 +707,7 @@ export class BrowserSession {
 	async requireCurrentTab(): Promise<chrome.tabs.Tab> {
 		const tab = await this.currentTab();
 		if (tab) return tab;
+		this.refuseAfterGroupRemoved();
 		throw new NoTabError();
 	}
 
@@ -673,6 +726,7 @@ export class BrowserSession {
 
 	/** Owned tabs with live titles and urls. */
 	async tabs(): Promise<TabInfo[]> {
+		this.activeAt = Date.now();
 		await this.reconcile();
 		const out: TabInfo[] = [];
 		for (const id of this.state.tabIds) {
