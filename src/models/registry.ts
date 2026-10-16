@@ -14,6 +14,8 @@ import type { SitegeistAppStorage } from "../storage/app-storage.js";
 import { canDiscover, type DiscoveredModel, discoverProviderModels } from "./discovery.js";
 
 const STALE_MS = 60 * 60 * 1000;
+/** Bump when an adapter changes which models it keeps, so cached lists are refetched at once. */
+const DISCOVERY_VERSION = 2;
 const METADATA_STALE_MS = 24 * 60 * 60 * 1000;
 const MODELS_DEV_URL = "https://models.dev/api.json";
 
@@ -129,7 +131,7 @@ async function credentialFor(storage: SitegeistAppStorage, provider: string) {
 /** Register the cached discovery result for a provider, if any. */
 export async function applyCachedModels(storage: SitegeistAppStorage, provider: string): Promise<boolean> {
 	const entry = await storage.discoveredModels.get(provider);
-	if (!entry || entry.models.length === 0) return false;
+	if (!entry || entry.models.length === 0 || entry.version !== DISCOVERY_VERSION) return false;
 	registerModels(provider, entry.models);
 	return true;
 }
@@ -156,12 +158,13 @@ export async function refreshProviderModels(storage: SitegeistAppStorage, provid
 			]);
 			if (discovered.length === 0) throw new Error("provider returned no models");
 			const generated = new Map(getGeneratedModels(provider).map((m) => [m.id, m]));
-			const models = discovered.map((d) =>
-				merge(provider, d, generated.get(d.id), findMetadata(meta, provider, d.id)),
-			);
-			models.sort((a, b) => a.id.localeCompare(b.id));
+			// The provider's own order where it gives one (its default first), else by id.
+			const rank = (d: DiscoveredModel) => d.priority ?? Number.POSITIVE_INFINITY;
+			const models = [...discovered]
+				.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id))
+				.map((d) => merge(provider, d, generated.get(d.id), findMetadata(meta, provider, d.id)));
 			registerModels(provider, models);
-			await storage.discoveredModels.set({ provider, fetchedAt: Date.now(), models });
+			await storage.discoveredModels.set({ provider, fetchedAt: Date.now(), models, version: DISCOVERY_VERSION });
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			console.warn(`[models] discovery failed for ${provider}: ${message}`);
@@ -191,7 +194,11 @@ export async function refreshDiscoveredModels(
 	const pending: Promise<void>[] = [];
 	for (const provider of providers) {
 		const entry = await storage.discoveredModels.get(provider);
-		const fresh = entry && Date.now() - entry.fetchedAt < STALE_MS && entry.models.length > 0;
+		const fresh =
+			entry &&
+			entry.version === DISCOVERY_VERSION &&
+			Date.now() - entry.fetchedAt < STALE_MS &&
+			entry.models.length > 0;
 		if (entry && entry.models.length > 0) registerModels(provider, entry.models);
 		if (!fresh || options.force) pending.push(refreshProviderModels(storage, provider));
 	}
