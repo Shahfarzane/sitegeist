@@ -1,6 +1,12 @@
 import { startBridge, trace } from "./bridge/native.js";
 import { setGuardLogger, startForegroundGuard } from "./browser/foreground-guard.js";
-import { BrowserSession, cleanupOrphanGroups, listSessions } from "./browser/session.js";
+import {
+	BrowserSession,
+	cleanupOrphanGroups,
+	forgetReleasedTabs,
+	listSessions,
+	unmarkReleased,
+} from "./browser/session.js";
 import { startSelfUpdate } from "./utils/self-update.js";
 
 // Keep popups opened by agent-driven background tabs from stealing the user's focus.
@@ -9,6 +15,11 @@ setGuardLogger(trace);
 
 // Groups from before an extension reload have no owning session any more; give the tabs back.
 cleanupOrphanGroups().catch(() => undefined);
+
+// Tabs the user took back from an agent are tracked by id, and ids only hold within one
+// browser run: drop the ones that are gone.
+forgetReleasedTabs().catch(() => undefined);
+chrome.tabs.onRemoved.addListener((tabId) => void unmarkReleased(tabId).catch(() => undefined));
 
 // Prerendered / instant pages commit into a new tab id; keep the owning session pointed at it.
 chrome.webNavigation.onTabReplaced.addListener(async ({ replacedTabId, tabId }) => {
