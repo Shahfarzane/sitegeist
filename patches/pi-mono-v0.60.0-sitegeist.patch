@@ -1749,6 +1749,26 @@ index 000000000..bbbf21f0e
 +	assert.equal(cron.nextRun(new Date("2026-10-22T12:06:00Z"))?.toISOString(), "2026-10-22T12:10:00.000Z");
 +	cron.stop();
 +});
+diff --git a/packages/pods/README.md b/packages/pods/README.md
+index 9edb2ea54..335325deb 100644
+--- a/packages/pods/README.md
++++ b/packages/pods/README.md
+@@ -44,7 +44,7 @@ export OPENAI_API_KEY=$PI_API_KEY
+ 
+ ## Prerequisites
+ 
+-- Node.js 18+
++- Node.js 22.22.2+ on the 22.x line, 24.15.0+ on the 24.x line, or 26+
+ - HuggingFace token (for model downloads)
+ - GPU pod with:
+   - Ubuntu 22.04 or 24.04
+@@ -508,4 +508,4 @@ ls -la ~/.pi/sessions/
+ 
+ ## License
+ 
+-MIT
+\ No newline at end of file
++MIT
 diff --git a/packages/pods/package.json b/packages/pods/package.json
 index 0b1887b9b..06b3bbeef 100644
 --- a/packages/pods/package.json
