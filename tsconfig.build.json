@@ -7,7 +7,6 @@
 		"moduleResolution": "Bundler",
 		"target": "ES2022",
 		"types": ["chrome"],
-		"baseUrl": ".",
 		"paths": {
 			"lit": ["./node_modules/lit"],
 			"lit/*": ["./node_modules/lit/*"],
