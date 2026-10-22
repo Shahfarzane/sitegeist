@@ -83,5 +83,18 @@
 			"urlFilter": "||api.z.ai",
 			"resourceTypes": ["xmlhttprequest", "other"]
 		}
+	},
+	{
+		"id": 6,
+		"priority": 1,
+		"action": {
+			"type": "modifyHeaders",
+			"requestHeaders": [{ "header": "Origin", "operation": "remove" }]
+		},
+		"condition": {
+			"urlFilter": "||api.anthropic.com",
+			"initiatorDomains": ["lnncppjiohlpejgcbdgoihplimdckddn"],
+			"resourceTypes": ["xmlhttprequest", "other"]
+		}
 	}
 ]
