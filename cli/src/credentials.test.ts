@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -147,6 +147,49 @@ test("codex: when Codex rotated the token during a failed refresh, its new token
 	assert.equal(response.error, undefined);
 	assert.equal(response.credentials?.expires, theirs * 1000);
 	assert.equal(readAuth().tokens.refresh_token, "refresh-from-codex");
+});
+
+test("codex: when Codex logs in again during a refresh, its auth.json is kept", async () => {
+	writeAuth(now() - HOUR);
+	const theirs = now() + 200 * HOUR;
+	const endpoint = await tokenEndpoint(() => {
+		writeAuth(theirs, "refresh-new-login");
+		return { status: 200, json: { access_token: jwt(now() + 240 * HOUR), refresh_token: "refresh-2" } };
+	});
+	const response = await cliCredentials("openai-codex", { codexTokenUrl: endpoint.url });
+	assert.equal(response.credentials?.expires, theirs * 1000);
+	assert.equal(readAuth().tokens.refresh_token, "refresh-new-login");
+});
+
+test("codex: a lock left by a dead host is broken at once", async () => {
+	writeAuth(now() - HOUR);
+	const dead = spawn(process.execPath, ["-e", ""]);
+	await new Promise((resolve) => dead.on("exit", resolve));
+	writeFileSync(`${authPath}.sitegeist-lock`, String(dead.pid));
+	const endpoint = await tokenEndpoint(() => ({ status: 200, json: { access_token: jwt(now() + 240 * HOUR) } }));
+	const started = Date.now();
+	const response = await cliCredentials("openai-codex", { codexTokenUrl: endpoint.url });
+	assert.equal(response.error, undefined);
+	assert.ok(Date.now() - started < 1000, "waited on a dead holder");
+	assert.equal(existsSync(`${authPath}.sitegeist-lock`), false);
+});
+
+test("codex: a symlinked auth.json stays a link and its target gets the refresh", async () => {
+	const real = join(home, "real");
+	mkdirSync(real);
+	const target = join(real, "auth.json");
+	writeAuth(now() - HOUR);
+	writeFileSync(target, readFileSync(authPath));
+	const linkDir = join(home, "linked");
+	mkdirSync(linkDir);
+	symlinkSync(target, join(linkDir, "auth.json"));
+	process.env.CODEX_HOME = linkDir;
+	const fresh = jwt(now() + 240 * HOUR);
+	const endpoint = await tokenEndpoint(() => ({ status: 200, json: { access_token: fresh, refresh_token: "refresh-2" } }));
+	const response = await cliCredentials("openai-codex", { codexTokenUrl: endpoint.url });
+	assert.equal(response.credentials?.access, fresh);
+	assert.ok(lstatSync(join(linkDir, "auth.json")).isSymbolicLink());
+	assert.equal(JSON.parse(readFileSync(target, "utf8")).tokens.refresh_token, "refresh-2");
 });
 
 test("codex: missing login and API-key login are reported", async () => {
