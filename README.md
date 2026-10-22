@@ -15,7 +15,6 @@ OpenAI/ChatGPT, GitHub Copilot, Google Gemini). Your data stays on your machine.
 is collected or tracked.
 
 This fork (0xSero/sitegeist) adds three things to upstream (badlogic/sitegeist):
-
 1. **Background operation.** Every chat owns its own tab group. Tabs open inactive, the
    agent acts on its own current tab, and it never sees or touches your other tabs.
 2. **Per-tab panels for parallel tasks.** The panel is bound to a tab, not a window (the
@@ -33,7 +32,6 @@ This fork ships as a self-signed `.crx` (extension id
 `lnncppjiohlpejgcbdgoihplimdckddn`). The signing key is "sitegeist CRX signing key" in
 1Password DEV; `static/manifest.chrome.json` carries its public half, so unpacked builds
 and signed releases install under the same id.
-
 1. Prepare the sibling repos once per machine: `scripts/setup-siblings.sh`.
 2. Build, sign and publish: `scripts/release-crx.sh` (append ssh hosts, e.g. `m3`, to
    publish there too). It writes the `.crx` and `updates.xml` to
@@ -123,7 +121,6 @@ CLI commands: `mcp`, `install`, `status`, `allow <host>`, `reload`, `debug`,
 ## What changed in this fork
 
 Extension:
-
 - `src/browser/` is new and is the only code that touches tabs: `session.ts` (tab group
   per session, current tab, persistence in `chrome.storage.session`), `cdp.ts`
   (`chrome.debugger` screenshots, real input events, focus emulation so hidden tabs keep

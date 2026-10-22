@@ -339,6 +339,7 @@ function pageSnapshot(maxNodes: number, maxTextChars: number, filter: string): u
 		nodes.push(node);
 	}
 	w.__sitegeistRefSeq = seq;
+	// biome-ignore lint/performance/useDomNodeTextContent: Snapshots need rendered text, excluding CSS-hidden content.
 	const text = (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n").slice(0, maxTextChars);
 	return {
 		url: location.href,

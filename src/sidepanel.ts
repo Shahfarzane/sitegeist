@@ -419,7 +419,7 @@ export function getShownSkills(): Map<string, string> {
 // ============================================================================
 const generateTitle = (messages: AgentMessage[]): string => {
 	const firstUserMsg = messages.find((m) => m.role === "user");
-	if (!firstUserMsg || firstUserMsg.role !== "user") return "";
+	if (firstUserMsg?.role !== "user") return "";
 
 	let text = "";
 	const content = firstUserMsg.content;

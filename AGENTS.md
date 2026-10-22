@@ -1,29 +1,35 @@
 # Development Rules
 
 ## First Message
+
 If the user did not give you a concrete task, read README.md first.
 
 ## Commands
+
 - After code changes: run `./check.sh`. Fix all errors and warnings before committing.
 - The user runs `./dev.sh` in a separate tmux session. Do not run `npm run dev` or `npm run build`.
 - NEVER commit unless the user asks.
 
 ## Code Quality
+
 - No `any` types unless absolutely necessary
 - Check node_modules for external API type definitions instead of guessing
 - NEVER use inline imports (no `await import(...)`, no `import("pkg").Type`)
 - Always ask before removing functionality or code that appears intentional
 
 ## Dependencies
+
 - `@mariozechner/mini-lit`, `@mariozechner/pi-ai`, `@mariozechner/pi-web-ui`, `@mariozechner/pi-agent-core` are linked via `file:` to sibling repos `../mini-lit` and `../pi-mono`
 - Changes to those packages require rebuilding them (the dev watcher handles this)
 - If you need to modify upstream code, edit it in `../pi-mono` or `../mini-lit` directly and rebuild
 - Those siblings are forks (Shahfarzane/pi-mono, Shahfarzane/mini-lit, branch `sitegeist`): commit and push changes there, then run `scripts/sibling-patches.sh export` and commit `patches/` in this repo (`./check.sh` fails while they differ)
 
 ## Changelog
+
 Location: `CHANGELOG.md`
 
 ### Format
+
 Use these sections under `## [Unreleased]`:
 - `### Breaking Changes`
 - `### Added`
@@ -32,11 +38,13 @@ Use these sections under `## [Unreleased]`:
 - `### Removed`
 
 ### Rules
+
 - New entries ALWAYS go under `## [Unreleased]`
 - Append to existing subsections, do not create duplicates
 - NEVER modify already-released version sections
 
 ## Releasing
+
 When the user asks to do a release:
 1. Ask: major, minor, or patch?
 2. Ensure `CHANGELOG.md` has entries under `## [Unreleased]`
@@ -45,6 +53,7 @@ When the user asks to do a release:
 The script bumps the version in `static/manifest.chrome.json`, finalizes the changelog, commits, tags, and pushes. GitHub Actions builds and publishes the release.
 
 ## Updating the Website
+
 When the user asks to update the website:
 ```bash
 cd site && ./run.sh deploy
@@ -54,11 +63,13 @@ Requires SSH access to `slayer.marioslab.io`.
 The site is static HTML (no backend). Source is in `site/src/frontend/`.
 
 ## Style
+
 - No emojis in commits, code, or comments
 - No fluff or cheerful filler text
 - Technical prose only, direct and concise
 
 ## Git Rules
+
 - NEVER use `git add -A` or `git add .`
 - ALWAYS use `git add <specific-file-paths>`
 - NEVER use `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`
@@ -66,6 +77,7 @@ The site is static HTML (no backend). Source is in `site/src/frontend/`.
 - Include `fixes #<number>` or `closes #<number>` in commit messages when applicable
 
 ## Project Structure
+
 ```
 src/
   sidepanel.ts          # Main entry point, agent setup, settings, rendering
@@ -89,6 +101,7 @@ cli/
 ```
 
 ## Bridge development
+
 - After changing `src/`, rebuild and reload with `npm run build && sitegeist reload` (always `&&`: a reload after a failed build unloads the extension until it is reloaded from the extensions page).
 - `sitegeist debug` prints the extension's bridge state, request timings, and a Chrome API benchmark.
 - The CLI is a separate package: `cd cli && npm run check`.
