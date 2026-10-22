@@ -86,6 +86,16 @@ function base64urlEncode(bytes: Uint8Array): string {
 	return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
+/** The token endpoint answered with an error status, as opposed to a network failure. */
+export class TokenRequestError extends Error {
+	constructor(
+		readonly status: number,
+		body: string,
+	) {
+		super(`Token request failed: ${status} ${body}`);
+	}
+}
+
 /**
  * Post JSON to a URL, optionally through a CORS proxy.
  */
@@ -104,7 +114,7 @@ export async function postTokenRequest(
 
 	if (!response.ok) {
 		const text = await response.text().catch(() => "");
-		throw new Error(`Token request failed: ${response.status} ${text}`);
+		throw new TokenRequestError(response.status, text);
 	}
 
 	return response.json();

@@ -25,6 +25,13 @@ const OFF_KEY = "cli_login_off";
 
 /** A refresh of Codex's login goes over the network; an old host never answers at all. */
 const LOOKUP_TIMEOUT_MS = 20_000;
+/**
+ * A borrowed token that has not expired is still compared with the CLI's this often: it
+ * changes when the CLI refreshes early or switches account. Quick, since it is optional.
+ */
+const RECHECK_MS = 5 * 60 * 1000;
+const RECHECK_TIMEOUT_MS = 3000;
+const lastCheck = new Map<CliLoginProvider, number>();
 
 interface KeyStore {
 	get(provider: string): Promise<string | null>;
@@ -51,28 +58,40 @@ export async function setCliLoginOff(provider: CliLoginProvider, off: boolean): 
 }
 
 /** The CLI's current login for a provider. Throws with the reason there is none. */
-export async function readCliLogin(provider: CliLoginProvider): Promise<OAuthCredentials> {
+export async function readCliLogin(
+	provider: CliLoginProvider,
+	timeoutMs = LOOKUP_TIMEOUT_MS,
+): Promise<OAuthCredentials> {
 	const request: ExtCredentialsRequest = { type: "credentials", provider };
+	const outdated = `Cannot read the ${CLI_NAMES[provider]} login: the sitegeist CLI is outdated (rebuild it: cd cli && npm run build)`;
 	let response: HostCredentialsResponse | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	try {
 		response = await Promise.race([
 			chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, request) as Promise<HostCredentialsResponse>,
 			new Promise<never>((_, reject) => {
-				timer = setTimeout(() => reject(new Error("the sitegeist CLI did not answer")), LOOKUP_TIMEOUT_MS);
+				timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
 			}),
 		]);
 	} catch (err) {
-		// "Specified native messaging host not found." until `sitegeist install` has run.
 		const reason = err instanceof Error ? err.message : String(err);
+		// "Specified native messaging host not found." until `sitegeist install` has run.
+		if (/not found/i.test(reason)) {
+			throw new Error(
+				`Cannot read the ${CLI_NAMES[provider]} login: the sitegeist CLI is not installed (sitegeist install)`,
+			);
+		}
 		throw new Error(
-			`Cannot read the ${CLI_NAMES[provider]} login: ${reason}. Update the sitegeist CLI and run "sitegeist install".`,
+			reason === "timeout" ? `${outdated}, or it is still waiting on a token refresh` : `${outdated}: ${reason}`,
 		);
 	} finally {
 		clearTimeout(timer);
 	}
-	const credentials = response?.credentials;
-	if (!credentials) throw new Error(response?.error ?? `No ${CLI_NAMES[provider]} login found`);
+	// An old host relays a harness frame here instead of answering.
+	if (response?.type !== "credentials") throw new Error(outdated);
+	const credentials = response.credentials;
+	if (!credentials) throw new Error(response.error ?? `No ${CLI_NAMES[provider]} login found`);
+	lastCheck.set(provider, Date.now());
 	return {
 		providerId: provider,
 		access: credentials.access,
@@ -83,11 +102,31 @@ export async function readCliLogin(provider: CliLoginProvider): Promise<OAuthCre
 	};
 }
 
+/**
+ * The token for a borrowed login: the stored one, read again from the CLI when it expires
+ * and every RECHECK_MS otherwise. Throws only when the stored token has expired.
+ */
+export async function currentCliLogin(provider: CliLoginProvider, stored: OAuthCredentials): Promise<OAuthCredentials> {
+	const expired = Date.now() >= stored.expires - 60_000;
+	if (!expired && Date.now() - (lastCheck.get(provider) ?? 0) < RECHECK_MS) return stored;
+	lastCheck.set(provider, Date.now());
+	try {
+		return await readCliLogin(provider, expired ? LOOKUP_TIMEOUT_MS : RECHECK_TIMEOUT_MS);
+	} catch (err) {
+		// The CLI logged out or is slow; a token that has not expired still works.
+		if (expired) throw err;
+		return stored;
+	}
+}
+
 /** Store the CLI's login for a provider, unless the user disconnected it. True when stored. */
 export async function borrowCliLogin(store: KeyStore, provider: string): Promise<boolean> {
 	if (!isCliLoginProvider(provider) || (await isCliLoginOff(provider))) return false;
 	try {
-		await store.set(provider, serializeOAuthCredentials(await readCliLogin(provider)));
+		const credentials = await readCliLogin(provider);
+		// Logout may have happened while the lookup ran.
+		if (await isCliLoginOff(provider)) return false;
+		await store.set(provider, serializeOAuthCredentials(credentials));
 		return true;
 	} catch (err) {
 		console.info(`[cli-login] ${provider}: ${err instanceof Error ? err.message : String(err)}`);
