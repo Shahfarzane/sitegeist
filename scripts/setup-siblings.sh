@@ -4,7 +4,7 @@
 #   ../pi-mono   Shahfarzane/pi-mono, or earendil-works/pi v0.60.0 + patches/pi-mono-*.patch
 # In the sitegeist-workspace checkout the forks are submodules and are used as they are.
 # Where a sibling is missing (CI, a fresh machine) it is cloned from upstream and patched,
-# which needs no access to the private forks.
+# which needs no access to the forks.
 # The patch adds pi-mono APIs that were never published upstream (registerModels and
 # friends in pi-ai, ModelSelector/MessageEditor/AgentInterface hooks in pi-web-ui).
 # Do not move pi-mono to upstream main: it renamed the packages and dropped web-ui.
