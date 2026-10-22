@@ -29,7 +29,7 @@ This fork (0xSero/sitegeist) adds three things to upstream (badlogic/sitegeist):
 
 ## Install the extension
 
-This private fork ships as a self-signed `.crx` (extension id
+This fork ships as a self-signed `.crx` (extension id
 `lnncppjiohlpejgcbdgoihplimdckddn`). The signing key is "sitegeist CRX signing key" in
 1Password DEV; `static/manifest.chrome.json` carries its public half, so unpacked builds
 and signed releases install under the same id.
@@ -160,11 +160,11 @@ Full list of changes: `CHANGELOG.md`.
 
 ## Development
 
-The extension builds against two sibling repos in the same parent directory. The private
-workspace repo holds all three as submodules:
+The extension builds against two sibling repos in the same parent directory. The workspace
+repo holds all three as submodules:
 
 ```
-sitegeist-workspace/   # https://github.com/Shahfarzane/sitegeist-workspace (private)
+sitegeist-workspace/   # https://github.com/Shahfarzane/sitegeist-workspace
   sitegeist/           # this repo
   mini-lit/            # https://github.com/Shahfarzane/mini-lit, branch sitegeist (badlogic/mini-lit v0.2.1 + changes)
   pi-mono/             # https://github.com/Shahfarzane/pi-mono, branch sitegeist (earendil-works/pi v0.60.0 + changes)
