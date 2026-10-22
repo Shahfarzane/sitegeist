@@ -124,6 +124,37 @@ export interface HostPing {
 
 export type HostToExt = HostClientConnected | HostClientDisconnected | HostForwardedRequest | HostPing;
 
+// ---- coding CLI logins ----------------------------------------------------
+// The extension asks with chrome.runtime.sendNativeMessage, which starts a host process
+// for that one message; the host answers it without starting the relay. Socket clients
+// cannot send these: only frames from the extension (stdin) reach this handler.
+
+/** The providers a coding CLI on this machine can log in: Claude Code and Codex. */
+export type CliLoginProvider = "anthropic" | "openai-codex";
+
+export interface ExtCredentialsRequest {
+	type: "credentials";
+	provider: CliLoginProvider;
+}
+
+/** An access token only: the refresh token stays with the CLI. */
+export interface CliCredentials {
+	access: string;
+	/** Epoch ms. */
+	expires: number;
+	/** ChatGPT account id (Codex). */
+	accountId?: string;
+	/** The CLI the login belongs to, for messages: "Claude Code", "Codex". */
+	source: string;
+}
+
+export interface HostCredentialsResponse {
+	type: "credentials";
+	credentials?: CliCredentials;
+	/** Why there is no usable login: not logged in, expired, refresh failed. */
+	error?: string;
+}
+
 /** Error codes the extension returns. */
 export const ERR = {
 	BAD_PARAMS: "bad_params",

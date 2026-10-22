@@ -108,6 +108,15 @@ Bridge to "Ask before opening a new site" or run `sitegeist ask` (`sitegeist yol
 back). In that mode Claude Code and Codex show the prompt inline (MCP elicitation);
 otherwise answer it in the side panel under Settings > Bridge or run `sitegeist allow <host>`.
 
+Provider logins: when Claude Code or Codex is logged in on this computer, the Anthropic and
+ChatGPT providers use that login, so they need no setup. The native host reads Claude Code's
+Keychain entry (or `~/.claude/.credentials.json`) and `~/.codex/auth.json` and hands the
+extension the access token only. Claude Code's login is read only: after 8 idle hours its
+token has expired until `claude` runs again. Codex's login is refreshed by the host when it
+expires and written back to `auth.json`, so Codex stays logged in. Logout under Settings >
+Providers stops sitegeist from using a CLI login; "Use Claude Code" / "Use Codex" turns it
+back on.
+
 CLI commands: `mcp`, `install`, `status`, `allow <host>`, `reload`, `debug`,
 `pi-extension`. See `cli/README.md`.
 

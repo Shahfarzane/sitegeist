@@ -54,6 +54,7 @@ import {
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
 import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
+import { borrowCliLogin, borrowCliLogins } from "./oauth/cli-login.js";
 import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
@@ -672,6 +673,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			return chrome.runtime.getURL("sandbox.html");
 		},
 		onApiKeyRequired: async (provider: string) => {
+			if (await borrowCliLogin(storage.providerKeys, provider)) return true;
 			return await ApiKeyOrOAuthDialog.prompt(provider);
 		},
 		onModelSelect: async () => {
@@ -1135,6 +1137,13 @@ async function initApp() {
 	port.initialize(currentWindowId);
 
 	pruneEmptyUnsavedSessions().catch(() => {});
+
+	// Claude Code's and Codex's logins stand in for providers with no key, so a fresh install
+	// works without connecting anything. Capped: an old CLI host never answers the lookup.
+	await Promise.race([
+		borrowCliLogins(storage.providerKeys).catch((err) => console.warn("Borrowing CLI logins failed:", err)),
+		new Promise((resolve) => setTimeout(resolve, 5000)),
+	]);
 
 	// Register cached provider model lists now; refresh stale ones in the background.
 	refreshDiscoveredModels(storage).catch((err) => console.warn("Model discovery failed:", err));
