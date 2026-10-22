@@ -162,6 +162,7 @@ function startRelay(): () => void {
 		socket.on("data", (chunk) => {
 			let messages: unknown[];
 			try {
+				if (typeof chunk === "string") throw new Error("Bridge frames require binary socket data");
 				messages = parser.push(chunk);
 			} catch (err) {
 				process.stderr.write(`[sitegeist-host] bad frame from ${id}: ${String(err)}\n`);
@@ -200,6 +201,7 @@ export function runNativeHost(): void {
 	process.stdin.on("data", (chunk: Buffer) => {
 		let messages: unknown[];
 		try {
+			if (typeof chunk === "string") throw new Error("Bridge frames require binary socket data");
 			messages = parser.push(chunk);
 		} catch (err) {
 			process.stderr.write(`[sitegeist-host] bad frame from extension: ${String(err)}\n`);

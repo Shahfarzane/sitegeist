@@ -93,6 +93,7 @@ export class BridgeClient {
 			socket.on("data", (chunk) => {
 				let messages: unknown[];
 				try {
+					if (typeof chunk === "string") throw new Error("Bridge frames require binary socket data");
 					messages = parser.push(chunk);
 				} catch (err) {
 					socket.destroy(err as Error);
