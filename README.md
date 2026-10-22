@@ -103,9 +103,10 @@ extension. Nothing listens on the network. Each harness gets its own tab group
 ("Sitegeist · claude", "Sitegeist · pi") and works in the background; `tabs_show` is the
 only tool that changes what you see.
 
-Site access: by default the extension asks before an agent opens a new site. Claude Code
-and Codex show the prompt inline (MCP elicitation). Otherwise answer it in the side panel
-under Settings > Bridge, run `sitegeist allow <host>`, or switch to "allow any site".
+Site access: by default agents may open any site. To be asked first, switch Settings >
+Bridge to "Ask before opening a new site" or run `sitegeist ask` (`sitegeist yolo` switches
+back). In that mode Claude Code and Codex show the prompt inline (MCP elicitation);
+otherwise answer it in the side panel under Settings > Bridge or run `sitegeist allow <host>`.
 
 CLI commands: `mcp`, `install`, `status`, `allow <host>`, `reload`, `debug`,
 `pi-extension`. See `cli/README.md`.

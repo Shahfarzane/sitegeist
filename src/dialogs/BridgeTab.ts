@@ -26,7 +26,7 @@ import { listSessions } from "../browser/session.js";
 @customElement("bridge-tab")
 export class BridgeTab extends SettingsTab {
 	@state() private enabled = true;
-	@state() private mode: PermissionMode = "ask";
+	@state() private mode: PermissionMode = "allow_all";
 	@state() private hosts: string[] = [];
 	@state() private pending: PendingRequest[] = [];
 	@state() private sessions: Array<{ id: string; label: string; tabs: number }> = [];

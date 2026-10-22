@@ -21,6 +21,7 @@
 - Sibling forks and workspace: the mini-lit and pi-mono changes are commits on private forks (Shahfarzane/mini-lit, Shahfarzane/pi-mono, branch `sitegeist`), and Shahfarzane/sitegeist-workspace holds all three repos as submodules. `scripts/sibling-patches.sh export|check` keeps `patches/` generated from the forks (checked in `./check.sh`); `scripts/siblings.conf` holds the tags and URLs. `auto-release.sh` fast-forwards clean fork checkouts and reinstalls dependencies when they are missing.
 
 ### Changed
+- Bridge site access defaults to "Allow any site". Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
 - Composer: ArrowUp in an empty composer recalls the last prompt; the model picker is a plain model-id button and the send button is an arrow (pi-web-ui `MessageEditor`/`AgentInterface`, see README). The provider/auth label was removed from the header.
 - Browser sessions persist in `chrome.storage.local` (they and their groups survive extension reloads), grouping retries when Chromium refuses a tab edit, and the panel adopts the tab it opens on even when that is a New Tab page.

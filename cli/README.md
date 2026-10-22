@@ -84,10 +84,11 @@ up from the next session on.
 
 ## Permissions
 
-By default the extension asks before an agent opens a new site. MCP clients that support
-elicitation (Claude Code, Codex) show the prompt inline; otherwise answer it in the
-Sitegeist side panel under Settings > Bridge, run `sitegeist allow <host>`, or switch the
-mode to "allow any site" there. pi: set `SITEGEIST_AUTO_ALLOW=1` to auto-approve.
+By default agents may open any site. `sitegeist ask` (or "Ask before opening a new site" in
+Settings > Bridge) makes the extension ask before an agent opens a new site; `sitegeist yolo`
+switches back. While asking, MCP clients that support elicitation (Claude Code, Codex) show
+the prompt inline; otherwise answer it in the Sitegeist side panel under Settings > Bridge
+or run `sitegeist allow <host>`. pi: set `SITEGEIST_AUTO_ALLOW=1` to auto-approve.
 
 `SITEGEIST_SESSION=<name>` makes a harness re-adopt the same tab group across restarts.
 `SITEGEIST_CLIENT_NAME` overrides the tab group label.

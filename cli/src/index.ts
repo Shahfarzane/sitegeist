@@ -17,8 +17,8 @@ Usage:
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
   sitegeist update          Make every running browser check for a new signed release now
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
-  sitegeist yolo            Allow agents to open ANY site (no per-site prompts)
-  sitegeist ask             Require a prompt before agents open an un-allowed site (default)
+  sitegeist yolo            Allow agents to open ANY site, no per-site prompts (default)
+  sitegeist ask             Require a prompt before agents open an un-allowed site
   sitegeist debug           Print the extension's bridge state and recent timing log
   sitegeist pi-extension    Write a pi extension to ~/.pi/agent/extensions/sitegeist.ts
   sitegeist host            (internal) native messaging host, spawned by the browser
