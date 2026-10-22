@@ -35,6 +35,7 @@
 - First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb and suggestion pills are grayscale.
 
 ### Fixed
+- Anthropic requests fail with 401 "CORS requests are not allowed for this Organization" for organizations that disallow browser access: a `declarativeNetRequest` rule removes the extension's `Origin` header from its own requests to `api.anthropic.com`, so they are not treated as CORS requests.
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
 - `actions` spaces steps by `settleMs` (default 80 ms) so a keystroke after Enter is not lost while the app opens its text editor, and accepts `key`, `text`, `doubleClick`, `move`, `sleep` and mid-list `screenshot` steps.
 - Screenshot coordinates: x/y for click, drag, hover and scroll are pixels of the tab's latest screenshot and are mapped to the page in the extension (models no longer multiply by a scale factor, which they got wrong); default screenshots are CSS-pixel scale up to 1280 px wide (the DPR was double-counted before).
