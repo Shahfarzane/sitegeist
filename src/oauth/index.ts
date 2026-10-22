@@ -7,6 +7,7 @@
  */
 
 import { loginAnthropic, refreshAnthropic } from "./anthropic.js";
+import { isCliLoginOff, isCliLoginProvider, readCliLogin } from "./cli-login.js";
 import { loginGitHubCopilot, refreshGitHubCopilot } from "./github-copilot.js";
 import { loginGeminiCli, refreshGeminiCli } from "./google-gemini-cli.js";
 import { loginOpenAICodex, refreshOpenAICodex } from "./openai-codex.js";
@@ -110,13 +111,24 @@ export async function resolveApiKey(
 
 	// Refresh if expired (or within 60s of expiry)
 	if (Date.now() >= credentials.expires - 60_000) {
-		try {
-			credentials = await oauthRefresh(credentials, proxyUrl);
-			await storage.set(provider, serializeOAuthCredentials(credentials));
-		} catch (error) {
-			console.error(`Failed to refresh OAuth token for ${provider}:`, error);
-			throw new Error(`OAuth token expired and refresh failed for ${provider}`);
+		if (credentials.source === "cli" && isCliLoginProvider(provider)) {
+			// Borrowed from Claude Code or Codex: the CLI's own store has the current token.
+			credentials = await readCliLogin(provider);
+		} else {
+			try {
+				credentials = await oauthRefresh(credentials, proxyUrl);
+			} catch (error) {
+				console.error(`Failed to refresh OAuth token for ${provider}:`, error);
+				// sitegeist's own login lapsed; the CLI's login, if there is one, still works.
+				const fallback =
+					isCliLoginProvider(provider) && !(await isCliLoginOff(provider))
+						? await readCliLogin(provider).catch(() => undefined)
+						: undefined;
+				if (!fallback) throw new Error(`OAuth token expired and refresh failed for ${provider}`);
+				credentials = fallback;
+			}
 		}
+		await storage.set(provider, serializeOAuthCredentials(credentials));
 	}
 
 	// Gemini CLI expects the API key as JSON with token and projectId

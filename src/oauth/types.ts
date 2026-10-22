@@ -9,6 +9,8 @@ export interface OAuthCredentials {
 	expires: number;
 	accountId?: string;
 	projectId?: string;
+	/** "cli": borrowed from Claude Code or Codex (cli-login.ts); `refresh` is empty. */
+	source?: "cli";
 }
 
 /**

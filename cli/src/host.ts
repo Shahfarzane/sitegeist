@@ -3,13 +3,24 @@
  * connects; it owns the unix socket harness clients dial and relays frames both
  * ways, adding `clientId` on the way in and stripping it on the way out.
  * No browser logic lives here.
+ *
+ * The extension also starts it with chrome.runtime.sendNativeMessage to read a coding
+ * CLI's login (credentials.ts). That process answers the one message and exits; the
+ * relay only starts on the extension's hello, so it never opens a socket.
  */
 
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
-import type { ClientToHost, ExtToHost, HostToClient, HostToExt } from "../../src/bridge/protocol.ts";
+import type {
+	ClientToHost,
+	ExtCredentialsRequest,
+	ExtToHost,
+	HostToClient,
+	HostToExt,
+} from "../../src/bridge/protocol.ts";
 import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
+import { cliCredentials } from "./credentials.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
@@ -98,7 +109,8 @@ function sweepStaleSockets(dir: string): void {
 	}
 }
 
-export function runNativeHost(): void {
+/** Socket server for harness clients; returns the function that tears it down. */
+function startRelay(): () => void {
 	const dir = socketDir();
 	if (process.platform !== "win32") {
 		if (!existsSync(dir)) mkdirSync(dir, { mode: 0o700 });
@@ -140,6 +152,20 @@ export function runNativeHost(): void {
 		if (process.platform !== "win32") chmodSync(path, 0o600);
 	});
 
+	const ping = setInterval(() => toExtension({ type: "ping" }), 20000);
+	ping.unref();
+
+	return () => {
+		for (const client of clients.values()) client.socket.destroy();
+		server.close();
+		rmSync(path, { force: true });
+	};
+}
+
+export function runNativeHost(): void {
+	let stopRelay: (() => void) | undefined;
+	let lookups: Promise<unknown> = Promise.resolve();
+
 	// stdin: frames from the extension
 	const parser = new FrameParser(MAX_FRAME_FROM_EXTENSION);
 	process.stdin.on("data", (chunk: Buffer) => {
@@ -150,19 +176,26 @@ export function runNativeHost(): void {
 			process.stderr.write(`[sitegeist-host] bad frame from extension: ${String(err)}\n`);
 			return;
 		}
-		for (const m of messages) onExtensionMessage(m as ExtToHost);
+		for (const m of messages) {
+			const message = m as ExtToHost | ExtCredentialsRequest;
+			if (message.type === "credentials") {
+				lookups = Promise.all([
+					lookups,
+					cliCredentials(message.provider).then((response) => process.stdout.write(encodeFrame(response))),
+				]);
+				continue;
+			}
+			stopRelay ??= startRelay();
+			onExtensionMessage(message);
+		}
 	});
 
 	const shutdown = () => {
-		for (const client of clients.values()) client.socket.destroy();
-		server.close();
-		rmSync(path, { force: true });
+		stopRelay?.();
 		process.exit(0);
 	};
-	process.stdin.on("end", shutdown);
+	// A login lookup may still be refreshing a token when the browser closes the pipe.
+	process.stdin.on("end", () => void lookups.finally(shutdown));
 	process.on("SIGINT", shutdown);
 	process.on("SIGTERM", shutdown);
-
-	const ping = setInterval(() => toExtension({ type: "ping" }), 20000);
-	ping.unref();
 }

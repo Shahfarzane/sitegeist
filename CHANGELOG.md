@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Claude Code's and Codex's logins on this computer connect the Anthropic and ChatGPT providers with no setup. The native host reads them (Claude Code's Keychain entry or `~/.claude/.credentials.json`, `~/.codex/auth.json`) when the extension asks through `chrome.runtime.sendNativeMessage` and hands over the access token only. Claude Code's login is read only; Codex's is refreshed by the host on expiry and written back to `auth.json` under a lock, so Codex stays logged in. Settings > Providers shows "Connected through Claude Code/Codex"; Logout stops borrowing that login, "Use Claude Code"/"Use Codex" turns it back on. A lapsed sitegeist login for those providers falls back to the CLI's.
 - `actions` bridge method and MCP tool: up to 40 input steps (press, click, drag, type, hover, scroll, wait) in one call with an optional closing screenshot. A canvas flowchart (two shapes, labels, bound arrow) is one call instead of 60 to 120 model turns.
 - `sitegeist debug` lists the active tab per window and records foreground-guard decisions; `bridge.activate` puts a tab back in front (dev aid after a focus mishap).
 - `tabs.context` flags tabs that sit outside the session's group (`inGroup: false`).
@@ -22,6 +23,7 @@
 
 ### Changed
 - Bridge site access defaults to "Allow any site". Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
+- The native host starts its socket relay on the extension's hello instead of at launch, so a one-message `sendNativeMessage` lookup never opens a bridge socket.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
 - Composer: ArrowUp in an empty composer recalls the last prompt; the model picker is a plain model-id button and the send button is an arrow (pi-web-ui `MessageEditor`/`AgentInterface`, see README). The provider/auth label was removed from the header.
 - Browser sessions persist in `chrome.storage.local` (they and their groups survive extension reloads), grouping retries when Chromium refuses a tab edit, and the panel adopts the tab it opens on even when that is a New Tab page.
