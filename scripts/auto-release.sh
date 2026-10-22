@@ -6,7 +6,8 @@
 #
 # - builds only a clean checkout of main that can fast-forward to origin/main, so work in
 #   progress is never touched; otherwise it logs and waits for the next run
-# - reruns setup-siblings.sh when the patches or dependencies changed since the last release
+# - reruns setup-siblings.sh when the patches or dependencies changed since the last release,
+#   and rebuilds the CLI (the native host) when cli/ changed
 # - release-crx.sh signs, publishes to ~/.local/share/sitegeist/extension and nudges running
 #   browsers; each ssh host gets the same files, and a host that is asleep is retried on the
 #   next run without rebuilding
@@ -43,6 +44,11 @@ if [ "$released" != "$target" ]; then
 	if [ -z "$released" ] || ! git diff --quiet "$released" "$target" -- patches package.json package-lock.json scripts/setup-siblings.sh scripts/siblings.conf ||
 		[ ! -d node_modules ] || [ ! -d ../mini-lit/dist ] || [ ! -d ../pi-mono/node_modules ]; then
 		./scripts/setup-siblings.sh
+	fi
+	# cli/dist is the bridge's native host (the launcher runs it); browsers start the rebuilt
+	# one for the next login lookup and on their next bridge connect.
+	if [ -n "$released" ] && ! git diff --quiet "$released" "$target" -- cli; then
+		(cd cli && npm install && npm run build)
 	fi
 	./scripts/release-crx.sh
 	mkdir -p "$STATE_DIR"
