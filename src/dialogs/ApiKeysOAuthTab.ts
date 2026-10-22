@@ -56,6 +56,8 @@ export class ApiKeysOAuthTab extends SettingsTab {
 	private cliAvailable: Record<string, boolean> = {};
 	/** A borrowed login carries sitegeist's own login as its fallback. */
 	private hasFallback: Record<string, boolean> = {};
+	/** The stored borrowed token has expired (requests depend on the CLI or the fallback). */
+	private borrowedExpired: Record<string, boolean> = {};
 
 	getTabName(): string {
 		return "API Keys & OAuth";
@@ -75,6 +77,7 @@ export class ApiKeysOAuthTab extends SettingsTab {
 				const creds = parseOAuthCredentials(stored);
 				this.borrowed[provider] = creds.source === "cli";
 				this.hasFallback[provider] = !!creds.fallback;
+				this.borrowedExpired[provider] = creds.source === "cli" && Date.now() >= creds.expires - 60_000;
 				// A borrowed token that expired is re-read from the CLI on next use.
 				const expired = Date.now() >= creds.expires && creds.source !== "cli";
 				this.oauthStatuses[provider] = expired ? "none" : "logged-in";
@@ -158,9 +161,16 @@ export class ApiKeysOAuthTab extends SettingsTab {
 			Toast.success(`Logged in to ${getOAuthProviderName(provider)}`);
 		} catch (error) {
 			console.error(`OAuth login failed for ${provider}:`, error);
-			this.oauthStatuses[provider] = "error";
-			this.oauthErrors[provider] = error instanceof Error ? error.message : "Login failed";
+			const message = error instanceof Error ? error.message : "Login failed";
 			this.deviceCode = null;
+			if (this.borrowed[provider]) {
+				// A failed fallback login leaves the borrowed login connected.
+				this.oauthStatuses[provider] = "logged-in";
+				Toast.error(`Login failed: ${message}`);
+			} else {
+				this.oauthStatuses[provider] = "error";
+				this.oauthErrors[provider] = message;
+			}
 		}
 		this.requestUpdate();
 	}
@@ -195,7 +205,9 @@ export class ApiKeysOAuthTab extends SettingsTab {
 	private borrowedStatus(provider: OAuthProviderId): string {
 		if (!isCliLoginProvider(provider)) return "Connected";
 		const name = cliName(provider);
-		if (!keepsFallback(provider) || this.cliAvailable[provider] !== false) return `Connected through ${name}`;
+		// A stored token that is still valid is used whatever the CLI says right now.
+		const lapsed = this.cliAvailable[provider] === false && this.borrowedExpired[provider];
+		if (!keepsFallback(provider) || !lapsed) return `Connected through ${name}`;
 		return this.hasFallback[provider]
 			? `Using your sitegeist login: the ${name} login has expired`
 			: `The ${name} login has expired. Run claude once, or log in below.`;
