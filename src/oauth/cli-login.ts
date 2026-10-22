@@ -133,7 +133,6 @@ export async function readCliLogin(
 	if (response?.type !== "credentials") throw new Error(outdated);
 	const credentials = response.credentials;
 	if (!credentials) throw new Error(response.error ?? `No ${CLI_NAMES[provider]} login found`);
-	lastCheck.set(provider, Date.now());
 	return {
 		providerId: provider,
 		access: credentials.access,
@@ -179,6 +178,9 @@ export async function borrowCliLogin(store: KeyStore, provider: string): Promise
 		if (await isCliLoginOff(provider)) return false;
 		const combined = combineLogins(provider, credentials, ownLogin(await store.get(provider)));
 		if (combined) await store.set(provider, serializeOAuthCredentials(combined));
+		// Just read: the next request need not ask again. (Only a read that is stored counts, so a
+		// probe from Settings cannot hold back a newer token.)
+		lastCheck.set(provider, Date.now());
 		return true;
 	} catch (err) {
 		console.info(`[cli-login] ${provider}: ${err instanceof Error ? err.message : String(err)}`);
