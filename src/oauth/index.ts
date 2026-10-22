@@ -8,7 +8,14 @@
 
 import { loginAnthropic, refreshAnthropic } from "./anthropic.js";
 import { TokenRequestError } from "./browser-oauth.js";
-import { currentCliLogin, isCliLoginOff, isCliLoginProvider, readCliLogin } from "./cli-login.js";
+import {
+	cliName,
+	currentCliLogin,
+	isCliLoginOff,
+	isCliLoginProvider,
+	keepsFallback,
+	readCliLogin,
+} from "./cli-login.js";
 import { loginGitHubCopilot, refreshGitHubCopilot } from "./github-copilot.js";
 import { loginGeminiCli, refreshGeminiCli } from "./google-gemini-cli.js";
 import { loginOpenAICodex, refreshOpenAICodex } from "./openai-codex.js";
@@ -112,11 +119,36 @@ export async function resolveApiKey(
 
 	if (credentials.source === "cli" && isCliLoginProvider(provider)) {
 		// Borrowed from Claude Code or Codex: the CLI's own store has the current token.
-		const current = await currentCliLogin(provider, credentials);
+		const fallback = credentials.fallback;
+		let current: OAuthCredentials;
+		let token: string;
+		try {
+			current = { ...(await currentCliLogin(provider, credentials, { fallback: !!fallback })), fallback };
+			token = current.access;
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			if (!fallback) {
+				if (!keepsFallback(provider)) throw error;
+				throw new Error(`${reason} Or log in under Settings > Providers to give sitegeist a fallback login.`);
+			}
+			// Claude Code's login lapsed: sitegeist's own login stands in until it is back.
+			let own = fallback;
+			if (Date.now() >= own.expires - 60_000) {
+				try {
+					own = await oauthRefresh(own, proxyUrl);
+				} catch (refreshError) {
+					console.error(`Failed to refresh the fallback login for ${provider}:`, refreshError);
+					throw new Error(`${reason}, and the sitegeist login for ${provider} could not be refreshed`);
+				}
+			}
+			current = { ...credentials, fallback: own };
+			token = own.access;
+			console.info(`[cli-login] ${provider}: ${cliName(provider)} login expired, using the sitegeist login`);
+		}
 		const serialized = serializeOAuthCredentials(current);
 		// Not after a Logout that happened while the lookup ran.
 		if (serialized !== storedValue && !(await isCliLoginOff(provider))) await storage.set(provider, serialized);
-		credentials = current;
+		return token;
 	} else if (Date.now() >= credentials.expires - 60_000) {
 		// Refresh if expired (or within 60s of expiry)
 		try {

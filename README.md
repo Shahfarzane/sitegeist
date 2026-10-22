@@ -109,11 +109,13 @@ otherwise answer it in the side panel under Settings > Bridge or run `sitegeist 
 Provider logins: when Claude Code or Codex is logged in on this computer, the Anthropic and
 ChatGPT providers use that login, so they need no setup. The native host reads Claude Code's
 Keychain entry (or `~/.claude/.credentials.json`) and `~/.codex/auth.json` and hands the
-extension the access token only. Claude Code's login is read only: after 8 idle hours its
-token has expired until `claude` runs again. Codex's login is refreshed by the host when it
-expires and written back to `auth.json`, so Codex stays logged in. Logout under Settings >
-Providers stops sitegeist from using a CLI login; "Use Claude Code" / "Use Codex" turns it
-back on.
+extension the access token only. Claude Code's login is read only: 8 hours after `claude`
+last ran its token has expired until `claude` runs again. For that window, log in to Claude
+under Settings > Providers as well: sitegeist keeps that login as a fallback, uses Claude
+Code's whenever it is valid and its own while Claude Code's has expired, and never writes
+Claude Code's Keychain entry. Codex's login is refreshed by the host when it expires and
+written back to `auth.json`, so Codex stays logged in. Logout under Settings > Providers
+stops sitegeist from using a CLI login; "Use Claude Code" / "Use Codex" turns it back on.
 
 CLI commands: `mcp`, `install`, `status`, `allow <host>`, `reload`, `debug`,
 `pi-extension`. See `cli/README.md`.
