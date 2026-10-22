@@ -425,7 +425,7 @@ export async function runMcpServer(): Promise<void> {
 				"Send a raw Chrome DevTools Protocol command to your current tab and return its result (e.g. Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, DOM.getDocument, Performance.getMetrics, Input.dispatchMouseEvent). The tab is already attached; enable domains first if a command needs it. Page.navigate asks for site permission like navigate does. Commands that reach other tabs or browser-wide state (Target.*, Browser.*, Storage.*, Network.getAllCookies, clearing cache or cookies) are refused. Events are not streamed: use read_console and read_network. Prefer the dedicated tools when one fits.",
 			inputSchema: {
 				method: z.string().describe("CDP method, e.g. Emulation.setDeviceMetricsOverride"),
-				params: z.record(z.unknown()).optional().describe("Command parameters as in the CDP docs"),
+				params: z.record(z.string(), z.unknown()).optional().describe("Command parameters as in the CDP docs"),
 				tabId,
 			},
 		},
