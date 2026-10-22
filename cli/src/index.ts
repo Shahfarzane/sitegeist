@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeClient, listSockets } from "./client.ts";
+import { cliCredentials } from "./credentials.ts";
 import { runNativeHost } from "./host.ts";
 import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
 import { runMcpServer } from "./mcp.ts";
@@ -22,6 +23,7 @@ Usage:
   sitegeist debug           Print the extension's bridge state and recent timing log
   sitegeist pi-extension    Write a pi extension to ~/.pi/agent/extensions/sitegeist.ts
   sitegeist host            (internal) native messaging host, spawned by the browser
+  sitegeist credentials <p> (internal) one login lookup for the host, printed as JSON
 
 Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegeist install\` prints them):
   claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp
@@ -65,6 +67,11 @@ async function main(): Promise<void> {
 	switch (command) {
 		case "host":
 			runNativeHost();
+			return;
+		case "credentials":
+			// The host may be gone by now (it was terminated); the write-back has happened.
+			process.stdout.on("error", () => undefined);
+			process.stdout.write(JSON.stringify(await cliCredentials(process.argv[3] ?? "")));
 			return;
 		case "mcp":
 			await runMcpServer();

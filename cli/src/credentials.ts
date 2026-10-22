@@ -13,9 +13,9 @@
  */
 
 import { execFile } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { CliCredentials, HostCredentialsResponse } from "../../src/bridge/protocol.ts";
 
 /** Tokens with less time left count as expired. */
@@ -24,9 +24,11 @@ const KEYCHAIN_SERVICE = "Claude Code-credentials";
 const CODEX_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const CODEX_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const CODEX_JWT_CLAIM = "https://api.openai.com/auth";
-const LOCK_WAIT_MS = 20_000;
-/** A lock older than this was left by a host that died mid-refresh. */
-const LOCK_STALE_MS = 30_000;
+const REFRESH_TIMEOUT_MS = 10_000;
+/** Below the extension's 20 s lookup timeout. */
+const LOCK_WAIT_MS = 15_000;
+/** A lock this old outlived any refresh (REFRESH_TIMEOUT_MS plus file I/O); its holder hung. */
+const LOCK_STALE_MS = 12_000;
 
 export interface LookupOptions {
 	/** Reads a generic password from the login keychain; undefined when there is none. */
@@ -140,9 +142,16 @@ async function readCodex(tokenUrl: string): Promise<CliCredentials> {
 			tokens: { ...auth.tokens, ...tokens },
 			last_refresh: new Date().toISOString(),
 		};
-		writeAtomic(path, `${JSON.stringify(updated, null, 2)}\n`);
 		const refreshed = codexCredentials(updated);
 		if (!refreshed || !usable(refreshed)) throw new Error("Codex's refreshed token is already expired");
+		// The lock does not hold Codex back: if it refreshed or logged in to another account
+		// during the request, its file wins and this refresh is used for this lookup only.
+		const now = readCodexAuth(path);
+		if (now.tokens?.refresh_token !== used) {
+			const theirs = codexCredentials(now);
+			return theirs && usable(theirs) ? theirs : refreshed;
+		}
+		writeAtomic(path, `${JSON.stringify(updated, null, 2)}\n`);
 		return refreshed;
 	});
 }
@@ -161,7 +170,7 @@ async function refreshCodexTokens(
 			refresh_token: refreshToken,
 			scope: "openid profile email",
 		}),
-		signal: AbortSignal.timeout(15_000),
+		signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
 	});
 	if (!response.ok) throw new Error(`token endpoint returned ${response.status}`);
 	const data = (await response.json()) as Record<string, unknown>;
@@ -174,26 +183,47 @@ async function refreshCodexTokens(
 	return tokens;
 }
 
+/** Replaces the file a symlinked auth.json points at, not the link. */
 function writeAtomic(path: string, content: string): void {
-	const tmp = `${path}.sitegeist-${process.pid}`;
+	const target = realpathSync(path);
+	const tmp = join(dirname(target), `.auth.json.sitegeist-${process.pid}`);
 	writeFileSync(tmp, content, { mode: 0o600 });
-	renameSync(tmp, path);
+	renameSync(tmp, target);
+}
+
+function lockHolderAlive(lock: string): boolean {
+	const pid = Number.parseInt(readFileSync(lock, "utf8"), 10);
+	// Empty while its creator is still writing the pid; the age check covers a crash there.
+	if (!Number.isInteger(pid) || pid <= 0) return true;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		return (err as NodeJS.ErrnoException).code === "EPERM";
+	}
 }
 
 /**
  * One refresh at a time across host processes: every side panel can ask at once, and two
  * refreshes with the same refresh token make the second one fail (or revoke the login).
+ * The lock file holds the holder's pid, so a lock left by a dead host is broken at once.
  */
 async function withLock<T>(lock: string, fn: () => Promise<T>): Promise<T> {
 	const deadline = Date.now() + LOCK_WAIT_MS;
 	for (;;) {
 		try {
-			closeSync(openSync(lock, "wx", 0o600));
+			writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
 			break;
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-			const held = statSync(lock, { throwIfNoEntry: false });
-			if (held && Date.now() - held.mtimeMs > LOCK_STALE_MS) rmSync(lock, { force: true });
+			let stale: boolean;
+			try {
+				const held = statSync(lock);
+				stale = Date.now() - held.mtimeMs > LOCK_STALE_MS || !lockHolderAlive(lock);
+			} catch {
+				continue; // released between the attempts
+			}
+			if (stale) rmSync(lock, { force: true });
 			else if (Date.now() > deadline) throw new Error("Timed out waiting for another refresh of the Codex login");
 			else await new Promise((resolve) => setTimeout(resolve, 100));
 		}

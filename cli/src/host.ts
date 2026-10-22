@@ -9,6 +9,8 @@
  * relay only starts on the extension's hello, so it never opens a socket.
  */
 
+import { spawn } from "node:child_process";
+
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
@@ -16,11 +18,11 @@ import type {
 	ClientToHost,
 	ExtCredentialsRequest,
 	ExtToHost,
+	HostCredentialsResponse,
 	HostToClient,
 	HostToExt,
 } from "../../src/bridge/protocol.ts";
 import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
-import { cliCredentials } from "./credentials.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
@@ -109,6 +111,33 @@ function sweepStaleSockets(dir: string): void {
 	}
 }
 
+/**
+ * Runs a login lookup (`sitegeist credentials <provider>`) in a detached child. Chrome
+ * terminates the host when the side panel goes away (SIGTERM, SIGKILL 2 s later); a Codex
+ * refresh killed between the token response and the write-back would leave Codex holding a
+ * spent refresh token. The child finishes the write-back on its own.
+ */
+function lookUpLogin(provider: string): Promise<HostCredentialsResponse> {
+	return new Promise((resolve) => {
+		const child = spawn(process.execPath, [...process.execArgv, process.argv[1], "credentials", provider], {
+			detached: true,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		let out = "";
+		child.stdout.on("data", (chunk: Buffer) => {
+			out += chunk.toString("utf8");
+		});
+		child.on("error", (err) => resolve({ type: "credentials", error: `login lookup failed: ${err.message}` }));
+		child.on("close", () => {
+			try {
+				resolve(JSON.parse(out) as HostCredentialsResponse);
+			} catch {
+				resolve({ type: "credentials", error: "login lookup failed" });
+			}
+		});
+	});
+}
+
 /** Socket server for harness clients; returns the function that tears it down. */
 function startRelay(): () => void {
 	const dir = socketDir();
@@ -181,7 +210,7 @@ export function runNativeHost(): void {
 			if (message.type === "credentials") {
 				lookups = Promise.all([
 					lookups,
-					cliCredentials(message.provider).then((response) => process.stdout.write(encodeFrame(response))),
+					lookUpLogin(message.provider).then((response) => process.stdout.write(encodeFrame(response))),
 				]);
 				continue;
 			}
