@@ -1,10 +1,10 @@
 /**
  * Host permissions for bridge sessions.
  *
- * Mode "ask" (default): a harness may only navigate to hosts the user allowed.
- * Unknown hosts raise a permission request that the harness shows (MCP
- * elicitation) or that the user answers in Settings > Bridge. Mode "allow_all"
- * skips the check for people who trust their harness.
+ * Mode "allow_all" (default): a harness may open any site. Mode "ask": a harness
+ * may only navigate to hosts the user allowed; unknown hosts raise a permission
+ * request that the harness shows (MCP elicitation) or that the user answers in
+ * Settings > Bridge.
  */
 
 const ENABLED_KEY = "bridge_enabled";
@@ -35,7 +35,7 @@ export async function setBridgeEnabled(enabled: boolean): Promise<void> {
 
 export async function getPermissionMode(): Promise<PermissionMode> {
 	const data = await chrome.storage.local.get(MODE_KEY);
-	return data[MODE_KEY] === "allow_all" ? "allow_all" : "ask";
+	return data[MODE_KEY] === "ask" ? "ask" : "allow_all";
 }
 
 export async function setPermissionMode(mode: PermissionMode): Promise<void> {
