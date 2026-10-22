@@ -7,7 +7,8 @@
  */
 
 import { loginAnthropic, refreshAnthropic } from "./anthropic.js";
-import { isCliLoginOff, isCliLoginProvider, readCliLogin } from "./cli-login.js";
+import { TokenRequestError } from "./browser-oauth.js";
+import { currentCliLogin, isCliLoginOff, isCliLoginProvider, readCliLogin } from "./cli-login.js";
 import { loginGitHubCopilot, refreshGitHubCopilot } from "./github-copilot.js";
 import { loginGeminiCli, refreshGeminiCli } from "./google-gemini-cli.js";
 import { loginOpenAICodex, refreshOpenAICodex } from "./openai-codex.js";
@@ -109,24 +110,28 @@ export async function resolveApiKey(
 
 	let credentials = parseOAuthCredentials(storedValue);
 
-	// Refresh if expired (or within 60s of expiry)
-	if (Date.now() >= credentials.expires - 60_000) {
-		if (credentials.source === "cli" && isCliLoginProvider(provider)) {
-			// Borrowed from Claude Code or Codex: the CLI's own store has the current token.
-			credentials = await readCliLogin(provider);
-		} else {
-			try {
-				credentials = await oauthRefresh(credentials, proxyUrl);
-			} catch (error) {
-				console.error(`Failed to refresh OAuth token for ${provider}:`, error);
-				// sitegeist's own login lapsed; the CLI's login, if there is one, still works.
-				const fallback =
-					isCliLoginProvider(provider) && !(await isCliLoginOff(provider))
-						? await readCliLogin(provider).catch(() => undefined)
-						: undefined;
-				if (!fallback) throw new Error(`OAuth token expired and refresh failed for ${provider}`);
-				credentials = fallback;
-			}
+	if (credentials.source === "cli" && isCliLoginProvider(provider)) {
+		// Borrowed from Claude Code or Codex: the CLI's own store has the current token.
+		const current = await currentCliLogin(provider, credentials);
+		const serialized = serializeOAuthCredentials(current);
+		// Not after a Logout that happened while the lookup ran.
+		if (serialized !== storedValue && !(await isCliLoginOff(provider))) await storage.set(provider, serialized);
+		credentials = current;
+	} else if (Date.now() >= credentials.expires - 60_000) {
+		// Refresh if expired (or within 60s of expiry)
+		try {
+			credentials = await oauthRefresh(credentials, proxyUrl);
+		} catch (error) {
+			console.error(`Failed to refresh OAuth token for ${provider}:`, error);
+			// The token endpoint turned sitegeist's own login down for good (not a network error):
+			// the CLI's login, if there is one, still works.
+			const rejected = error instanceof TokenRequestError && error.status >= 400 && error.status < 500;
+			const fallback =
+				rejected && isCliLoginProvider(provider) && !(await isCliLoginOff(provider))
+					? await readCliLogin(provider).catch(() => undefined)
+					: undefined;
+			if (!fallback) throw new Error(`OAuth token expired and refresh failed for ${provider}`);
+			credentials = fallback;
 		}
 		await storage.set(provider, serializeOAuthCredentials(credentials));
 	}

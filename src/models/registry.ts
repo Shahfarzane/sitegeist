@@ -124,7 +124,9 @@ async function credentialFor(storage: SitegeistAppStorage, provider: string) {
 	const stored = await storage.providerKeys.get(provider);
 	if (!stored) return undefined;
 	const token = await resolveApiKey(stored, provider, storage.providerKeys);
-	const accountId = isOAuthCredentials(stored) ? parseOAuthCredentials(stored).accountId : undefined;
+	// resolveApiKey may have stored a newer login (a CLI that switched account).
+	const latest = (await storage.providerKeys.get(provider)) ?? stored;
+	const accountId = isOAuthCredentials(latest) ? parseOAuthCredentials(latest).accountId : undefined;
 	return { token, accountId };
 }
 
