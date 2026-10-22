@@ -99,6 +99,38 @@ export async function oauthRefresh(credentials: OAuthCredentials, _proxyUrl?: st
 	}
 }
 
+interface KeyStore {
+	get: (provider: string) => Promise<string | null>;
+	set: (provider: string, value: string) => Promise<void>;
+}
+
+/**
+ * Save what a resolution changed, unless the stored value changed meanwhile (Logout,
+ * Remove, a new login or API key). Then only a rotated refresh token is carried into the
+ * newer value, where the same login is still stored: its old refresh token no longer works.
+ */
+async function saveResolved(
+	storage: KeyStore,
+	provider: string,
+	before: string,
+	updated: OAuthCredentials,
+	rotated?: { from: string; to: OAuthCredentials },
+): Promise<void> {
+	const now = await storage.get(provider);
+	if (now === before) {
+		const serialized = serializeOAuthCredentials(updated);
+		if (serialized !== before) await storage.set(provider, serialized);
+		return;
+	}
+	if (!rotated || !now || !isOAuthCredentials(now)) return;
+	const current = parseOAuthCredentials(now);
+	if (current.source !== "cli" && current.refresh === rotated.from) {
+		await storage.set(provider, serializeOAuthCredentials(rotated.to));
+	} else if (current.source === "cli" && current.fallback?.refresh === rotated.from) {
+		await storage.set(provider, serializeOAuthCredentials({ ...current, fallback: rotated.to }));
+	}
+}
+
 /**
  * Resolve an API key from stored value.
  * If the value is a plain string, return it directly.
@@ -108,7 +140,7 @@ export async function oauthRefresh(credentials: OAuthCredentials, _proxyUrl?: st
 export async function resolveApiKey(
 	storedValue: string,
 	provider: string,
-	storage: { set: (provider: string, value: string) => Promise<void> },
+	storage: KeyStore,
 	proxyUrl?: string,
 ): Promise<string> {
 	if (!isOAuthCredentials(storedValue)) {
@@ -122,6 +154,7 @@ export async function resolveApiKey(
 		const fallback = credentials.fallback;
 		let current: OAuthCredentials;
 		let token: string;
+		let rotated: { from: string; to: OAuthCredentials } | undefined;
 		try {
 			current = { ...(await currentCliLogin(provider, credentials, { fallback: !!fallback })), fallback };
 			token = current.access;
@@ -136,6 +169,7 @@ export async function resolveApiKey(
 			if (Date.now() >= own.expires - 60_000) {
 				try {
 					own = await oauthRefresh(own, proxyUrl);
+					rotated = { from: fallback.refresh, to: own };
 				} catch (refreshError) {
 					console.error(`Failed to refresh the fallback login for ${provider}:`, refreshError);
 					throw new Error(`${reason}, and the sitegeist login for ${provider} could not be refreshed`);
@@ -145,14 +179,15 @@ export async function resolveApiKey(
 			token = own.access;
 			console.info(`[cli-login] ${provider}: ${cliName(provider)} login expired, using the sitegeist login`);
 		}
-		const serialized = serializeOAuthCredentials(current);
-		// Not after a Logout that happened while the lookup ran.
-		if (serialized !== storedValue && !(await isCliLoginOff(provider))) await storage.set(provider, serialized);
+		await saveResolved(storage, provider, storedValue, current, rotated);
 		return token;
 	} else if (Date.now() >= credentials.expires - 60_000) {
 		// Refresh if expired (or within 60s of expiry)
+		const before = credentials;
+		let rotated: { from: string; to: OAuthCredentials } | undefined;
 		try {
 			credentials = await oauthRefresh(credentials, proxyUrl);
+			rotated = { from: before.refresh, to: credentials };
 		} catch (error) {
 			console.error(`Failed to refresh OAuth token for ${provider}:`, error);
 			// The token endpoint turned sitegeist's own login down for good (not a network error):
@@ -165,7 +200,7 @@ export async function resolveApiKey(
 			if (!fallback) throw new Error(`OAuth token expired and refresh failed for ${provider}`);
 			credentials = fallback;
 		}
-		await storage.set(provider, serializeOAuthCredentials(credentials));
+		await saveResolved(storage, provider, storedValue, credentials, rotated);
 	}
 
 	// Gemini CLI expects the API key as JSON with token and projectId
