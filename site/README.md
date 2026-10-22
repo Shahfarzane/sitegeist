@@ -64,7 +64,6 @@ Additional commands:
 ## API Pattern
 
 Uses type-safe API pattern with auto-generated client/server code:
-
 - **`src/shared/api.ts`** - API interface and route definitions (single source of truth)
 - **`src/frontend/api-client.ts`** - Auto-generated client (creates typed fetch calls)
 - **`src/backend/api-server.ts`** - Auto-generated Express routes

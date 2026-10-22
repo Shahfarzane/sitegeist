@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+
 - Claude Code's and Codex's logins on this computer connect the Anthropic and ChatGPT providers with no setup. The native host reads them (Claude Code's Keychain entry or `~/.claude/.credentials.json`, `~/.codex/auth.json`) when the extension asks through `chrome.runtime.sendNativeMessage` and hands over the access token only. Claude Code's login is read only; Codex's is refreshed by the host on expiry and written back to `auth.json` under a lock, so Codex stays logged in. The lookup runs in a detached process, so a host that Chrome terminates mid-refresh cannot lose the rotated token, and a file Codex changed during the refresh is left as Codex wrote it. Borrowed tokens are compared with the CLI's every 5 minutes. Settings > Providers shows "Connected through Claude Code/Codex"; Logout stops borrowing that login, "Use Claude Code"/"Use Codex" turns it back on. A sitegeist login for those providers that the token endpoint rejects falls back to the CLI's.
 - `actions` bridge method and MCP tool: up to 40 input steps (press, click, drag, type, hover, scroll, wait) in one call with an optional closing screenshot. A canvas flowchart (two shapes, labels, bound arrow) is one call instead of 60 to 120 model turns.
 - `sitegeist debug` lists the active tab per window and records foreground-guard decisions; `bridge.activate` puts a tab back in front (dev aid after a focus mishap).
@@ -22,6 +23,7 @@
 - Sibling forks and workspace: the mini-lit and pi-mono changes are commits on private forks (Shahfarzane/mini-lit, Shahfarzane/pi-mono, branch `sitegeist`), and Shahfarzane/sitegeist-workspace holds all three repos as submodules. `scripts/sibling-patches.sh export|check` keeps `patches/` generated from the forks (checked in `./check.sh`); `scripts/siblings.conf` holds the tags and URLs. `auto-release.sh` fast-forwards clean fork checkouts and reinstalls dependencies when they are missing.
 
 ### Changed
+
 - Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
 - The native host starts its socket relay on the extension's hello instead of at launch, so a one-message `sendNativeMessage` lookup never opens a bridge socket.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
@@ -38,6 +40,7 @@
 - First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb and suggestion pills are grayscale.
 
 ### Fixed
+
 - Anthropic requests fail with 401 "CORS requests are not allowed for this Organization" for organizations that disallow browser access: a `declarativeNetRequest` rule removes the extension's `Origin` header from its own requests to `api.anthropic.com`, so they are not treated as CORS requests.
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
 - `actions` spaces steps by `settleMs` (default 80 ms) so a keystroke after Enter is not lost while the app opens its text editor, and accepts `key`, `text`, `doubleClick`, `move`, `sleep` and mid-list `screenshot` steps.
@@ -71,6 +74,7 @@
 - Deleting, closing or ungrouping an agent's tab group while it was working brought a new group right back: the agent's next `navigate` found no tab and opened one in a fresh group. Removing the group mid-run (the agent used the browser in the last 2 minutes) now means "stop": the agent's next attempt to open a tab is refused once with a message telling it to end its turn and report. The agent closing its own last tab, a group removed while the agent is idle, and a new side panel message are unaffected.
 
 ### Removed
+
 - Upstream update check (About tab and the disabled startup prompt against `sitegeist.ai/uploads/version.json`) and `UpdateNotificationDialog`: the fork's version numbers differ and its updates come from signed releases.
 
 ## [1.0.0] - 2026-03-15
