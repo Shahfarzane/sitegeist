@@ -1,3 +1,131 @@
+diff --git a/biome.json b/biome.json
+index aa32183..f817ddb 100644
+--- a/biome.json
++++ b/biome.json
+@@ -2,7 +2,7 @@
+    "linter": {
+       "enabled": true,
+       "rules": {
+-         "recommended": true,
++         "preset": "recommended",
+          "style": {
+             "noNonNullAssertion": "off",
+             "useConst": "error",
+diff --git a/example/package.json b/example/package.json
+index 79b571a..187eed7 100644
+--- a/example/package.json
++++ b/example/package.json
+@@ -10,18 +10,18 @@
+   },
+   "dependencies": {
+     "@mariozechner/mini-lit": "file:/../",
+-    "@tailwindcss/vite": "^4.1.13",
+-    "@vaadin/router": "^2.0.0",
+-    "lit": "^3.3.1",
+-    "lucide": "^0.544.0",
+-    "react": "^19.1.1",
+-    "react-dom": "^19.1.1"
++    "@tailwindcss/vite": "^4.3.3",
++    "@vaadin/router": "^2.0.1",
++    "lit": "^3.3.3",
++    "lucide": "^1.61.0",
++    "react": "^19.3.1",
++    "react-dom": "^19.3.1"
+   },
+   "devDependencies": {
+-    "@biomejs/biome": "^2.2.4",
+-    "@types/react": "^19.1.15",
+-    "@types/react-dom": "^19.1.9",
+-    "@vitejs/plugin-react": "^5.0.4",
+-    "vite": "^7.1.6"
++    "@biomejs/biome": "^2.6.2",
++    "@types/react": "^19.3.0",
++    "@types/react-dom": "^19.3.0",
++    "@vitejs/plugin-react": "^6.1.2",
++    "vite": "^8.3.5"
+   }
+ }
+diff --git a/example/tsconfig.json b/example/tsconfig.json
+index c8138ac..dbad2ca 100644
+--- a/example/tsconfig.json
++++ b/example/tsconfig.json
+@@ -2,6 +2,7 @@
+    "compilerOptions": {
+       "target": "ES2020",
+       "lib": ["ES2022", "DOM", "DOM.Iterable"],
++      "types": ["vite/client"],
+       "module": "ESNext",
+       "moduleResolution": "bundler",
+       "strict": true,
+diff --git a/example/vite.config.ts b/example/vite.config.ts
+index e53bf41..681eff7 100644
+--- a/example/vite.config.ts
++++ b/example/vite.config.ts
+@@ -1,7 +1,7 @@
+ import tailwindcss from "@tailwindcss/vite";
+ import react from "@vitejs/plugin-react";
+ import { defineConfig } from "vite";
+-import packageJson from "../package.json";
++import packageJson from "../package.json" with { type: "json" };
+ 
+ export default defineConfig({
+    plugins: [tailwindcss(), react()],
+diff --git a/package.json b/package.json
+index d259e92..1991029 100644
+--- a/package.json
++++ b/package.json
+@@ -33,33 +33,33 @@
+       "test:ui": "vitest --ui"
+    },
+    "dependencies": {
+-      "@preact/signals-core": "^1.12.1",
++      "@preact/signals-core": "^1.14.4",
+       "class-variance-authority": "^0.7.1",
+-      "diff": "^8.0.2",
+-      "highlight.js": "^11.11.1",
++      "diff": "^9.0.0",
++      "highlight.js": "^11.12.0",
+       "html-parse-string": "^0.0.9",
+-      "katex": "^0.16.22",
+-      "lucide": "^0.544.0",
+-      "marked": "^16.3.0",
+-      "tailwind-merge": "^3.3.1",
+-      "tailwind-variants": "^3.1.1",
++      "katex": "^0.19.0",
++      "lucide": "^1.61.0",
++      "marked": "^18.1.1",
++      "tailwind-merge": "^3.7.0",
++      "tailwind-variants": "^3.3.1",
+       "uhtml": "^5.0.9"
+    },
+    "peerDependencies": {
+       "lit": "^3.3.1"
+    },
+    "devDependencies": {
+-      "@anthropic-ai/claude-code": "^1.0.128",
+-      "@biomejs/biome": "^2.2.4",
+-      "@types/node": "^24.5.2",
+-      "@vitest/ui": "^3.2.4",
+-      "concurrently": "^9.2.1",
+-      "happy-dom": "^20.0.8",
++      "@anthropic-ai/claude-code": "^2.1.308",
++      "@biomejs/biome": "^2.6.2",
++      "@types/node": "^26.6.5",
++      "@vitest/ui": "^5.0.5",
++      "concurrently": "^10.0.6",
++      "happy-dom": "^21.0.4",
+       "husky": "^9.1.7",
+-      "prettier": "^3.6.2",
++      "prettier": "^3.9.10",
+       "string-dedent": "^3.0.2",
+-      "tsx": "^4.20.5",
+-      "typescript": "^5.9.2",
+-      "vitest": "^3.2.4"
++      "tsx": "^4.23.15",
++      "typescript": "^7.0.2",
++      "vitest": "^5.0.5"
+    }
+ }
 diff --git a/src/Button.ts b/src/Button.ts
 index 4906044..302b24f 100644
 --- a/src/Button.ts
@@ -61,3 +189,118 @@ index 3905aec..0d09b4f 100644
  });
  
  // Dialog footer for action buttons
+diff --git a/src/component.ts b/src/component.ts
+index 3e3ac1a..f3ad902 100644
+--- a/src/component.ts
++++ b/src/component.ts
+@@ -294,12 +294,13 @@ type TVSlotResult<S> = S extends { slots: infer Slots }
+    : never;
+ 
+ // Extract variant props from our styles structure
+-export type VariantPropsFromStyles<S> = S extends SimpleStyles<ComponentDefinition>
+-   ? { [K in keyof NonNullable<S["variants"]>]?: keyof NonNullable<S["variants"]>[K] } & {
+-        className?: string;
+-        class?: string;
+-     }
+-   : never;
++export type VariantPropsFromStyles<S> =
++   S extends SimpleStyles<ComponentDefinition>
++      ? { [K in keyof NonNullable<S["variants"]>]?: keyof NonNullable<S["variants"]>[K] } & {
++           className?: string;
++           class?: string;
++        }
++      : never;
+ 
+ // Conditional render function type based on whether slots exist
+ export type RenderFunction<Props, Styles> = Styles extends { slots: Record<string, string> }
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 21aaa50..f939e24 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -1,5 +1,5 @@
+ import assert from "node:assert";
+-import { test } from "node:test";
++import { test } from "vitest";
+ 
+ test("Library builds", () => {
+    // Since we're testing a browser library in Node.js,
+diff --git a/src/mini.ts b/src/mini.ts
+index 8abbdb3..a171d83 100644
+--- a/src/mini.ts
++++ b/src/mini.ts
+@@ -46,5 +46,5 @@ export interface ComponentPropsWithoutChildren {
+    className?: string;
+ }
+ 
+-export { createRef, html, nothing, ref };
+ export type { Ref, TemplateResult };
++export { createRef, html, nothing, ref };
+diff --git a/tests/decorators.test.ts b/tests/decorators.test.ts
+new file mode 100644
+index 0000000..68ec3f0
+--- /dev/null
++++ b/tests/decorators.test.ts
+@@ -0,0 +1,29 @@
++import { expect, test } from "vitest";
++import { ModeToggle } from "../dist/ModeToggle.js";
++
++test("compiled legacy decorators preserve reactive properties and class field setters", async () => {
++   const toggle = new ModeToggle();
++   document.body.append(toggle);
++   try {
++      await toggle.updateComplete;
++      expect(customElements.get("mode-toggle")).toBe(ModeToggle);
++      expect(Object.hasOwn(toggle, "selectedIndex")).toBe(false);
++      expect(toggle.querySelectorAll("button")).toHaveLength(2);
++
++      toggle.modes = ["First", "Second", "Third"];
++      await toggle.updateComplete;
++      expect(toggle.querySelectorAll("button")).toHaveLength(3);
++
++      let selected: unknown;
++      toggle.addEventListener("mode-change", (event) => {
++         selected = (event as CustomEvent<{ index: number; mode: string }>).detail;
++      });
++      toggle.querySelectorAll("button")[2].click();
++      await toggle.updateComplete;
++      expect(toggle.selectedIndex).toBe(2);
++      expect(selected).toEqual({ index: 2, mode: "Third" });
++      expect(toggle.querySelectorAll("button")[2].classList.contains("bg-card")).toBe(true);
++   } finally {
++      toggle.remove();
++   }
++});
+diff --git a/tsconfig.json b/tsconfig.json
+index 569f25a..e507cca 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -2,6 +2,7 @@
+    "compilerOptions": {
+       "target": "ES2020",
+       "lib": ["ES2022", "DOM", "DOM.Iterable"],
++      "types": ["node"],
+       "module": "ESNext",
+       "moduleResolution": "bundler",
+       "strict": true,
+diff --git a/vitest.config.ts b/vitest.config.ts
+index 390c4b7..2f87f07 100644
+--- a/vitest.config.ts
++++ b/vitest.config.ts
+@@ -3,8 +3,8 @@ import { defineConfig } from "vitest/config";
+ export default defineConfig({
+    test: {
+       globals: true,
+-      environment: "node",
+-      include: ["src/tests/**/*.test.ts"],
++      environment: "happy-dom",
++      include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+       coverage: {
+          provider: "v8",
+          reporter: ["text", "html"],
+@@ -23,4 +23,4 @@ export default defineConfig({
+    ssr: {
+       noExternal: ["html-parse-string"],
+    },
+-});
+\ No newline at end of file
++});

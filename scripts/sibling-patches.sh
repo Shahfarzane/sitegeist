@@ -14,7 +14,7 @@ PARENT="$(dirname "$ROOT")"
 # shellcheck source=siblings.conf
 source "$ROOT/scripts/siblings.conf"
 
-mini_lit_diff() { git -C "$PARENT/mini-lit" diff "$MINI_LIT_TAG" HEAD -- src; }
+mini_lit_diff() { git -C "$PARENT/mini-lit" diff "$MINI_LIT_TAG" HEAD -- . ':(exclude)package-lock.json' ':(exclude)**/package-lock.json'; }
 pi_diff() { git -C "$PARENT/pi-mono" diff "$PI_TAG" HEAD -- . ':(exclude)package-lock.json' ':(exclude)**/package-lock.json'; }
 
 # A fork checkout has commits on top of the tag; a patched upstream clone does not.

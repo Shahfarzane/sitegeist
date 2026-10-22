@@ -1,3 +1,147 @@
+diff --git a/biome.json b/biome.json
+index 147d081a3..ce4dadaab 100644
+--- a/biome.json
++++ b/biome.json
+@@ -1,9 +1,9 @@
+ {
+-	"$schema": "https://biomejs.dev/schemas/2.3.5/schema.json",
++	"$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
+ 	"linter": {
+ 		"enabled": true,
+ 		"rules": {
+-			"recommended": true,
++			"preset": "recommended",
+ 			"style": {
+ 				"noNonNullAssertion": "off",
+ 				"useConst": "error",
+diff --git a/package.json b/package.json
+index 958d51bfa..82422ec77 100644
+--- a/package.json
++++ b/package.json
+@@ -31,29 +31,33 @@
+ 		"prepare": "husky"
+ 	},
+ 	"devDependencies": {
+-		"@biomejs/biome": "2.3.5",
+-		"@types/node": "^22.10.5",
+-		"@typescript/native-preview": "7.0.0-dev.20260120.1",
+-		"concurrently": "^9.2.1",
++		"@biomejs/biome": "2.6.2",
++		"@types/node": "^26.6.5",
++		"@typescript/native-preview": "7.0.0-dev.20260707.2",
++		"concurrently": "^10.0.6",
++		"esbuild": "^0.28.2",
+ 		"husky": "^9.1.7",
+-		"tsx": "^4.20.3",
+-		"typescript": "^5.9.2",
++		"tsx": "^4.23.15",
++		"typescript": "^7.0.2",
+ 		"shx": "^0.4.0"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	},
+ 	"version": "0.0.3",
+ 	"dependencies": {
+ 		"@mariozechner/jiti": "^2.6.5",
+ 		"@mariozechner/pi-coding-agent": "^0.30.2",
+-		"get-east-asian-width": "^1.4.0"
++		"get-east-asian-width": "^1.7.0"
+ 	},
+ 	"overrides": {
+-		"rimraf": "6.1.2",
+-		"fast-xml-parser": "5.3.8",
++		"basic-ftp": "6.2.3",
++		"lucide": "1.61.0",
++		"katex": "0.19.0",
++		"rimraf": "6.1.3",
++		"fast-xml-parser": "5.11.2",
+ 		"gaxios": {
+-			"rimraf": "6.1.2"
++			"rimraf": "6.1.3"
+ 		}
+ 	}
+ }
+diff --git a/packages/agent/package.json b/packages/agent/package.json
+index 816fdcd2a..62caa1822 100644
+--- a/packages/agent/package.json
++++ b/packages/agent/package.json
+@@ -34,11 +34,11 @@
+ 		"directory": "packages/agent"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	},
+ 	"devDependencies": {
+-		"@types/node": "^24.3.0",
+-		"typescript": "^5.7.3",
+-		"vitest": "^3.2.4"
++		"@types/node": "^26.6.5",
++		"typescript": "^7.0.2",
++		"vitest": "^5.0.5"
+ 	}
+ }
+diff --git a/packages/ai/package.json b/packages/ai/package.json
+index 1ee2ff202..41e249509 100644
+--- a/packages/ai/package.json
++++ b/packages/ai/package.json
+@@ -65,26 +65,26 @@
+ 	"scripts": {
+ 		"clean": "shx rm -rf dist",
+ 		"generate-models": "npx tsx scripts/generate-models.ts",
+-		"build": "npm run generate-models && tsgo -p tsconfig.build.json",
++		"build": "tsgo -p tsconfig.build.json",
+ 		"dev": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
+ 		"dev:tsc": "tsgo -p tsconfig.build.json --watch --preserveWatchOutput",
+ 		"test": "vitest --run",
+ 		"prepublishOnly": "npm run clean && npm run build"
+ 	},
+ 	"dependencies": {
+-		"@anthropic-ai/sdk": "^0.73.0",
+-		"@aws-sdk/client-bedrock-runtime": "^3.983.0",
+-		"@google/genai": "^1.40.0",
+-		"@mistralai/mistralai": "1.14.1",
+-		"@sinclair/typebox": "^0.34.41",
+-		"ajv": "^8.17.1",
++		"@anthropic-ai/sdk": "^1.1.0",
++		"@aws-sdk/client-bedrock-runtime": "^3.1155.0",
++		"@google/genai": "^2.30.0",
++		"@mistralai/mistralai": "3.1.0",
++		"@sinclair/typebox": "^0.34.52",
++		"ajv": "^8.20.0",
+ 		"ajv-formats": "^3.0.1",
+-		"chalk": "^5.6.2",
+-		"openai": "6.26.0",
++		"chalk": "^6.0.1",
++		"openai": "7.42.0",
+ 		"partial-json": "^0.1.7",
+-		"proxy-agent": "^6.5.0",
+-		"undici": "^7.19.1",
+-		"zod-to-json-schema": "^3.24.6"
++		"proxy-agent": "^8.0.2",
++		"undici": "^8.12.3",
++		"zod-to-json-schema": "^3.25.2"
+ 	},
+ 	"keywords": [
+ 		"ai",
+@@ -104,11 +104,11 @@
+ 		"directory": "packages/ai"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	},
+ 	"devDependencies": {
+-		"@types/node": "^24.3.0",
+-		"canvas": "^3.2.0",
+-		"vitest": "^3.2.4"
++		"@types/node": "^26.6.5",
++		"canvas": "^3.2.3",
++		"vitest": "^5.0.5"
+ 	}
+ }
 diff --git a/packages/ai/src/models.ts b/packages/ai/src/models.ts
 index 101c83f2c..8c563a264 100644
 --- a/packages/ai/src/models.ts
@@ -31,6 +175,1712 @@ index 101c83f2c..8c563a264 100644
  export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
  	usage.cost.input = (model.cost.input / 1000000) * usage.input;
  	usage.cost.output = (model.cost.output / 1000000) * usage.output;
+diff --git a/packages/ai/src/providers/anthropic.ts b/packages/ai/src/providers/anthropic.ts
+index 4af0c6ffd..d3ee80f85 100644
+--- a/packages/ai/src/providers/anthropic.ts
++++ b/packages/ai/src/providers/anthropic.ts
+@@ -32,6 +32,10 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copi
+ import { adjustMaxTokensForThinking, buildBaseOptions } from "./simple-options.js";
+ import { transformMessages } from "./transform-messages.js";
+ 
++// Keep the existing Messages API contract, including temperature for older models.
++// SDK 1.x defaults to 2026-10-21, which removes sampling parameters.
++type CompatibleMessageParams = MessageCreateParamsStreaming & { temperature?: number };
++
+ /**
+  * Resolve cache retention preference.
+  * Defaults to "short" and uses PI_CACHE_RETENTION for backward compatibility.
+@@ -256,7 +260,13 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
+ 			if (nextParams !== undefined) {
+ 				params = nextParams as MessageCreateParamsStreaming;
+ 			}
+-			const anthropicStream = client.messages.stream({ ...params, stream: true }, { signal: options?.signal });
++			const anthropicStream = client.messages.stream(
++				{ ...params, stream: true },
++				{
++					signal: options?.signal,
++					headers: mergeHeaders({ "anthropic-version": "2023-06-01" }, model.headers, options?.headers),
++				},
++			);
+ 			stream.push({ type: "start", partial: output });
+ 
+ 			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
+@@ -590,15 +600,19 @@ function createClient(
+ 		apiKey,
+ 		baseURL: model.baseUrl,
+ 		dangerouslyAllowBrowser: true,
+-		defaultHeaders: mergeHeaders(
+-			{
+-				accept: "application/json",
+-				"anthropic-dangerous-direct-browser-access": "true",
+-				"anthropic-beta": betaFeatures.join(","),
+-			},
+-			model.headers,
+-			optionsHeaders,
+-		),
++		defaultHeaders: {
++			authorization: null,
++			...mergeHeaders(
++				{
++					accept: "application/json",
++					"x-api-key": apiKey,
++					"anthropic-dangerous-direct-browser-access": "true",
++					"anthropic-beta": betaFeatures.join(","),
++				},
++				model.headers,
++				optionsHeaders,
++			),
++		},
+ 	});
+ 
+ 	return { client, isOAuthToken: false };
+@@ -609,9 +623,9 @@ function buildParams(
+ 	context: Context,
+ 	isOAuthToken: boolean,
+ 	options?: AnthropicOptions,
+-): MessageCreateParamsStreaming {
++): CompatibleMessageParams {
+ 	const { cacheControl } = getCacheControl(model.baseUrl, options?.cacheRetention);
+-	const params: MessageCreateParamsStreaming = {
++	const params: CompatibleMessageParams = {
+ 		model: model.id,
+ 		messages: convertMessages(context.messages, model, isOAuthToken, cacheControl),
+ 		max_tokens: options?.maxTokens || (model.maxTokens / 3) | 0,
+diff --git a/packages/ai/src/providers/google-gemini-cli.ts b/packages/ai/src/providers/google-gemini-cli.ts
+index a7ece8095..ae06ed873 100644
+--- a/packages/ai/src/providers/google-gemini-cli.ts
++++ b/packages/ai/src/providers/google-gemini-cli.ts
+@@ -469,7 +469,7 @@ export const streamGoogleGeminiCli: StreamFunction<"google-gemini-cli", GoogleGe
+ 				}
+ 			}
+ 
+-			if (!response || !response.ok) {
++			if (!response?.ok) {
+ 				throw lastError ?? new Error("Failed to get response after retries");
+ 			}
+ 
+diff --git a/packages/ai/src/providers/google-shared.ts b/packages/ai/src/providers/google-shared.ts
+index 57b592382..a105a70d3 100644
+--- a/packages/ai/src/providers/google-shared.ts
++++ b/packages/ai/src/providers/google-shared.ts
+@@ -287,6 +287,7 @@ export function mapStopReason(reason: FinishReason): StopReason {
+ 		case FinishReason.STOP:
+ 			return "stop";
+ 		case FinishReason.MAX_TOKENS:
++		case FinishReason.CONTINUATION:
+ 			return "length";
+ 		case FinishReason.BLOCKLIST:
+ 		case FinishReason.PROHIBITED_CONTENT:
+@@ -302,6 +303,7 @@ export function mapStopReason(reason: FinishReason): StopReason {
+ 		case FinishReason.LANGUAGE:
+ 		case FinishReason.MALFORMED_FUNCTION_CALL:
+ 		case FinishReason.UNEXPECTED_TOOL_CALL:
++		case FinishReason.TOO_MANY_TOOL_CALLS:
+ 		case FinishReason.NO_IMAGE:
+ 			return "error";
+ 		default: {
+@@ -319,6 +321,7 @@ export function mapStopReasonString(reason: string): StopReason {
+ 		case "STOP":
+ 			return "stop";
+ 		case "MAX_TOKENS":
++		case "CONTINUATION":
+ 			return "length";
+ 		default:
+ 			return "error";
+diff --git a/packages/ai/src/providers/mistral.ts b/packages/ai/src/providers/mistral.ts
+index c70e72cfd..3fb136e0f 100644
+--- a/packages/ai/src/providers/mistral.ts
++++ b/packages/ai/src/providers/mistral.ts
+@@ -1,12 +1,12 @@
+-import { Mistral } from "@mistralai/mistralai";
+ import type { RequestOptions } from "@mistralai/mistralai/lib/sdks.js";
+ import type {
+ 	ChatCompletionStreamRequest,
+-	ChatCompletionStreamRequestMessages,
++	ChatCompletionStreamRequestMessage,
+ 	CompletionEvent,
+ 	ContentChunk,
+ 	FunctionTool,
+ } from "@mistralai/mistralai/models/components/index.js";
++import { Chat } from "@mistralai/mistralai/sdk/chat.js";
+ import { getEnvApiKey } from "../env-api-keys.js";
+ import { calculateCost } from "../models.js";
+ import type {
+@@ -61,7 +61,7 @@ export const streamMistral: StreamFunction<"mistral-conversations", MistralOptio
+ 			}
+ 
+ 			// Intentionally per-request: avoids shared SDK mutable state across concurrent consumers.
+-			const mistral = new Mistral({
++			const mistral = new Chat({
+ 				apiKey,
+ 				serverURL: model.baseUrl,
+ 			});
+@@ -74,7 +74,7 @@ export const streamMistral: StreamFunction<"mistral-conversations", MistralOptio
+ 			if (nextPayload !== undefined) {
+ 				payload = nextPayload as ChatCompletionStreamRequest;
+ 			}
+-			const mistralStream = await mistral.chat.stream(payload, buildRequestOptions(model, options));
++			const mistralStream = await mistral.stream(payload, buildRequestOptions(model, options));
+ 			stream.push({ type: "start", partial: output });
+ 			await consumeChatStream(model, output, stream, mistralStream);
+ 
+@@ -311,7 +311,7 @@ async function consumeChatStream(
+ 			for (const item of contentItems) {
+ 				if (typeof item === "string") {
+ 					const textDelta = sanitizeSurrogates(item);
+-					if (!currentBlock || currentBlock.type !== "text") {
++					if (currentBlock?.type !== "text") {
+ 						finishCurrentBlock(currentBlock);
+ 						currentBlock = { type: "text", text: "" };
+ 						output.content.push(currentBlock);
+@@ -334,7 +334,7 @@ async function consumeChatStream(
+ 						.join("");
+ 					const thinkingDelta = sanitizeSurrogates(deltaText);
+ 					if (!thinkingDelta) continue;
+-					if (!currentBlock || currentBlock.type !== "thinking") {
++					if (currentBlock?.type !== "thinking") {
+ 						finishCurrentBlock(currentBlock);
+ 						currentBlock = { type: "thinking", thinking: "" };
+ 						output.content.push(currentBlock);
+@@ -352,7 +352,7 @@ async function consumeChatStream(
+ 
+ 				if (item.type === "text") {
+ 					const textDelta = sanitizeSurrogates(item.text);
+-					if (!currentBlock || currentBlock.type !== "text") {
++					if (currentBlock?.type !== "text") {
+ 						finishCurrentBlock(currentBlock);
+ 						currentBlock = { type: "text", text: "" };
+ 						output.content.push(currentBlock);
+@@ -446,8 +446,8 @@ function toFunctionTools(tools: Tool[]): Array<FunctionTool & { type: "function"
+ 	}));
+ }
+ 
+-function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompletionStreamRequestMessages[] {
+-	const result: ChatCompletionStreamRequestMessages[] = [];
++function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompletionStreamRequestMessage[] {
++	const result: ChatCompletionStreamRequestMessage[] = [];
+ 
+ 	for (const msg of messages) {
+ 		if (msg.role === "user") {
+@@ -499,7 +499,7 @@ function toChatMessages(messages: Message[], supportsImages: boolean): ChatCompl
+ 				});
+ 			}
+ 
+-			const assistantMessage: ChatCompletionStreamRequestMessages = { role: "assistant" };
++			const assistantMessage: ChatCompletionStreamRequestMessage = { role: "assistant" };
+ 			if (contentParts.length > 0) assistantMessage.content = contentParts;
+ 			if (toolCalls.length > 0) assistantMessage.toolCalls = toolCalls;
+ 			if (contentParts.length > 0 || toolCalls.length > 0) result.push(assistantMessage);
+diff --git a/packages/ai/src/providers/openai-completions.ts b/packages/ai/src/providers/openai-completions.ts
+index bd2ccf205..50696989d 100644
+--- a/packages/ai/src/providers/openai-completions.ts
++++ b/packages/ai/src/providers/openai-completions.ts
+@@ -157,7 +157,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
+ 						choice.delta.content !== undefined &&
+ 						choice.delta.content.length > 0
+ 					) {
+-						if (!currentBlock || currentBlock.type !== "text") {
++						if (currentBlock?.type !== "text") {
+ 							finishCurrentBlock(currentBlock);
+ 							currentBlock = { type: "text", text: "" };
+ 							output.content.push(currentBlock);
+@@ -195,7 +195,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
+ 					}
+ 
+ 					if (foundReasoningField) {
+-						if (!currentBlock || currentBlock.type !== "thinking") {
++						if (currentBlock?.type !== "thinking") {
+ 							finishCurrentBlock(currentBlock);
+ 							currentBlock = {
+ 								type: "thinking",
+@@ -220,11 +220,7 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
+ 
+ 					if (choice?.delta?.tool_calls) {
+ 						for (const toolCall of choice.delta.tool_calls) {
+-							if (
+-								!currentBlock ||
+-								currentBlock.type !== "toolCall" ||
+-								(toolCall.id && currentBlock.id !== toolCall.id)
+-							) {
++							if (currentBlock?.type !== "toolCall" || (toolCall.id && currentBlock.id !== toolCall.id)) {
+ 								finishCurrentBlock(currentBlock);
+ 								currentBlock = {
+ 									type: "toolCall",
+diff --git a/packages/ai/test/anthropic-oauth.test.ts b/packages/ai/test/anthropic-oauth.test.ts
+index f8e066c66..95626dfa8 100644
+--- a/packages/ai/test/anthropic-oauth.test.ts
++++ b/packages/ai/test/anthropic-oauth.test.ts
+@@ -30,7 +30,7 @@ function getJsonBody(init?: RequestInit): Record<string, string> {
+ 	return JSON.parse(init.body) as Record<string, string>;
+ }
+ 
+-describe.sequential("Anthropic OAuth", () => {
++describe("Anthropic OAuth", { concurrent: false }, () => {
+ 	afterEach(() => {
+ 		vi.unstubAllGlobals();
+ 	});
+diff --git a/packages/ai/test/cross-provider-handoff.test.ts b/packages/ai/test/cross-provider-handoff.test.ts
+index a76c9807e..8343182a9 100644
+--- a/packages/ai/test/cross-provider-handoff.test.ts
++++ b/packages/ai/test/cross-provider-handoff.test.ts
+@@ -219,7 +219,7 @@ async function generateContext(
+ 	}
+ 
+ 	const toolCall = assistantResponse.content.find((c) => c.type === "toolCall");
+-	if (!toolCall || toolCall.type !== "toolCall") {
++	if (toolCall?.type !== "toolCall") {
+ 		console.log(`  No tool call in response (stopReason: ${assistantResponse.stopReason})`);
+ 		return {
+ 			messages: [userMessage, assistantResponse],
+diff --git a/packages/ai/test/image-tool-result.test.ts b/packages/ai/test/image-tool-result.test.ts
+index dfb1215c7..25b286c54 100644
+--- a/packages/ai/test/image-tool-result.test.ts
++++ b/packages/ai/test/image-tool-result.test.ts
+@@ -68,7 +68,7 @@ async function handleToolWithImageResult<TApi extends Api>(model: Model<TApi>, o
+ 	// Find the tool call
+ 	const toolCall = firstResponse.content.find((b) => b.type === "toolCall");
+ 	expect(toolCall).toBeTruthy();
+-	if (!toolCall || toolCall.type !== "toolCall") {
++	if (toolCall?.type !== "toolCall") {
+ 		throw new Error("Expected tool call");
+ 	}
+ 	expect(toolCall.name).toBe("get_circle");
+@@ -160,7 +160,7 @@ async function handleToolWithTextAndImageResult<TApi extends Api>(
+ 	// Find the tool call
+ 	const toolCall = firstResponse.content.find((b) => b.type === "toolCall");
+ 	expect(toolCall).toBeTruthy();
+-	if (!toolCall || toolCall.type !== "toolCall") {
++	if (toolCall?.type !== "toolCall") {
+ 		throw new Error("Expected tool call");
+ 	}
+ 	expect(toolCall.name).toBe("get_circle_with_description");
+diff --git a/packages/ai/test/interleaved-thinking.test.ts b/packages/ai/test/interleaved-thinking.test.ts
+index e6c775402..bc09842c4 100644
+--- a/packages/ai/test/interleaved-thinking.test.ts
++++ b/packages/ai/test/interleaved-thinking.test.ts
+@@ -94,7 +94,7 @@ async function assertSecondToolCallWithInterleavedThinking<TApi extends Api>(
+ 
+ 	const firstToolCall = firstResponse.content.find((block) => block.type === "toolCall");
+ 	expect(firstToolCall?.type).toBe("toolCall");
+-	if (!firstToolCall || firstToolCall.type !== "toolCall") {
++	if (firstToolCall?.type !== "toolCall") {
+ 		throw new Error("Expected first response to include a tool call");
+ 	}
+ 
+diff --git a/packages/ai/test/openai-responses-reasoning-replay-e2e.test.ts b/packages/ai/test/openai-responses-reasoning-replay-e2e.test.ts
+index 4d6899d4f..b8ed31394 100644
+--- a/packages/ai/test/openai-responses-reasoning-replay-e2e.test.ts
++++ b/packages/ai/test/openai-responses-reasoning-replay-e2e.test.ts
+@@ -47,7 +47,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY || !process.env.ANTHROPIC_API_KEY)(
+ 			const thinkingBlock = assistantResponse.content.find(
+ 				(block) => block.type === "thinking" && block.thinkingSignature,
+ 			);
+-			if (!thinkingBlock || thinkingBlock.type !== "thinking") {
++			if (thinkingBlock?.type !== "thinking") {
+ 				throw new Error("Missing thinking signature from OpenAI Responses");
+ 			}
+ 
+diff --git a/packages/ai/test/openai-responses-tool-result-images.test.ts b/packages/ai/test/openai-responses-tool-result-images.test.ts
+index c5e85fe68..55187a0be 100644
+--- a/packages/ai/test/openai-responses-tool-result-images.test.ts
++++ b/packages/ai/test/openai-responses-tool-result-images.test.ts
+@@ -77,7 +77,7 @@ async function verifyToolResultImagesStayInFunctionCallOutput<TApi extends Api>(
+ 
+ 	const toolCall = firstResponse.content.find((block) => block.type === "toolCall");
+ 	expect(toolCall).toBeTruthy();
+-	if (!toolCall || toolCall.type !== "toolCall") {
++	if (toolCall?.type !== "toolCall") {
+ 		throw new Error("Expected tool call");
+ 	}
+ 
+diff --git a/packages/ai/test/provider-sdk-compatibility.test.ts b/packages/ai/test/provider-sdk-compatibility.test.ts
+new file mode 100644
+index 000000000..7d6cfa2c4
+--- /dev/null
++++ b/packages/ai/test/provider-sdk-compatibility.test.ts
+@@ -0,0 +1,65 @@
++import { FinishReason } from "@google/genai";
++import { afterEach, expect, test, vi } from "vitest";
++import { getModel } from "../src/models.js";
++import { streamAnthropic } from "../src/providers/anthropic.js";
++import { mapStopReason, mapStopReasonString } from "../src/providers/google-shared.js";
++
++afterEach(() => {
++	vi.unstubAllGlobals();
++});
++
++test("Anthropic SDK 1 preserves the existing sampling and API-key wire contract", async () => {
++	let requestHeaders = new Headers();
++	let requestBody: Record<string, unknown> = {};
++	vi.stubGlobal(
++		"fetch",
++		vi.fn(async (_input: unknown, init?: RequestInit) => {
++			requestHeaders = new Headers(init?.headers);
++			requestBody = JSON.parse(String(init?.body));
++			const events = [
++				{
++					type: "message_start",
++					message: {
++						id: "msg_test",
++						type: "message",
++						role: "assistant",
++						model: "claude-sonnet-4-5",
++						content: [],
++						stop_reason: null,
++						stop_sequence: null,
++						usage: { input_tokens: 1, output_tokens: 0 },
++					},
++				},
++				{ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
++				{ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "Hello" } },
++				{ type: "content_block_stop", index: 0 },
++				{ type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
++				{ type: "message_stop" },
++			];
++			return new Response(
++				events.map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(""),
++				{
++					headers: { "content-type": "text/event-stream" },
++				},
++			);
++		}),
++	);
++	const result = await streamAnthropic(
++		getModel("anthropic", "claude-sonnet-4-5"),
++		{ messages: [{ role: "user", content: "Hello", timestamp: 0 }] },
++		{ apiKey: "test-key", temperature: 0.25 },
++	).result();
++	expect(result.stopReason).toBe("stop");
++	expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
++	expect(requestBody.temperature).toBe(0.25);
++	expect(requestHeaders.get("anthropic-version")).toBe("2023-06-01");
++	expect(requestHeaders.get("x-api-key")).toBe("test-key");
++	expect(requestHeaders.has("authorization")).toBe(false);
++});
++
++test("Google SDK finish reasons retain truncation and failure semantics", () => {
++	expect(mapStopReason(FinishReason.CONTINUATION)).toBe("length");
++	expect(mapStopReasonString("CONTINUATION")).toBe("length");
++	expect(mapStopReason(FinishReason.TOO_MANY_TOOL_CALLS)).toBe("error");
++	expect(mapStopReasonString("TOO_MANY_TOOL_CALLS")).toBe("error");
++});
+diff --git a/packages/ai/test/total-tokens.test.ts b/packages/ai/test/total-tokens.test.ts
+index 1d9d0da43..1ecaa3c4c 100644
+--- a/packages/ai/test/total-tokens.test.ts
++++ b/packages/ai/test/total-tokens.test.ts
+@@ -105,26 +105,25 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.ANTHROPIC_API_KEY)("Anthropic (API Key)", () => {
+-		it(
+-			"claude-3-5-haiku - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
++		it("claude-3-5-haiku - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("anthropic", "claude-3-5-haiku-20241022");
+ 
+-				console.log(`\nAnthropic / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ANTHROPIC_API_KEY });
++			console.log(`\nAnthropic / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ANTHROPIC_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
+ 
+-				// Anthropic should have cache activity
+-				const hasCache = second.cacheRead > 0 || second.cacheWrite > 0 || first.cacheWrite > 0;
+-				expect(hasCache).toBe(true);
+-			},
+-		);
++			// Anthropic should have cache activity
++			const hasCache = second.cacheRead > 0 || second.cacheWrite > 0 || first.cacheWrite > 0;
++			expect(hasCache).toBe(true);
++		});
+ 	});
+ 
+ 	describe("Anthropic (OAuth)", () => {
+@@ -155,27 +154,26 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.OPENAI_API_KEY)("OpenAI Completions", () => {
+-		it(
+-			"gpt-4o-mini - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini")!;
+-				void _compat;
+-				const llm: Model<"openai-completions"> = {
+-					...baseModel,
+-					api: "openai-completions",
+-				};
+-
+-				console.log(`\nOpenAI Completions / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm);
++		it("gpt-4o-mini - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini")!;
++			void _compat;
++			const llm: Model<"openai-completions"> = {
++				...baseModel,
++				api: "openai-completions",
++			};
++
++			console.log(`\nOpenAI Completions / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm);
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	describe.skipIf(!process.env.OPENAI_API_KEY)("OpenAI Responses", () => {
+@@ -194,24 +192,23 @@ describe("totalTokens field", () => {
+ 	});
+ 
+ 	describe.skipIf(!hasAzureOpenAICredentials())("Azure OpenAI Responses", () => {
+-		it(
+-			"gpt-4o-mini - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("azure-openai-responses", "gpt-4o-mini");
+-				const azureDeploymentName = resolveAzureDeploymentName(llm.id);
+-				const azureOptions = azureDeploymentName ? { azureDeploymentName } : {};
++		it("gpt-4o-mini - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("azure-openai-responses", "gpt-4o-mini");
++			const azureDeploymentName = resolveAzureDeploymentName(llm.id);
++			const azureOptions = azureDeploymentName ? { azureDeploymentName } : {};
+ 
+-				console.log(`\nAzure OpenAI Responses / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, azureOptions);
++			console.log(`\nAzure OpenAI Responses / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, azureOptions);
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -219,22 +216,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.GEMINI_API_KEY)("Google", () => {
+-		it(
+-			"gemini-2.0-flash - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("google", "gemini-2.0-flash");
++		it("gemini-2.0-flash - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("google", "gemini-2.0-flash");
+ 
+-				console.log(`\nGoogle / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm);
++			console.log(`\nGoogle / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm);
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -242,22 +238,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.XAI_API_KEY)("xAI", () => {
+-		it(
+-			"grok-3-fast - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("xai", "grok-3-fast");
++		it("grok-3-fast - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("xai", "grok-3-fast");
+ 
+-				console.log(`\nxAI / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.XAI_API_KEY });
++			console.log(`\nxAI / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.XAI_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -265,22 +260,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.GROQ_API_KEY)("Groq", () => {
+-		it(
+-			"openai/gpt-oss-120b - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("groq", "openai/gpt-oss-120b");
++		it("openai/gpt-oss-120b - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("groq", "openai/gpt-oss-120b");
+ 
+-				console.log(`\nGroq / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.GROQ_API_KEY });
++			console.log(`\nGroq / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.GROQ_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -288,22 +282,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.CEREBRAS_API_KEY)("Cerebras", () => {
+-		it(
+-			"gpt-oss-120b - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("cerebras", "gpt-oss-120b");
++		it("gpt-oss-120b - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("cerebras", "gpt-oss-120b");
+ 
+-				console.log(`\nCerebras / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.CEREBRAS_API_KEY });
++			console.log(`\nCerebras / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.CEREBRAS_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -330,22 +323,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.ZAI_API_KEY)("z.ai", () => {
+-		it(
+-			"glm-4.5-flash - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("zai", "glm-4.5-flash");
++		it("glm-4.5-flash - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("zai", "glm-4.5-flash");
+ 
+-				console.log(`\nz.ai / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ZAI_API_KEY });
++			console.log(`\nz.ai / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.ZAI_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -353,22 +345,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.MISTRAL_API_KEY)("Mistral", () => {
+-		it(
+-			"devstral-medium-latest - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("mistral", "devstral-medium-latest");
++		it("devstral-medium-latest - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("mistral", "devstral-medium-latest");
+ 
+-				console.log(`\nMistral / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.MISTRAL_API_KEY });
++			console.log(`\nMistral / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.MISTRAL_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -376,22 +367,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.MINIMAX_API_KEY)("MiniMax", () => {
+-		it(
+-			"MiniMax-M2.1 - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("minimax", "MiniMax-M2.1");
++		it("MiniMax-M2.1 - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("minimax", "MiniMax-M2.1");
+ 
+-				console.log(`\nMiniMax / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.MINIMAX_API_KEY });
++			console.log(`\nMiniMax / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.MINIMAX_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -399,22 +389,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.KIMI_API_KEY)("Kimi For Coding", () => {
+-		it(
+-			"kimi-k2-thinking - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("kimi-coding", "kimi-k2-thinking");
++		it("kimi-k2-thinking - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("kimi-coding", "kimi-k2-thinking");
+ 
+-				console.log(`\nKimi For Coding / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.KIMI_API_KEY });
++			console.log(`\nKimi For Coding / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.KIMI_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -422,22 +411,21 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.AI_GATEWAY_API_KEY)("Vercel AI Gateway", () => {
+-		it(
+-			"google/gemini-2.5-flash - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("vercel-ai-gateway", "google/gemini-2.5-flash");
++		it("google/gemini-2.5-flash - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("vercel-ai-gateway", "google/gemini-2.5-flash");
+ 
+-				console.log(`\nVercel AI Gateway / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.AI_GATEWAY_API_KEY });
++			console.log(`\nVercel AI Gateway / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.AI_GATEWAY_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -445,90 +433,85 @@ describe("totalTokens field", () => {
+ 	// =========================================================================
+ 
+ 	describe.skipIf(!process.env.OPENROUTER_API_KEY)("OpenRouter", () => {
+-		it(
+-			"anthropic/claude-sonnet-4 - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("openrouter", "anthropic/claude-sonnet-4");
++		it("anthropic/claude-sonnet-4 - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("openrouter", "anthropic/claude-sonnet-4");
+ 
+-				console.log(`\nOpenRouter / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
++			console.log(`\nOpenRouter / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 
+-		it(
+-			"deepseek/deepseek-chat - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("openrouter", "deepseek/deepseek-chat");
++		it("deepseek/deepseek-chat - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("openrouter", "deepseek/deepseek-chat");
+ 
+-				console.log(`\nOpenRouter / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
++			console.log(`\nOpenRouter / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 
+-		it(
+-			"mistralai/mistral-small-3.2-24b-instruct - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("openrouter", "mistralai/mistral-small-3.2-24b-instruct");
++		it("mistralai/mistral-small-3.2-24b-instruct - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("openrouter", "mistralai/mistral-small-3.2-24b-instruct");
+ 
+-				console.log(`\nOpenRouter / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
++			console.log(`\nOpenRouter / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 
+-		it(
+-			"google/gemini-2.0-flash-001 - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("openrouter", "google/gemini-2.0-flash-001");
++		it("google/gemini-2.0-flash-001 - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("openrouter", "google/gemini-2.0-flash-001");
+ 
+-				console.log(`\nOpenRouter / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
++			console.log(`\nOpenRouter / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 
+-		it(
+-			"meta-llama/llama-4-maverick - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("openrouter", "meta-llama/llama-4-maverick");
++		it("meta-llama/llama-4-maverick - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("openrouter", "meta-llama/llama-4-maverick");
+ 
+-				console.log(`\nOpenRouter / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
++			console.log(`\nOpenRouter / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm, { apiKey: process.env.OPENROUTER_API_KEY });
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+@@ -652,22 +635,21 @@ describe("totalTokens field", () => {
+ 	});
+ 
+ 	describe.skipIf(!hasBedrockCredentials())("Amazon Bedrock", () => {
+-		it(
+-			"claude-sonnet-4-5 - should return totalTokens equal to sum of components",
+-			{ retry: 3, timeout: 60000 },
+-			async () => {
+-				const llm = getModel("amazon-bedrock", "global.anthropic.claude-sonnet-4-5-20250929-v1:0");
++		it("claude-sonnet-4-5 - should return totalTokens equal to sum of components", {
++			retry: 3,
++			timeout: 60000,
++		}, async () => {
++			const llm = getModel("amazon-bedrock", "global.anthropic.claude-sonnet-4-5-20250929-v1:0");
+ 
+-				console.log(`\nAmazon Bedrock / ${llm.id}:`);
+-				const { first, second } = await testTotalTokensWithCache(llm);
++			console.log(`\nAmazon Bedrock / ${llm.id}:`);
++			const { first, second } = await testTotalTokensWithCache(llm);
+ 
+-				logUsage("First request", first);
+-				logUsage("Second request", second);
++			logUsage("First request", first);
++			logUsage("Second request", second);
+ 
+-				assertTotalTokensEqualsComponents(first);
+-				assertTotalTokensEqualsComponents(second);
+-			},
+-		);
++			assertTotalTokensEqualsComponents(first);
++			assertTotalTokensEqualsComponents(second);
++		});
+ 	});
+ 
+ 	// =========================================================================
+diff --git a/packages/coding-agent/examples/extensions/antigravity-image-gen.ts b/packages/coding-agent/examples/extensions/antigravity-image-gen.ts
+index 72a481113..7726aa5a5 100644
+--- a/packages/coding-agent/examples/extensions/antigravity-image-gen.ts
++++ b/packages/coding-agent/examples/extensions/antigravity-image-gen.ts
+@@ -210,7 +210,7 @@ function resolveSaveConfig(params: ToolParams, cwd: string): SaveConfig {
+ 
+ 	if (mode === "custom") {
+ 		const dir = params.saveDir || process.env.PI_IMAGE_SAVE_DIR || config.saveDir;
+-		if (!dir || !dir.trim()) {
++		if (!dir?.trim()) {
+ 			throw new Error("save=custom requires saveDir or PI_IMAGE_SAVE_DIR.");
+ 		}
+ 		return { mode, outputDir: dir };
+diff --git a/packages/coding-agent/examples/extensions/custom-provider-anthropic/index.ts b/packages/coding-agent/examples/extensions/custom-provider-anthropic/index.ts
+index c1227326c..e18029158 100644
+--- a/packages/coding-agent/examples/extensions/custom-provider-anthropic/index.ts
++++ b/packages/coding-agent/examples/extensions/custom-provider-anthropic/index.ts
+@@ -21,7 +21,7 @@
+  * Then use /model to select custom-anthropic/claude-sonnet-4-5
+  */
+ 
+-import Anthropic from "@anthropic-ai/sdk";
++import Anthropic, { type ClientOptions } from "@anthropic-ai/sdk";
+ import type { ContentBlockParam, MessageCreateParamsStreaming } from "@anthropic-ai/sdk/resources/messages.js";
+ import {
+ 	type Api,
+@@ -363,7 +363,7 @@ function streamCustomAnthropic(
+ 
+ 			// Configure client based on auth type
+ 			const betaFeatures = ["fine-grained-tool-streaming-2025-05-14", "interleaved-thinking-2025-05-14"];
+-			const clientOptions: any = {
++			const clientOptions: ClientOptions = {
+ 				baseURL: model.baseUrl,
+ 				dangerouslyAllowBrowser: true,
+ 			};
+@@ -372,6 +372,7 @@ function streamCustomAnthropic(
+ 				clientOptions.apiKey = null;
+ 				clientOptions.authToken = apiKey;
+ 				clientOptions.defaultHeaders = {
++					"anthropic-version": "2023-06-01",
+ 					accept: "application/json",
+ 					"anthropic-dangerous-direct-browser-access": "true",
+ 					"anthropic-beta": `claude-code-20250219,oauth-2025-04-20,${betaFeatures.join(",")}`,
+@@ -381,6 +382,9 @@ function streamCustomAnthropic(
+ 			} else {
+ 				clientOptions.apiKey = apiKey;
+ 				clientOptions.defaultHeaders = {
++					authorization: null,
++					"x-api-key": apiKey,
++					"anthropic-version": "2023-06-01",
+ 					accept: "application/json",
+ 					"anthropic-dangerous-direct-browser-access": "true",
+ 					"anthropic-beta": betaFeatures.join(","),
+diff --git a/packages/coding-agent/examples/extensions/custom-provider-anthropic/package.json b/packages/coding-agent/examples/extensions/custom-provider-anthropic/package.json
+index 9189ed9f8..b59c9b8fc 100644
+--- a/packages/coding-agent/examples/extensions/custom-provider-anthropic/package.json
++++ b/packages/coding-agent/examples/extensions/custom-provider-anthropic/package.json
+@@ -14,6 +14,6 @@
+     ]
+   },
+   "dependencies": {
+-    "@anthropic-ai/sdk": "^0.52.0"
++    "@anthropic-ai/sdk": "^1.1.0"
+   }
+ }
+diff --git a/packages/coding-agent/examples/extensions/minimal-mode.ts b/packages/coding-agent/examples/extensions/minimal-mode.ts
+index 529afe41e..fca9881fb 100644
+--- a/packages/coding-agent/examples/extensions/minimal-mode.ts
++++ b/packages/coding-agent/examples/extensions/minimal-mode.ts
+@@ -102,7 +102,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded mode: show full output
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+@@ -143,7 +143,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded mode: show full output
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+@@ -233,7 +233,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded mode: show diff or error
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+@@ -292,7 +292,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded: show full results
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+@@ -354,7 +354,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded: show full results
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+@@ -410,7 +410,7 @@ export default function (pi: ExtensionAPI) {
+ 
+ 			// Expanded: show full listing
+ 			const textContent = result.content.find((c) => c.type === "text");
+-			if (!textContent || textContent.type !== "text") {
++			if (textContent?.type !== "text") {
+ 				return new Text("", 0, 0);
+ 			}
+ 
+diff --git a/packages/coding-agent/examples/extensions/sandbox/package.json b/packages/coding-agent/examples/extensions/sandbox/package.json
+index 21e9fc5a6..277a3eee5 100644
+--- a/packages/coding-agent/examples/extensions/sandbox/package.json
++++ b/packages/coding-agent/examples/extensions/sandbox/package.json
+@@ -14,6 +14,6 @@
+ 		]
+ 	},
+ 	"dependencies": {
+-		"@anthropic-ai/sandbox-runtime": "^0.0.26"
++		"@anthropic-ai/sandbox-runtime": "^0.0.81"
+ 	}
+ }
+diff --git a/packages/coding-agent/package.json b/packages/coding-agent/package.json
+index e72586697..02b49df0c 100644
+--- a/packages/coding-agent/package.json
++++ b/packages/coding-agent/package.json
+@@ -39,44 +39,44 @@
+ 		"prepublishOnly": "npm run clean && npm run build"
+ 	},
+ 	"dependencies": {
+-		"@mariozechner/jiti": "^2.6.2",
++		"@mariozechner/jiti": "^2.6.5",
+ 		"@mariozechner/pi-agent-core": "^0.60.0",
+ 		"@mariozechner/pi-ai": "^0.60.0",
+ 		"@mariozechner/pi-tui": "^0.60.0",
+ 		"@silvia-odwyer/photon-node": "^0.3.4",
+-		"chalk": "^5.5.0",
++		"chalk": "^6.0.1",
+ 		"cli-highlight": "^2.1.11",
+-		"diff": "^8.0.2",
++		"diff": "^9.0.0",
+ 		"extract-zip": "^2.0.1",
+-		"file-type": "^21.1.1",
+-		"glob": "^13.0.1",
+-		"hosted-git-info": "^9.0.2",
+-		"ignore": "^7.0.5",
+-		"marked": "^15.0.12",
+-		"minimatch": "^10.2.3",
++		"file-type": "^22.2.0",
++		"glob": "^13.0.6",
++		"hosted-git-info": "^10.1.1",
++		"ignore": "^7.0.13",
++		"marked": "^18.1.1",
++		"minimatch": "^10.2.6",
+ 		"proper-lockfile": "^4.1.2",
+-		"strip-ansi": "^7.1.0",
+-		"undici": "^7.19.1",
+-		"yaml": "^2.8.2"
++		"strip-ansi": "^7.2.0",
++		"undici": "^8.12.3",
++		"yaml": "^2.9.1"
+ 	},
+ 	"overrides": {
+-		"rimraf": "6.1.2",
++		"rimraf": "6.1.3",
+ 		"gaxios": {
+-			"rimraf": "6.1.2"
++			"rimraf": "6.1.3"
+ 		}
+ 	},
+ 	"optionalDependencies": {
+-		"@mariozechner/clipboard": "^0.3.2"
++		"@mariozechner/clipboard": "^0.3.9"
+ 	},
+ 	"devDependencies": {
+-		"@types/diff": "^7.0.2",
++		"@types/diff": "^8.0.0",
+ 		"@types/hosted-git-info": "^3.0.5",
+ 		"@types/ms": "^2.1.0",
+-		"@types/node": "^24.3.0",
++		"@types/node": "^26.6.5",
+ 		"@types/proper-lockfile": "^4.1.4",
+ 		"shx": "^0.4.0",
+-		"typescript": "^5.7.3",
+-		"vitest": "^3.2.4"
++		"typescript": "^7.0.2",
++		"vitest": "^5.0.5"
+ 	},
+ 	"keywords": [
+ 		"coding-agent",
+@@ -94,6 +94,6 @@
+ 		"directory": "packages/coding-agent"
+ 	},
+ 	"engines": {
+-		"node": ">=20.6.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	}
+ }
+diff --git a/packages/coding-agent/src/core/agent-session.ts b/packages/coding-agent/src/core/agent-session.ts
+index 4517dc318..f131da125 100644
+--- a/packages/coding-agent/src/core/agent-session.ts
++++ b/packages/coding-agent/src/core/agent-session.ts
+@@ -2670,7 +2670,7 @@ export class AgentSession {
+ 		const previousSessionFile = this.sessionFile;
+ 		const selectedEntry = this.sessionManager.getEntry(entryId);
+ 
+-		if (!selectedEntry || selectedEntry.type !== "message" || selectedEntry.message.role !== "user") {
++		if (selectedEntry?.type !== "message" || selectedEntry.message.role !== "user") {
+ 			throw new Error("Invalid entry ID for forking");
+ 		}
+ 
+diff --git a/packages/coding-agent/src/core/compaction/compaction.ts b/packages/coding-agent/src/core/compaction/compaction.ts
+index 213ab6bd8..68d4cc7a2 100644
+--- a/packages/coding-agent/src/core/compaction/compaction.ts
++++ b/packages/coding-agent/src/core/compaction/compaction.ts
+@@ -619,7 +619,7 @@ export function prepareCompaction(
+ 	const boundaryStart = prevCompactionIndex + 1;
+ 	const boundaryEnd = pathEntries.length;
+ 
+-	const usageStart = prevCompactionIndex >= 0 ? prevCompactionIndex : 0;
++	const usageStart = Math.max(prevCompactionIndex, 0);
+ 	const usageMessages: AgentMessage[] = [];
+ 	for (let i = usageStart; i < boundaryEnd; i++) {
+ 		const msg = getMessageFromEntry(pathEntries[i]);
+diff --git a/packages/coding-agent/src/core/extensions/types.ts b/packages/coding-agent/src/core/extensions/types.ts
+index 76960667a..709af17c8 100644
+--- a/packages/coding-agent/src/core/extensions/types.ts
++++ b/packages/coding-agent/src/core/extensions/types.ts
+@@ -73,8 +73,8 @@ import type {
+ } from "../tools/index.js";
+ 
+ export type { ExecOptions, ExecResult } from "../exec.js";
+-export type { AgentToolResult, AgentToolUpdateCallback };
+ export type { AppAction, KeybindingsManager } from "../keybindings.js";
++export type { AgentToolResult, AgentToolUpdateCallback };
+ 
+ // ============================================================================
+ // UI Context
+diff --git a/packages/coding-agent/src/core/sdk.ts b/packages/coding-agent/src/core/sdk.ts
+index 8c5723703..b744b02aa 100644
+--- a/packages/coding-agent/src/core/sdk.ts
++++ b/packages/coding-agent/src/core/sdk.ts
+@@ -98,27 +98,27 @@ export type { Skill } from "./skills.js";
+ export type { Tool } from "./tools/index.js";
+ 
+ export {
+-	// Pre-built tools (use process.cwd())
+-	readTool,
++	allTools as allBuiltInTools,
+ 	bashTool,
+-	editTool,
+-	writeTool,
+-	grepTool,
+-	findTool,
+-	lsTool,
+ 	codingTools,
+-	readOnlyTools,
+-	allTools as allBuiltInTools,
++	createBashTool,
+ 	// Tool factories (for custom cwd)
+ 	createCodingTools,
+-	createReadOnlyTools,
+-	createReadTool,
+-	createBashTool,
+ 	createEditTool,
+-	createWriteTool,
+-	createGrepTool,
+ 	createFindTool,
++	createGrepTool,
+ 	createLsTool,
++	createReadOnlyTools,
++	createReadTool,
++	createWriteTool,
++	editTool,
++	findTool,
++	grepTool,
++	lsTool,
++	readOnlyTools,
++	// Pre-built tools (use process.cwd())
++	readTool,
++	writeTool,
+ };
+ 
+ // Helper Functions
+@@ -234,7 +234,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
+ 	}
+ 
+ 	// Clamp to model capabilities
+-	if (!model || !model.reasoning) {
++	if (!model?.reasoning) {
+ 		thinkingLevel = "off";
+ 	}
+ 
+diff --git a/packages/coding-agent/src/core/tools/find.ts b/packages/coding-agent/src/core/tools/find.ts
+index f70b2f991..f693d6463 100644
+--- a/packages/coding-agent/src/core/tools/find.ts
++++ b/packages/coding-agent/src/core/tools/find.ts
+@@ -181,7 +181,12 @@ export function createFindTool(cwd: string, options?: FindToolOptions): AgentToo
+ 							args.push("--ignore-file", gitignorePath);
+ 						}
+ 
+-						args.push(pattern, searchPath);
++						// fd matches basenames by default; path globs must match from the search root.
++						if (pattern.includes("/")) {
++							args.push("--full-path", path.join(searchPath, pattern), searchPath);
++						} else {
++							args.push(pattern, searchPath);
++						}
+ 
+ 						const result = spawnSync(fdPath, args, {
+ 							encoding: "utf-8",
+diff --git a/packages/coding-agent/src/modes/interactive/components/config-selector.ts b/packages/coding-agent/src/modes/interactive/components/config-selector.ts
+index 7e93cb517..a6cd1792d 100644
+--- a/packages/coding-agent/src/modes/interactive/components/config-selector.ts
++++ b/packages/coding-agent/src/modes/interactive/components/config-selector.ts
+@@ -286,7 +286,7 @@ class ResourceList implements Component, Focusable {
+ 
+ 	private selectFirstItem(): void {
+ 		const firstItemIndex = this.filteredItems.findIndex((e) => e.type === "item");
+-		this.selectedIndex = firstItemIndex >= 0 ? firstItemIndex : 0;
++		this.selectedIndex = Math.max(firstItemIndex, 0);
+ 	}
+ 
+ 	updateItem(item: ResourceItem, enabled: boolean): void {
+diff --git a/packages/coding-agent/src/modes/interactive/components/diff.ts b/packages/coding-agent/src/modes/interactive/components/diff.ts
+index d575d63e3..d5050fe6b 100644
+--- a/packages/coding-agent/src/modes/interactive/components/diff.ts
++++ b/packages/coding-agent/src/modes/interactive/components/diff.ts
+@@ -96,7 +96,7 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}):
+ 			const removedLines: { lineNum: string; content: string }[] = [];
+ 			while (i < lines.length) {
+ 				const p = parseDiffLine(lines[i]);
+-				if (!p || p.prefix !== "-") break;
++				if (p?.prefix !== "-") break;
+ 				removedLines.push({ lineNum: p.lineNum, content: p.content });
+ 				i++;
+ 			}
+@@ -105,7 +105,7 @@ export function renderDiff(diffText: string, _options: RenderDiffOptions = {}):
+ 			const addedLines: { lineNum: string; content: string }[] = [];
+ 			while (i < lines.length) {
+ 				const p = parseDiffLine(lines[i]);
+-				if (!p || p.prefix !== "+") break;
++				if (p?.prefix !== "+") break;
+ 				addedLines.push({ lineNum: p.lineNum, content: p.content });
+ 				i++;
+ 			}
+diff --git a/packages/coding-agent/src/utils/clipboard-image.ts b/packages/coding-agent/src/utils/clipboard-image.ts
+index 6bddeb30a..b7874e207 100644
+--- a/packages/coding-agent/src/utils/clipboard-image.ts
++++ b/packages/coding-agent/src/utils/clipboard-image.ts
+@@ -238,7 +238,7 @@ function readClipboardImageViaXclip(): ClipboardImage | null {
+ }
+ 
+ async function readClipboardImageViaNativeClipboard(): Promise<ClipboardImage | null> {
+-	if (!clipboard || !clipboard.hasImage()) {
++	if (!clipboard?.hasImage()) {
+ 		return null;
+ 	}
+ 
+diff --git a/packages/coding-agent/test/footer-data-provider.test.ts b/packages/coding-agent/test/footer-data-provider.test.ts
+index f9bc4ac21..18940c977 100644
+--- a/packages/coding-agent/test/footer-data-provider.test.ts
++++ b/packages/coding-agent/test/footer-data-provider.test.ts
+@@ -155,8 +155,11 @@ describe("FooterDataProvider reftable branch detection", () => {
+ 			const onBranchChange = vi.fn();
+ 			provider.onBranchChange(onBranchChange);
+ 
+-			writeFileSync(join(reftableDir, "tables.list"), "1\n");
+-			await waitFor(() => vi.mocked(spawnSync).mock.calls.length > 0);
++			// macOS may register a new fs watcher after the first write under worker load.
++			await waitFor(() => {
++				writeFileSync(join(reftableDir, "tables.list"), "1\n");
++				return vi.mocked(spawnSync).mock.calls.length > 0;
++			});
+ 
+ 			expect(provider.getGitBranch()).toBe("main");
+ 			expect(onBranchChange).not.toHaveBeenCalled();
+@@ -174,13 +177,11 @@ describe("FooterDataProvider reftable branch detection", () => {
+ 			expect(provider.getGitBranch()).toBe("main");
+ 			resolvedBranch = "foo";
+ 
+-			await new Promise<void>((resolve, reject) => {
+-				const timeout = setTimeout(() => reject(new Error("Timed out waiting for branch change")), 2000);
+-				provider.onBranchChange(() => {
+-					clearTimeout(timeout);
+-					resolve();
+-				});
++			const onBranchChange = vi.fn();
++			provider.onBranchChange(onBranchChange);
++			await waitFor(() => {
+ 				writeFileSync(join(reftableDir, "tables.list"), "1\n");
++				return onBranchChange.mock.calls.length > 0;
+ 			});
+ 
+ 			expect(provider.getGitBranch()).toBe("foo");
+diff --git a/packages/coding-agent/test/streaming-render-debug.ts b/packages/coding-agent/test/streaming-render-debug.ts
+index 05f72e5c1..98ab55af7 100644
+--- a/packages/coding-agent/test/streaming-render-debug.ts
++++ b/packages/coding-agent/test/streaming-render-debug.ts
+@@ -28,7 +28,7 @@ const fixtureMessage: AssistantMessage = JSON.parse(
+ const thinkingContent = fixtureMessage.content.find((c) => c.type === "thinking");
+ const textContent = fixtureMessage.content.find((c) => c.type === "text");
+ 
+-if (!thinkingContent || thinkingContent.type !== "thinking") {
++if (thinkingContent?.type !== "thinking") {
+ 	console.error("No thinking content in fixture");
+ 	process.exit(1);
+ }
+diff --git a/packages/mom/package.json b/packages/mom/package.json
+index 21e085d53..a0139d51f 100644
+--- a/packages/mom/package.json
++++ b/packages/mom/package.json
+@@ -19,21 +19,21 @@
+ 		"prepublishOnly": "npm run clean && npm run build"
+ 	},
+ 	"dependencies": {
+-		"@anthropic-ai/sandbox-runtime": "^0.0.16",
++		"@anthropic-ai/sandbox-runtime": "^0.0.81",
+ 		"@mariozechner/pi-agent-core": "^0.60.0",
+ 		"@mariozechner/pi-ai": "^0.60.0",
+ 		"@mariozechner/pi-coding-agent": "^0.60.0",
+-		"@sinclair/typebox": "^0.34.0",
+-		"@slack/socket-mode": "^2.0.0",
+-		"@slack/web-api": "^7.0.0",
+-		"chalk": "^5.6.2",
+-		"croner": "^9.1.0",
+-		"diff": "^8.0.2"
++		"@sinclair/typebox": "^0.34.52",
++		"@slack/socket-mode": "^3.1.0",
++		"@slack/web-api": "^8.2.0",
++		"chalk": "^6.0.1",
++		"croner": "^10.0.1",
++		"diff": "^9.0.0"
+ 	},
+ 	"devDependencies": {
+-		"@types/diff": "^7.0.2",
+-		"@types/node": "^24.3.0",
+-		"typescript": "^5.7.3"
++		"@types/diff": "^8.0.0",
++		"@types/node": "^26.6.5",
++		"typescript": "^7.0.2"
+ 	},
+ 	"keywords": [
+ 		"slack",
+@@ -49,6 +49,6 @@
+ 		"directory": "packages/mom"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	}
+ }
+diff --git a/packages/mom/src/cron-schedule.ts b/packages/mom/src/cron-schedule.ts
+new file mode 100644
+index 000000000..b10d1c7cf
+--- /dev/null
++++ b/packages/mom/src/cron-schedule.ts
+@@ -0,0 +1,19 @@
++import { CronDate } from "croner";
++
++/** Preserve Croner 9's current-time placeholder, which became a wildcard in 10. */
++export function normalizeLegacySchedule(schedule: string, timezone: string, now = new Date()): string {
++	if (!schedule.includes("?")) return schedule;
++	const parts = schedule.replace(/\s+/g, " ").split(" ");
++	if (parts.length !== 5 && parts.length !== 6) return schedule;
++	const date = new CronDate(now, timezone).getDate(true);
++	const values = [
++		date.getSeconds(),
++		date.getMinutes(),
++		date.getHours(),
++		date.getDate(),
++		date.getMonth() + 1,
++		date.getDay(),
++	];
++	const offset = parts.length === 5 ? 1 : 0;
++	return parts.map((part, index) => part.replace("?", String(values[index + offset]))).join(" ");
++}
+diff --git a/packages/mom/src/events.ts b/packages/mom/src/events.ts
+index 2bb099e4b..6ad043690 100644
+--- a/packages/mom/src/events.ts
++++ b/packages/mom/src/events.ts
+@@ -2,6 +2,7 @@ import { Cron } from "croner";
+ import { existsSync, type FSWatcher, mkdirSync, readdirSync, statSync, unlinkSync, watch } from "fs";
+ import { readFile } from "fs/promises";
+ import { join } from "path";
++import { normalizeLegacySchedule } from "./cron-schedule.js";
+ import * as log from "./log.js";
+ import type { SlackBot, SlackEvent } from "./slack.js";
+ 
+@@ -71,7 +72,7 @@ export class EventsWatcher {
+ 
+ 		// Watch for changes
+ 		this.watcher = watch(this.eventsDir, (_eventType, filename) => {
+-			if (!filename || !filename.endsWith(".json")) return;
++			if (!filename?.endsWith(".json")) return;
+ 			this.debounce(filename, () => this.handleFileChange(filename));
+ 		});
+ 
+@@ -300,10 +301,14 @@ export class EventsWatcher {
+ 
+ 	private handlePeriodic(filename: string, event: PeriodicEvent): void {
+ 		try {
+-			const cron = new Cron(event.schedule, { timezone: event.timezone }, () => {
+-				log.logInfo(`Executing periodic event: ${filename}`);
+-				this.execute(filename, event, false); // Don't delete periodic events
+-			});
++			const cron = new Cron(
++				normalizeLegacySchedule(event.schedule, event.timezone),
++				{ timezone: event.timezone, sloppyRanges: true, mode: "5-or-6-parts" },
++				() => {
++					log.logInfo(`Executing periodic event: ${filename}`);
++					this.execute(filename, event, false); // Don't delete periodic events
++				},
++			);
+ 
+ 			this.crons.set(filename, cron);
+ 
+diff --git a/packages/mom/test/cron-schedule.test.ts b/packages/mom/test/cron-schedule.test.ts
+new file mode 100644
+index 000000000..bbbf21f0e
+--- /dev/null
++++ b/packages/mom/test/cron-schedule.test.ts
+@@ -0,0 +1,17 @@
++import assert from "node:assert/strict";
++import { test } from "node:test";
++import { Cron } from "croner";
++import { normalizeLegacySchedule } from "../src/cron-schedule.js";
++
++test("current-time placeholders retain their timezone and five/six-field meaning", () => {
++	const now = new Date("2026-10-22T12:34:56Z");
++	assert.equal(normalizeLegacySchedule("? ? ? ? ? ?", "Europe/Stockholm", now), "56 34 14 22 10 4");
++	assert.equal(normalizeLegacySchedule("? ? * * *", "Europe/Stockholm", now), "34 14 * * *");
++	assert.equal(normalizeLegacySchedule("*/5 * * * *", "UTC", now), "*/5 * * * *");
++});
++
++test("numeric step prefixes continue to schedule at the same interval", () => {
++	const cron = new Cron("5/5 * * * *", { sloppyRanges: true, mode: "5-or-6-parts", timezone: "UTC" });
++	assert.equal(cron.nextRun(new Date("2026-10-22T12:06:00Z"))?.toISOString(), "2026-10-22T12:10:00.000Z");
++	cron.stop();
++});
+diff --git a/packages/pods/package.json b/packages/pods/package.json
+index 0b1887b9b..06b3bbeef 100644
+--- a/packages/pods/package.json
++++ b/packages/pods/package.json
+@@ -30,11 +30,11 @@
+ 		"directory": "packages/pods"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	},
+ 	"dependencies": {
+ 		"@mariozechner/pi-agent-core": "^0.60.0",
+-		"chalk": "^5.5.0"
++		"chalk": "^6.0.1"
+ 	},
+ 	"devDependencies": {}
+ }
+diff --git a/packages/tui/package.json b/packages/tui/package.json
+index 67d39db09..c4c7a0a2f 100644
+--- a/packages/tui/package.json
++++ b/packages/tui/package.json
+@@ -32,21 +32,21 @@
+ 		"directory": "packages/tui"
+ 	},
+ 	"engines": {
+-		"node": ">=20.0.0"
++		"node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+ 	},
+ 	"types": "./dist/index.d.ts",
+ 	"dependencies": {
+-		"@types/mime-types": "^2.1.4",
+-		"chalk": "^5.5.0",
+-		"get-east-asian-width": "^1.3.0",
+-		"marked": "^15.0.12",
+-		"mime-types": "^3.0.1"
++		"@types/mime-types": "^3.0.1",
++		"chalk": "^6.0.1",
++		"get-east-asian-width": "^1.7.0",
++		"marked": "^18.1.1",
++		"mime-types": "^3.0.2"
+ 	},
+ 	"optionalDependencies": {
+-		"koffi": "^2.9.0"
++		"koffi": "^3.3.3"
+ 	},
+ 	"devDependencies": {
+-		"@xterm/headless": "^5.5.0",
+-		"@xterm/xterm": "^5.5.0"
++		"@xterm/headless": "^6.0.0",
++		"@xterm/xterm": "^6.0.0"
+ 	}
+ }
+diff --git a/packages/web-ui/example/package.json b/packages/web-ui/example/package.json
+index c74d1c3c3..3c8125a81 100644
+--- a/packages/web-ui/example/package.json
++++ b/packages/web-ui/example/package.json
+@@ -14,12 +14,12 @@
+     "@mariozechner/mini-lit": "^0.2.0",
+     "@mariozechner/pi-ai": "file:../../ai",
+     "@mariozechner/pi-web-ui": "file:../",
+-    "@tailwindcss/vite": "^4.1.17",
+-    "lit": "^3.3.1",
+-    "lucide": "^0.544.0"
++    "@tailwindcss/vite": "^4.3.3",
++    "lit": "^3.3.3",
++    "lucide": "^1.61.0"
+   },
+   "devDependencies": {
+-    "typescript": "^5.7.3",
+-    "vite": "^7.1.6"
++    "typescript": "^7.0.2",
++    "vite": "^8.3.5"
+   }
+ }
+diff --git a/packages/web-ui/example/src/app.css b/packages/web-ui/example/src/app.css
+index 695386b0f..a60f5efe4 100644
+--- a/packages/web-ui/example/src/app.css
++++ b/packages/web-ui/example/src/app.css
+@@ -1 +1 @@
+-@import "../../dist/app.css";
++@import "../../src/app.css";
+diff --git a/packages/web-ui/example/tsconfig.json b/packages/web-ui/example/tsconfig.json
+index e095a2797..b814ae34a 100644
+--- a/packages/web-ui/example/tsconfig.json
++++ b/packages/web-ui/example/tsconfig.json
+@@ -3,6 +3,7 @@
+ 		"target": "ES2022",
+ 		"module": "ES2022",
+ 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
++		"types": ["vite/client"],
+ 		"moduleResolution": "bundler",
+ 		"paths": {
+ 			"*": ["./*"],
+diff --git a/packages/web-ui/package.json b/packages/web-ui/package.json
+index bcec466b7..7b4225ae0 100644
+--- a/packages/web-ui/package.json
++++ b/packages/web-ui/package.json
+@@ -17,14 +17,14 @@
+ 		"check": "biome check --write --error-on-warnings . && tsc --noEmit && cd example && biome check --write --error-on-warnings . && tsc --noEmit"
+ 	},
+ 	"dependencies": {
+-		"@lmstudio/sdk": "^1.5.0",
++		"@lmstudio/sdk": "^2.1.0",
+ 		"@mariozechner/pi-ai": "^0.60.0",
+ 		"@mariozechner/pi-tui": "^0.60.0",
+-		"docx-preview": "^0.3.7",
+-		"jszip": "^3.10.1",
+-		"lucide": "^0.544.0",
+-		"ollama": "^0.6.0",
+-		"pdfjs-dist": "5.4.394",
++		"docx-preview": "^0.4.1",
++		"jszip": "^3.10.2",
++		"lucide": "^1.61.0",
++		"ollama": "^0.6.4",
++		"pdfjs-dist": "6.4.299",
+ 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+ 	},
+ 	"peerDependencies": {
+@@ -33,9 +33,9 @@
+ 	},
+ 	"devDependencies": {
+ 		"@mariozechner/mini-lit": "^0.2.0",
+-		"@tailwindcss/cli": "^4.0.0-beta.14",
+-		"concurrently": "^9.2.1",
+-		"typescript": "^5.7.3"
++		"@tailwindcss/cli": "^4.3.3",
++		"concurrently": "^10.0.6",
++		"typescript": "^7.0.2"
+ 	},
+ 	"keywords": [
+ 		"ai",
 diff --git a/packages/web-ui/src/components/AgentInterface.ts b/packages/web-ui/src/components/AgentInterface.ts
 index b8f6550ec..02e7ca033 100644
 --- a/packages/web-ui/src/components/AgentInterface.ts
@@ -387,6 +2237,19 @@ index 8dd7ce45e..5ecec004d 100644
  				</div>
  				${this.isExpanded ? html`<markdown-block .content=${this.content} .isThinking=${true}></markdown-block>` : ""}
  			</div>
+diff --git a/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts b/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts
+index 3ab84b04e..70a78c1e6 100644
+--- a/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts
++++ b/packages/web-ui/src/components/sandbox/RuntimeMessageRouter.ts
+@@ -89,7 +89,7 @@ export class RuntimeMessageRouter {
+ 			}
+ 
+ 			// Remove user script listener
+-			if (this.userScriptMessageListener && typeof chrome !== "undefined" && chrome.runtime?.onUserScriptMessage) {
++			if (this.userScriptMessageListener && chrome?.runtime?.onUserScriptMessage) {
+ 				chrome.runtime.onUserScriptMessage.removeListener(this.userScriptMessageListener);
+ 				this.userScriptMessageListener = null;
+ 			}
 diff --git a/packages/web-ui/src/dialogs/ModelSelector.ts b/packages/web-ui/src/dialogs/ModelSelector.ts
 index 192c3c536..26a381339 100644
 --- a/packages/web-ui/src/dialogs/ModelSelector.ts
@@ -523,6 +2386,53 @@ index 48284c742..c40d71a9e 100644
  export { PersistentStorageDialog } from "./dialogs/PersistentStorageDialog.js";
  export { ProvidersModelsTab } from "./dialogs/ProvidersModelsTab.js";
  export { SessionListDialog } from "./dialogs/SessionListDialog.js";
+diff --git a/packages/web-ui/src/tools/artifacts/PdfArtifact.ts b/packages/web-ui/src/tools/artifacts/PdfArtifact.ts
+index e139c2a45..2b2e91de5 100644
+--- a/packages/web-ui/src/tools/artifacts/PdfArtifact.ts
++++ b/packages/web-ui/src/tools/artifacts/PdfArtifact.ts
+@@ -12,7 +12,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mi
+ export class PdfArtifact extends ArtifactElement {
+ 	@property({ type: String }) private _content = "";
+ 	@state() private error: string | null = null;
+-	private currentLoadingTask: any = null;
++	private currentLoadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+ 
+ 	get content(): string {
+ 		return this._content;
+@@ -106,7 +106,7 @@ export class PdfArtifact extends ArtifactElement {
+ 		const container = this.querySelector("#pdf-container");
+ 		if (!container || !this._content) return;
+ 
+-		let pdf: any = null;
++		let loadingTask: pdfjsLib.PDFDocumentLoadingTask | null = null;
+ 
+ 		try {
+ 			const arrayBuffer = this.base64ToArrayBuffer(this._content);
+@@ -117,9 +117,9 @@ export class PdfArtifact extends ArtifactElement {
+ 			}
+ 
+ 			// Load the PDF
+-			this.currentLoadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+-			pdf = await this.currentLoadingTask.promise;
+-			this.currentLoadingTask = null;
++			loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
++			this.currentLoadingTask = loadingTask;
++			const pdf = await loadingTask.promise;
+ 
+ 			// Clear container
+ 			container.innerHTML = "";
+@@ -168,8 +168,9 @@ export class PdfArtifact extends ArtifactElement {
+ 			console.error("Error rendering PDF:", error);
+ 			this.error = error?.message || i18n("Failed to load PDF");
+ 		} finally {
+-			if (pdf) {
+-				pdf.destroy();
++			await loadingTask?.destroy();
++			if (this.currentLoadingTask === loadingTask) {
++				this.currentLoadingTask = null;
+ 			}
+ 		}
+ 	}
 diff --git a/packages/web-ui/src/tools/renderer-registry.ts b/packages/web-ui/src/tools/renderer-registry.ts
 index 0d19781d6..5ff211de7 100644
 --- a/packages/web-ui/src/tools/renderer-registry.ts
@@ -549,6 +2459,33 @@ index 0d19781d6..5ff211de7 100644
  
  	return html`
  		<button @click=${toggleContent} class="flex items-center justify-between gap-2 text-sm text-muted-foreground w-full text-left hover:text-foreground transition-colors cursor-pointer">
+diff --git a/packages/web-ui/src/utils/attachment-utils.ts b/packages/web-ui/src/utils/attachment-utils.ts
+index afe98e443..2cf89d2e3 100644
+--- a/packages/web-ui/src/utils/attachment-utils.ts
++++ b/packages/web-ui/src/utils/attachment-utils.ts
+@@ -204,9 +204,9 @@ async function processPdf(
+ 	arrayBuffer: ArrayBuffer,
+ 	fileName: string,
+ ): Promise<{ extractedText: string; preview?: string }> {
+-	let pdf: PDFDocumentProxy | null = null;
++	const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+ 	try {
+-		pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
++		const pdf = await loadingTask.promise;
+ 
+ 		// Extract text with page structure
+ 		let extractedText = `<pdf filename="${fileName}">`;
+@@ -230,9 +230,7 @@ async function processPdf(
+ 		throw new Error(`Failed to process PDF: ${String(error)}`);
+ 	} finally {
+ 		// Clean up PDF resources
+-		if (pdf) {
+-			pdf.destroy();
+-		}
++		await loadingTask.destroy();
+ 	}
+ }
+ 
 diff --git a/packages/web-ui/src/utils/i18n.ts b/packages/web-ui/src/utils/i18n.ts
 index 1f50a7d08..8379569af 100644
 --- a/packages/web-ui/src/utils/i18n.ts
@@ -577,3 +2514,18 @@ index 1f50a7d08..8379569af 100644
  		"Storage Permission Required": "Speicherberechtigung erforderlich",
  		"This app needs persistent storage to save your conversations":
  			"Diese App benötigt dauerhaften Speicher, um Ihre Konversationen zu speichern",
+diff --git a/tsconfig.base.json b/tsconfig.base.json
+index bd9a33a48..5361f8f9d 100644
+--- a/tsconfig.base.json
++++ b/tsconfig.base.json
+@@ -1,8 +1,8 @@
+ {
+ 	"compilerOptions": {
+-		"target": "ES2022",
++		"target": "ES2024",
+ 		"module": "Node16",
+-		"lib": ["ES2022"],
++		"lib": ["ES2024"],
+ 		"strict": true,
+ 		"esModuleInterop": true,
+ 		"skipLibCheck": true,
