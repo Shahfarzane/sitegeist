@@ -48,7 +48,7 @@ if [ "$released" != "$target" ]; then
 	# cli/dist is the bridge's native host (the launcher runs it); browsers start the rebuilt
 	# one for the next login lookup and on their next bridge connect.
 	if [ -n "$released" ] && ! git diff --quiet "$released" "$target" -- cli; then
-		(cd cli && npm install && npm run build)
+		(cd cli && npm ci && npm run build)
 	fi
 	./scripts/release-crx.sh
 	mkdir -p "$STATE_DIR"
