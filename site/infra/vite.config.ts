@@ -4,22 +4,22 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
 	plugins: [tailwindcss()],
-	root: path.resolve(__dirname, "../src/frontend"),
-	publicDir: path.resolve(__dirname, "../src/frontend/public"),
+	root: path.resolve(import.meta.dirname, "../src/frontend"),
+	publicDir: path.resolve(import.meta.dirname, "../src/frontend/public"),
 	server: {
 		port: 8080,
 		host: "0.0.0.0",
 		fs: {
-			allow: [path.resolve(__dirname, "..")],
+			allow: [path.resolve(import.meta.dirname, "..")],
 		},
 	},
 	build: {
-		outDir: path.resolve(__dirname, "../dist"),
+		outDir: path.resolve(import.meta.dirname, "../dist"),
 		emptyOutDir: true,
 		rollupOptions: {
 			input: {
-				main: path.resolve(__dirname, "../src/frontend/index.html"),
-				install: path.resolve(__dirname, "../src/frontend/install.html"),
+				main: path.resolve(import.meta.dirname, "../src/frontend/index.html"),
+				install: path.resolve(import.meta.dirname, "../src/frontend/install.html"),
 			},
 		},
 	},
