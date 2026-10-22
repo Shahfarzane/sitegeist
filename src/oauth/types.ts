@@ -11,6 +11,8 @@ export interface OAuthCredentials {
 	projectId?: string;
 	/** "cli": borrowed from Claude Code or Codex (cli-login.ts); `refresh` is empty. */
 	source?: "cli";
+	/** On a borrowed Claude login: sitegeist's own login, used while Claude Code's has expired. */
+	fallback?: OAuthCredentials;
 }
 
 /**

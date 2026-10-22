@@ -6,6 +6,10 @@
  * only. A borrowed login is stored like any OAuth login, marked `source: "cli"`; when its
  * token expires, resolveApiKey asks the host again instead of refreshing it here, because
  * a refresh here would rotate the CLI's refresh token and log the CLI out.
+ *
+ * Claude Code's login is read only, so it lapses 8 hours after the claude CLI last ran. A
+ * borrowed Claude login therefore keeps sitegeist's own Claude login, if the user has one,
+ * as `fallback`, and resolveApiKey uses that while Claude Code's has expired.
  */
 
 import {
@@ -14,9 +18,17 @@ import {
 	type HostCredentialsResponse,
 	NATIVE_HOST_NAME,
 } from "../bridge/protocol.js";
-import { type OAuthCredentials, serializeOAuthCredentials } from "./types.js";
+import {
+	isOAuthCredentials,
+	type OAuthCredentials,
+	parseOAuthCredentials,
+	serializeOAuthCredentials,
+} from "./types.js";
 
 export const CLI_LOGIN_PROVIDERS: CliLoginProvider[] = ["anthropic", "openai-codex"];
+
+/** Providers whose borrowed login keeps sitegeist's own login as its fallback. */
+const FALLBACK_PROVIDERS: CliLoginProvider[] = ["anthropic"];
 
 const CLI_NAMES: Record<CliLoginProvider, string> = { anthropic: "Claude Code", "openai-codex": "Codex" };
 
@@ -32,6 +44,8 @@ const LOOKUP_TIMEOUT_MS = 20_000;
 const RECHECK_MS = 5 * 60 * 1000;
 const RECHECK_TIMEOUT_MS = 3000;
 const lastCheck = new Map<CliLoginProvider, number>();
+/** When an expired borrowed login last could not be read again. */
+const lastFailure = new Map<CliLoginProvider, number>();
 
 interface KeyStore {
 	get(provider: string): Promise<string | null>;
@@ -44,6 +58,34 @@ export function isCliLoginProvider(provider: string): provider is CliLoginProvid
 
 export function cliName(provider: CliLoginProvider): string {
 	return CLI_NAMES[provider];
+}
+
+export function keepsFallback(provider: string): boolean {
+	return (FALLBACK_PROVIDERS as string[]).includes(provider);
+}
+
+/** sitegeist's own OAuth login in a stored value: the value itself, or a borrowed login's fallback. */
+export function ownLogin(stored: string | null): OAuthCredentials | undefined {
+	if (!stored || !isOAuthCredentials(stored)) return undefined;
+	const credentials = parseOAuthCredentials(stored);
+	return credentials.source === "cli" ? credentials.fallback : credentials;
+}
+
+/** The borrowed login in a stored value, without its fallback. */
+export function borrowedLogin(stored: string | null): OAuthCredentials | undefined {
+	if (!stored || !isOAuthCredentials(stored)) return undefined;
+	const { fallback: _, ...credentials } = parseOAuthCredentials(stored);
+	return credentials.source === "cli" ? credentials : undefined;
+}
+
+/** The value to store: the borrowed login in front, carrying the own login where the provider keeps one. */
+export function combineLogins(
+	provider: string,
+	borrowed: OAuthCredentials | undefined,
+	own: OAuthCredentials | undefined,
+): OAuthCredentials | undefined {
+	if (!borrowed) return own;
+	return own && keepsFallback(provider) ? { ...borrowed, fallback: own } : borrowed;
 }
 
 export async function isCliLoginOff(provider: CliLoginProvider): Promise<boolean> {
@@ -104,18 +146,27 @@ export async function readCliLogin(
 
 /**
  * The token for a borrowed login: the stored one, read again from the CLI when it expires
- * and every RECHECK_MS otherwise. Throws only when the stored token has expired.
+ * and every RECHECK_MS otherwise. Throws only when the stored token has expired. With a
+ * fallback to use meanwhile, a lapsed CLI login is asked for once per RECHECK_MS, briefly.
  */
-export async function currentCliLogin(provider: CliLoginProvider, stored: OAuthCredentials): Promise<OAuthCredentials> {
+export async function currentCliLogin(
+	provider: CliLoginProvider,
+	stored: OAuthCredentials,
+	options: { fallback?: boolean } = {},
+): Promise<OAuthCredentials> {
 	const expired = Date.now() >= stored.expires - 60_000;
 	if (!expired && Date.now() - (lastCheck.get(provider) ?? 0) < RECHECK_MS) return stored;
+	if (expired && options.fallback && Date.now() - (lastFailure.get(provider) ?? 0) < RECHECK_MS) {
+		throw new Error(`The ${CLI_NAMES[provider]} login has expired`);
+	}
 	lastCheck.set(provider, Date.now());
 	try {
-		return await readCliLogin(provider, expired ? LOOKUP_TIMEOUT_MS : RECHECK_TIMEOUT_MS);
+		return await readCliLogin(provider, expired && !options.fallback ? LOOKUP_TIMEOUT_MS : RECHECK_TIMEOUT_MS);
 	} catch (err) {
 		// The CLI logged out or is slow; a token that has not expired still works.
-		if (expired) throw err;
-		return stored;
+		if (!expired) return stored;
+		lastFailure.set(provider, Date.now());
+		throw err;
 	}
 }
 
@@ -126,7 +177,8 @@ export async function borrowCliLogin(store: KeyStore, provider: string): Promise
 		const credentials = await readCliLogin(provider);
 		// Logout may have happened while the lookup ran.
 		if (await isCliLoginOff(provider)) return false;
-		await store.set(provider, serializeOAuthCredentials(credentials));
+		const combined = combineLogins(provider, credentials, ownLogin(await store.get(provider)));
+		if (combined) await store.set(provider, serializeOAuthCredentials(combined));
 		return true;
 	} catch (err) {
 		console.info(`[cli-login] ${provider}: ${err instanceof Error ? err.message : String(err)}`);
@@ -134,11 +186,16 @@ export async function borrowCliLogin(store: KeyStore, provider: string): Promise
 	}
 }
 
-/** Borrow every CLI login whose provider has no key yet. */
+/**
+ * Borrow every CLI login whose provider has no key yet. For Claude, Claude Code's login also
+ * goes in front of a sitegeist login, which stays as its fallback.
+ */
 export async function borrowCliLogins(store: KeyStore): Promise<void> {
 	await Promise.all(
 		CLI_LOGIN_PROVIDERS.map(async (provider) => {
-			if (!(await store.get(provider))) await borrowCliLogin(store, provider);
+			const stored = await store.get(provider);
+			const ownOnly = keepsFallback(provider) && !!ownLogin(stored) && !borrowedLogin(stored);
+			if (!stored || ownOnly) await borrowCliLogin(store, provider);
 		}),
 	);
 }
