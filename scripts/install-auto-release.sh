@@ -11,14 +11,21 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LABEL="com.shahfarzane.sitegeist-auto-release"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/sitegeist-auto-release.log"
+LAUNCHER="$HOME/.local/share/sitegeist/bin/sitegeist-auto-release"
 DOMAIN="gui/$(id -u)"
 
 launchctl bootout "$DOMAIN/$LABEL" 2>/dev/null || true
 if [ "${1:-}" = "--uninstall" ]; then
-	rm -f "$PLIST"
+	rm -f "$PLIST" "$LAUNCHER"
 	echo "removed $LABEL"
 	exit 0
 fi
+
+# Login Items (System Settings > General) names a launchd job after the first program it
+# runs, so a job started as /bin/bash was listed as "bash". The launcher only gives it a name.
+mkdir -p "$(dirname "$LAUNCHER")"
+printf '#!/bin/sh\nexec /bin/bash "$@"\n' >"$LAUNCHER"
+chmod 755 "$LAUNCHER"
 
 args="<string>$ROOT/scripts/auto-release.sh</string>"
 for host in "$@"; do
@@ -39,7 +46,7 @@ cat >"$PLIST" <<EOF
 	<string>$LABEL</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/bin/bash</string>
+		<string>$LAUNCHER</string>
 		$args
 	</array>
 	<key>EnvironmentVariables</key>
