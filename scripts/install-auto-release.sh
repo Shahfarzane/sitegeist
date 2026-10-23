@@ -8,7 +8,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LABEL="com.shahfarzane.sitegeist-auto-release"
+LABEL="ceo.nerd.sitegeist-auto-release"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/sitegeist-auto-release.log"
 LAUNCHER="$HOME/.local/share/sitegeist/bin/sitegeist-auto-release"
