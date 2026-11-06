@@ -172,6 +172,14 @@ test("a long chat scrolls and the header and composer stay put", async () => {
 	await sleep(100);
 	assert.deepEqual(await panel.evaluate(finalGeometry), shell);
 	assert.deepEqual(await panel.evaluate(offScale), []);
+	const type = (selector) =>
+		panel.evaluate(`(() => {
+			const style = getComputedStyle(document.querySelector(${JSON.stringify(selector)}));
+			return [style.fontSize, style.lineHeight];
+		})()`);
+	assert.deepEqual(await type("assistant-message .markdown-content p"), ["16px", "26px"], "chat");
+	assert.deepEqual(await type("message-editor textarea"), ["16px", "24px"], "composer");
+	assert.deepEqual(await type("div.h-11 button"), ["14px", "20px"], "header");
 });
 
 test("padding and gaps stay on the 4 px scale", async () => {

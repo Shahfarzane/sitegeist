@@ -185,9 +185,17 @@ textarea {
 	background: color-mix(in srgb, var(--color-ring) 30%, transparent);
 }
 
-.markdown-content {
+/* Chat text is 16/26; thinking and tool output stay at UI size. */
+assistant-message .markdown-content,
+.user-message-container .markdown-content {
 	font-size: 16px;
 	line-height: 26px;
+}
+
+tool-message .markdown-content,
+.thinking-block .markdown-content {
+	font-size: 14px;
+	line-height: 20px;
 }
 
 .markdown-content a {
