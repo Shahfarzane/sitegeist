@@ -226,6 +226,17 @@ test("an OAuth connector logs in from Settings", async () => {
 	);
 	await context.panel.waitFor(`document.body.innerText.includes("1 tool")`, { timeoutMs: 15000 });
 	assert.ok(seen.authorization.includes("Bearer oauth-token"));
+	await context.panel.evaluate(`document.querySelector('[aria-label="Back to settings"]').click()`);
+	await context.panel.evaluate(
+		`[...document.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Close" || b.querySelector("svg.lucide-x"))?.click()`,
+	);
+	server.requests.length = 0;
+	turns = () => ({ text: "tools checked" });
+	await sendPrompt(context.panel, "which tools?");
+	await context.panel.waitFor(`document.body.innerText.includes("tools checked")`);
+	const names = toolNames(server.requests[0]);
+	assert.equal(new Set(names).size, names.length, "a login must not duplicate connector tools");
+	assert.ok(names.includes("secure__search"));
 	const stored = await context.panel.evaluate(
 		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const q = r.result.transaction("connectors").objectStore("connectors").get("secure"); q.onsuccess = () => { r.result.close(); res(q.result.auth.tokens.access_token); }; }; })`,
 	);

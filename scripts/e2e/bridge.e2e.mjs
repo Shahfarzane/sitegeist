@@ -29,6 +29,13 @@ const animated = `<!doctype html><title>Animated</title>
 <div id="box"></div>
 <script>let n = 0; setInterval(() => { document.querySelector("h1").textContent = "Recording fixture " + ++n; }, 150);</script>`;
 
+const hidden = `<!doctype html><title>Hidden</title>
+<button style="visibility:hidden" onclick="document.title = 'hidden clicked'">Send</button>
+<button onclick="document.title = 'visible clicked'">Send message</button>`;
+
+const zoneInForm = `<!doctype html><title>Zone</title><form><input type="file" onchange="document.title = 'wrong input'">
+<div id="zone" style="width:200px;height:100px" ondragover="event.preventDefault()" ondrop="event.preventDefault(); document.title = 'dropped'">Drop</div></form>`;
+
 const uploadPage = `<!doctype html><title>Upload</title>
 <input id="hidden" type="file" multiple style="display:none" onchange="document.title = 'input:' + [...this.files].map((f) => f.name + ':' + f.size + ':' + f.type).join(',')">
 <div id="zone" style="width:300px;height:200px;background:#eee"
@@ -37,7 +44,7 @@ const uploadPage = `<!doctype html><title>Upload</title>
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/form": form, "/upload": uploadPage, "/animated": animated },
+		routes: { "/form": form, "/upload": uploadPage, "/animated": animated, "/hidden": hidden, "/zone": zoneInForm },
 		script: () => ({ text: "unused" }),
 	});
 	browser = await Browser.launch({ bridge: true });
@@ -82,8 +89,31 @@ test("a whole form takes two calls", async () => {
 	assert.deepEqual(values.value, { plan: "Pro", terms: true });
 });
 
+test("a hidden element does not win a text target over a visible one", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/hidden` });
+	await harness.callText("click", { text: "Send" });
+	assert.equal((await harness.callText("run_js", { code: "document.title" })).value, "visible clicked");
+});
+
 test("a target that does not exist says so", async () => {
 	await assert.rejects(harness.call("click", { text: "No such button" }), /No element with the text/);
+});
+
+test("read interactive returns elements without page text", async () => {
+	const nav = await harness.callText("navigate", { url: `${server.origin}/form`, read: "interactive" });
+	assert.ok(nav.includes("Send") && !nav.includes("Text:"), nav.slice(-200));
+});
+
+test("keys:true types long text as key events", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/form` });
+	await harness.callText("run_js", {
+		code: `(() => { window.__keys = 0; document.querySelector("textarea").addEventListener("keydown", () => { window.__keys++; }); })()`,
+		world: "main",
+	});
+	const text = "k".repeat(70);
+	await harness.callText("type", { text, selector: "textarea", keys: true });
+	const seen = await harness.callText("run_js", { code: "window.__keys", world: "main" });
+	assert.equal(seen.value, 70);
 });
 
 test("typing a long text", async () => {
@@ -105,25 +135,42 @@ test("a line break in long text stays a key press", async () => {
 	assert.equal(value.value, text);
 });
 
-test("full access: nothing about raw CDP is refused", async () => {
-	const result = await harness
-		.callText("cdp", { method: "Storage.getStorageKey", params: {} })
-		.catch((err) => err.message);
-	assert.ok(!String(JSON.stringify(result)).includes("not available through the bridge"), JSON.stringify(result));
+test("full access: raw CDP reaches what the per-site mode would refuse", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/form` });
+	await harness.callText("cdp", { method: "Network.enable", params: {} });
+	const result = await harness.callText("cdp", { method: "Network.getAllCookies", params: {} });
+	assert.ok(Array.isArray(result.result.cookies), JSON.stringify(result).slice(0, 200));
 });
 
-test("a browser that stored ask moves to full access once", async () => {
-	const worker = await browser.worker();
-	assert.equal(
-		await worker.evaluate(
-			`chrome.storage.local.get("bridge_full_access_applied").then((d) => d.bridge_full_access_applied)`,
-		),
-		true,
-	);
-	assert.notEqual(
-		await worker.evaluate(`chrome.storage.local.get("bridge_permission_mode").then((d) => d.bridge_permission_mode)`),
-		"ask",
-	);
+test("a browser that stored ask moves to full access once, and a later ask sticks", async () => {
+	const profile = mkdtempSync(join(tmpdir(), "sitegeist-e2e-profile-"));
+	const session = async (run) => {
+		const own = await Browser.launch({ userDataDir: profile });
+		try {
+			return await run(await own.worker());
+		} finally {
+			await own.close();
+		}
+	};
+	const stored = `chrome.storage.local.get("bridge_permission_mode").then((d) => d.bridge_permission_mode)`;
+	const settle = () => new Promise((r) => setTimeout(r, 500));
+	await session(async (worker) => {
+		await settle();
+		await worker.evaluate(`chrome.storage.local.remove("bridge_full_access_applied")`);
+		await worker.evaluate(`chrome.storage.local.set({ bridge_permission_mode: "ask" })`);
+		await settle();
+	});
+	await session(async (worker) => {
+		await settle();
+		assert.equal(await worker.evaluate(stored), "allow_all");
+		await worker.evaluate(`chrome.storage.local.set({ bridge_permission_mode: "ask" })`);
+		await settle();
+	});
+	await session(async (worker) => {
+		await settle();
+		assert.equal(await worker.evaluate(stored), "ask");
+	});
+	rmSync(profile, { recursive: true, force: true });
 });
 
 const title = async () => (await harness.callText("run_js", { code: "document.title" })).value;
@@ -149,6 +196,19 @@ test("file_upload drops onto a zone that has no input", async () => {
 	const result = await harness.callText("file_upload", { paths: [file], selector: "#zone" });
 	assert.deepEqual(result, { delivered: "drop", files: 1 });
 	assert.equal(await title(), "drop:pic.png:1000");
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("a drop zone in a form gets the drop, not the form's file input", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "sitegeist-e2e-upload-"));
+	const file = join(dir, "pic.png");
+	writeFileSync(file, Buffer.alloc(100, 1));
+	await harness.callText("navigate", { url: `${server.origin}/zone` });
+	assert.deepEqual(await harness.callText("file_upload", { paths: [file], selector: "#zone" }), {
+		delivered: "drop",
+		files: 1,
+	});
+	assert.equal(await title(), "dropped");
 	rmSync(dir, { recursive: true, force: true });
 });
 
@@ -187,6 +247,13 @@ test("gif_creator records a hidden tab and writes a file with the actions on it"
 test("exporting nothing says so", async () => {
 	await harness.callText("gif_creator", { action: "clear" });
 	await assert.rejects(harness.call("gif_creator", { action: "export" }), /Nothing recorded/);
+});
+
+test("bad sizes are refused with a clear error", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/form` });
+	await assert.rejects(harness.call("resize_window", { width: -5, height: 700 }), /whole numbers/);
+	await assert.rejects(harness.call("find", { query: "send", limit: -1 }), /positive integer/);
+	await assert.rejects(harness.call("notify_user", { title: "x", tabId: 1 }), /not owned/);
 });
 
 test("find understands what things are called", async () => {

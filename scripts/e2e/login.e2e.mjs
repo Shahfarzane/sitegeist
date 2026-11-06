@@ -14,6 +14,9 @@ const loginPage = `<!doctype html><title>Sign in</title><form>
 	<label>Email <input id="u" type="email" autocomplete="username"></label>
 	<label>Password <input id="p" type="password" autocomplete="current-password"></label>
 	<button>Sign in</button></form>`;
+const newsletter = `<!doctype html><title>Sign in</title>
+	<form id="news"><input id="n" type="email" name="newsletter"></form>
+	<form id="login"><input id="u" type="text" name="user"><input id="p" type="password"></form>`;
 const usernameStep = `<!doctype html><title>Step one</title><input id="u" name="identifier"><button>Next</button>`;
 const codeStep = `<!doctype html><title>Code</title><label>Code <input id="c" autocomplete="one-time-code"></label>`;
 /** Sends the tab to another origin while 1Password waits for the user. */
@@ -29,6 +32,7 @@ before(async () => {
 	server = await startFakeServer({
 		routes: {
 			"/login": loginPage,
+			"/newsletter": newsletter,
 			"/step": usernameStep,
 			"/code": codeStep,
 			"/redirecting": () => redirecting(`http://localhost:${server.port}/login`),
@@ -86,6 +90,41 @@ test("a redirect during the 1Password prompt does not get the password", async (
 	const landed = await harness.callText("run_js", { code: "location.host" });
 	assert.equal(landed.value, `localhost:${server.port}`);
 	assert.equal(await value("#p"), "");
+});
+
+test("a newsletter box before the login form is left alone", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/newsletter` });
+	const result = await harness.callText("fill_login", {});
+	assert.deepEqual(result.filled, ["username", "password"]);
+	assert.equal(await value("#n"), "");
+	assert.equal(await value("#u"), "ada@example.test");
+});
+
+test("two logins for a site: the agent is asked which, then picks by id", async () => {
+	const own = await Browser.launch({
+		bridge: true,
+		env: {
+			SITEGEIST_OP_PATH: join(repoRoot, "scripts/e2e/fake-op.mjs"),
+			SITEGEIST_E2E_LOGIN_PORT: String(server.port),
+			SITEGEIST_E2E_SECOND_LOGIN: "1",
+		},
+	});
+	await own.worker();
+	await bridgeReady(own);
+	const second = await Harness.connect(own);
+	try {
+		await second.callText("navigate", { url: `${server.origin}/login` });
+		const choice = await second.callText("fill_login", {});
+		assert.deepEqual(
+			choice.choose.map((c) => c.id),
+			["one", "two"],
+		);
+		const filled = await second.callText("fill_login", { item: "two" });
+		assert.equal(filled.item, "Second login");
+	} finally {
+		await second.close();
+		await own.close();
+	}
 });
 
 test("multi-step sign-in: username first, then a one-time code", async () => {

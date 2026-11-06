@@ -38,6 +38,19 @@ test("a request during a run sees the state as of that request", async () => {
 	assert.equal(seen.at(-1), 2);
 });
 
+test("a request queued behind a failing run still gets its run", async () => {
+	let runs = 0;
+	const task = new CoalescedTask(async () => {
+		runs++;
+		await tick();
+		if (runs === 1) throw new Error("first failed");
+	});
+	const first = task.request();
+	task.request();
+	await first;
+	assert.equal(runs, 2);
+});
+
 test("a failing run rejects its waiters and the next request starts fresh", async () => {
 	let fail = true;
 	let runs = 0;

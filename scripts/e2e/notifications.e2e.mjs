@@ -58,7 +58,7 @@ test("a long run that finishes unwatched notifies, and a sound plays", async () 
 	await sendPrompt(context.panel, "do something long");
 	await context.tab.send("Page.bringToFront");
 	await context.panel.waitFor(`document.body.innerText.includes("w159")`, { timeoutMs: 40000 });
-	await context.panel.waitFor(`!document.hasFocus()`, { timeoutMs: 2000 }).catch(() => undefined);
+	assert.equal(await context.panel.evaluate(`document.visibilityState`), "hidden");
 	await context.worker.waitFor(`chrome.notifications.getAll().then((all) => Object.keys(all).length > ${before})`, {
 		timeoutMs: 5000,
 	});

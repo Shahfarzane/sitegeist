@@ -8,6 +8,23 @@ import { beforeEach, test } from "node:test";
 type Stored = Record<string, unknown>;
 type Tab = { id: number; windowId: number; groupId: number; url: string; active: boolean; pinned: boolean };
 
+// Node 22 has no Web Locks. Serialized per name, which is all the code under test relies on.
+if (!("locks" in navigator)) {
+	const queues = new Map<string, Promise<unknown>>();
+	Object.defineProperty(navigator, "locks", {
+		value: {
+			request: <T,>(name: string, callback: () => Promise<T>) => {
+				const run = (queues.get(name) ?? Promise.resolve()).then(callback, callback);
+				queues.set(
+					name,
+					run.catch(() => undefined),
+				);
+				return run;
+			},
+		},
+	});
+}
+
 const local: Stored = {};
 let writes = 0;
 const tabs = new Map<number, Tab>();

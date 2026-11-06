@@ -218,3 +218,29 @@ test("messages with attachments count toward the context", () => {
 	assert.ok(estimateTokens([message]) >= 1600);
 	assert.ok(transcript([message]).includes("USER: look"));
 });
+
+test("only the last turn's open calls are answered: earlier gaps are the provider layer's", () => {
+	const reply = { ...call(9), content: [{ type: "text", text: "done" }], stopReason: "stop" } as AgentMessage;
+	const messages: AgentMessage[] = [{ role: "user", content: "go", timestamp: 0 }, call(1), reply];
+	assert.equal(answerOpenToolCalls(messages), messages);
+});
+
+test("the current page keeps its skills list when older ones go", () => {
+	const nav = (url: string) => ({ role: "navigation", url, title: url, skillsOutput: `skills of ${url}` }) as AgentMessage;
+	const messages: AgentMessage[] = [nav("old"), nav("current")];
+	for (let i = 0; i < 40; i++) messages.push(call(i), textResult(i, "x"));
+	const view = pruneContext(messages) as Array<{ skillsOutput?: string }>;
+	assert.equal(view[0].skillsOutput, "");
+	assert.equal(view[1].skillsOutput, "skills of current");
+});
+
+test("a summary knows what was attached", () => {
+	const message = {
+		role: "user-with-attachments",
+		content: "read this",
+		attachments: [{ id: "1", type: "document", fileName: "a.pdf", mimeType: "application/pdf", size: 1, content: "x", extractedText: "the contract" }],
+		timestamp: 0,
+	} as unknown as AgentMessage;
+	const text = transcript([message]);
+	assert.ok(text.includes("a.pdf") && text.includes("the contract"));
+});

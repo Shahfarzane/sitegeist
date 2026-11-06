@@ -25,6 +25,17 @@ test("a message with attachments reaches the model, words and files", async () =
 	]);
 });
 
+test("a file with no extracted text is still named", async () => {
+	const message = {
+		role: "user-with-attachments",
+		content: "",
+		attachments: [{ id: "1", type: "document", fileName: "empty.txt", mimeType: "text/plain", size: 0, content: "" }],
+		timestamp: 5,
+	} as unknown as AgentMessage;
+	const [converted] = await browserMessageTransformer([message]);
+	assert.deepEqual(converted.content, [{ type: "text", text: "[Attached file: empty.txt]" }]);
+});
+
 test("attachments without words still go through", async () => {
 	const message = {
 		role: "user-with-attachments",

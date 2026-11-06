@@ -164,6 +164,8 @@ export class Browser {
 			...(headless ? ["--headless=new"] : []),
 			"about:blank",
 		];
+		// A profile used before still holds the last run's port.
+		rmSync(join(profile, "DevToolsActivePort"), { force: true });
 		const proc = spawn(findChrome(), args, {
 			stdio: "ignore",
 			env: { ...process.env, ...env, ...(socketDir ? { SITEGEIST_SOCKET_DIR: socketDir } : {}) },
