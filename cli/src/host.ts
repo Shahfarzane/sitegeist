@@ -18,6 +18,7 @@ import type {
 	ClientToHost,
 	ExtConnectorRequest,
 	ExtCredentialsRequest,
+	ExtOnePasswordRequest,
 	ExtToHost,
 	HostCredentialsResponse,
 	HostToClient,
@@ -26,6 +27,7 @@ import type {
 import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
 import { readConnectors, type RunningConnector, runConnector } from "./connectors.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
+import { readLogin, searchLogins } from "./onepassword.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
 
@@ -230,7 +232,19 @@ export function runNativeHost(): void {
 			return;
 		}
 		for (const m of messages) {
-			const message = m as ExtToHost | ExtCredentialsRequest | ExtConnectorRequest;
+			const message = m as ExtToHost | ExtCredentialsRequest | ExtConnectorRequest | ExtOnePasswordRequest;
+			if (message.type === "op_search" || message.type === "op_read") {
+				const answer =
+					message.type === "op_search" ? searchLogins(message.url) : readLogin(message.id, message.url);
+				lookups = Promise.all([
+					lookups,
+					answer.then(
+						(result) => process.stdout.write(encodeFrame({ result })),
+						(err: Error) => process.stdout.write(encodeFrame({ error: err.message })),
+					),
+				]);
+				continue;
+			}
 			if (message.type === "connector_list") {
 				process.stdout.write(encodeFrame({ names: Object.keys(readConnectors()) }));
 				continue;

@@ -46,6 +46,7 @@ import {
 	waitForLoad,
 } from "../browser/page.js";
 import type { BrowserSession } from "../browser/session.js";
+import { fillLogin } from "../credentials/login.js";
 import { showNotification } from "../notify/notifications.js";
 import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
 import type { GifOptions } from "../recording/gif-types.js";
@@ -614,6 +615,9 @@ export const handlers: Record<string, Handler> = {
 		const tabId = await resolveTab(ctx, params, true);
 		return { tabId, result: await cdpSend(tabId, method, cdpParams as Params) };
 	},
+
+	/** Sign in from 1Password. The result says which fields were filled, never with what. */
+	"login.fill": async (ctx, params) => fillLogin(await resolveTab(ctx, params, false), str(params, "item")),
 
 	/** Tell the user something needs them; clicking the notification shows the tab. */
 	notify: async (ctx, params) => {

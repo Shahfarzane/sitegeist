@@ -7,6 +7,7 @@ import {
 	listSessions,
 	unmarkReleased,
 } from "./browser/session.js";
+import { startLoginService } from "./credentials/login.js";
 import { startNotifications } from "./notify/notifications.js";
 import { startSelfUpdate } from "./utils/self-update.js";
 
@@ -36,6 +37,7 @@ chrome.webNavigation.onTabReplaced.addListener(async ({ replacedTabId, tabId }) 
 startBridge();
 startSelfUpdate(trace);
 startNotifications();
+startLoginService();
 
 // ============================================================================
 // PER-TAB SIDE PANEL (Claude-in-Chrome model)

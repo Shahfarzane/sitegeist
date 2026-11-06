@@ -74,6 +74,7 @@ import { ANY_SITE } from "./storage/skill-match.js";
 import { DebuggerTool } from "./tools/debugger.js";
 import { createConsoleTool, createNetworkTool } from "./tools/devtools.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
+import { createFillLoginTool } from "./tools/fill-login.js";
 import { createGifTool } from "./tools/gif.js";
 import { AskUserWhichElementTool, skillTool } from "./tools/index.js";
 import { NativeInputEventsRuntimeProvider } from "./tools/NativeInputEventsRuntimeProvider.js";
@@ -1032,6 +1033,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				createGifTool(),
 				createConsoleTool(),
 				createNetworkTool(),
+				createFillLoginTool(),
 			];
 
 			// Conditionally add debugger tool if enabled

@@ -157,6 +157,22 @@ export interface HostCredentialsResponse {
 	error?: string;
 }
 
+/** 1Password through the host. */
+export interface LoginChoice {
+	id: string;
+	title: string;
+	username?: string;
+}
+
+export interface LoginValues {
+	title: string;
+	username?: string;
+	password?: string;
+	otp?: string;
+}
+
+export type ExtOnePasswordRequest = { type: "op_search"; url: string } | { type: "op_read"; id: string; url: string };
+
 /** Local connectors: the extension names one, the host runs it from its own config. */
 export type ExtConnectorRequest =
 	| { type: "connector_list" }
@@ -215,6 +231,7 @@ export const BRIDGE_METHODS = [
 	"cdp",
 	"wait",
 	"notify",
+	"login.fill",
 	"console.read",
 	"network.read",
 	"permission.respond",

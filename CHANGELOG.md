@@ -4,6 +4,7 @@
 
 ### Added
 
+- 1Password sign-in: `fill_login` for harnesses and the panel agent. The native host runs `op`, so 1Password asks for approval itself; the values go from the host through the service worker into the page and appear in no tool result, chat or storage, and an item only fills on the site it is saved for. Works per step (username page, password page, one-time code).
 - Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
 - Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
 - Saved prompts: Settings > Prompts, inserted as text from the `/` menu.
@@ -106,6 +107,7 @@
 
 ### Added
 
+- 1Password sign-in: `fill_login` for harnesses and the panel agent. The native host runs `op`, so 1Password asks for approval itself; the values go from the host through the service worker into the page and appear in no tool result, chat or storage, and an item only fills on the site it is saved for. Works per step (username page, password page, one-time code).
 - Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
 - Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
 - Saved prompts: Settings > Prompts, inserted as text from the `/` menu.

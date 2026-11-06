@@ -678,6 +678,15 @@ export async function runMcpServer(): Promise<void> {
 		},
 	);
 	server.registerTool(
+		"fill_login",
+		{
+			description:
+				"Fill the sign-in form on your current page from the user's 1Password. They approve it in 1Password; you never see the password. Works per step: a page with only a username field gets that, a one-time-code page gets the code. Then press the sign-in button yourself. Several logins for the site come back as a list; call again with item set to one id. Use this instead of asking the user for a password.",
+			inputSchema: { item: z.string().optional().describe("Id of a login from an earlier list"), tabId },
+		},
+		(args) => call("login.fill", args),
+	);
+	server.registerTool(
 		"notify_user",
 		{
 			description:
