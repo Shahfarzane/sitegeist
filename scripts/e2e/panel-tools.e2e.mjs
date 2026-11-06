@@ -175,3 +175,55 @@ test("a saved prompt shows in the / menu and goes in as text", async () => {
 	await context.panel.close();
 	await context.tab.close();
 });
+
+test("the welcome screen offers what fits the page", async () => {
+	const context = await openPanel(browser, server, { path: "/welcome" });
+	await context.panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("the right-click menu exists and its question lands in the composer", async () => {
+	const context = await openPanel(browser, server, { path: "/menu" });
+	await context.worker.evaluate(`chrome.contextMenus.update("sitegeist-ask-page", { visible: true })`);
+	await context.worker.evaluate(`chrome.contextMenus.update("sitegeist-ask-selection", { visible: true })`);
+	await context.worker.evaluate(`chrome.storage.session.set({ panel_prefill_${context.tabId}: "About this page: " })`);
+	await context.panel.waitFor(`document.querySelector("message-editor textarea").value === "About this page: "`);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("capture an area attaches the dragged part of the page", async () => {
+	const context = await openPanel(browser, server, { path: "/region" });
+	await context.tab.send("Page.bringToFront");
+	await context.panel.evaluate(`document.querySelector("overflow-menu button").click()`);
+	await context.panel.waitFor(
+		`[...document.querySelectorAll("button,[role=menuitem]")].some((b) => b.textContent.trim() === "Capture an area")`,
+	);
+	await context.panel.evaluate(
+		`[...document.querySelectorAll("button,[role=menuitem]")].find((b) => b.textContent.trim() === "Capture an area").click()`,
+	);
+	await context.tab.waitFor(`document.documentElement.lastElementChild?.textContent.includes("Drag to select")`, {
+		timeoutMs: 8000,
+	});
+	const mouse = (type, x, y) =>
+		context.tab.send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+	await mouse("mousePressed", 10, 10);
+	await mouse("mouseMoved", 120, 60);
+	await mouse("mouseReleased", 210, 110);
+	await context.panel.waitFor(`document.querySelector("message-editor")?.attachments?.length === 1`, {
+		timeoutMs: 8000,
+	});
+	const attachment = await context.panel.evaluate(
+		`(() => { const a = document.querySelector("message-editor").attachments[0]; return { name: a.fileName, type: a.mimeType, size: a.size }; })()`,
+	);
+	assert.equal(attachment.name, "region.png");
+	assert.equal(attachment.type, "image/png");
+	assert.ok(attachment.size > 100);
+	assert.ok(
+		!(await context.tab.evaluate(`document.body.innerText`)).includes("Drag to select"),
+		"the overlay must be gone",
+	);
+	await context.panel.close();
+	await context.tab.close();
+});

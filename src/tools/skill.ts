@@ -23,13 +23,14 @@ import { SKILL_TOOL_DESCRIPTION } from "../prompts/prompts.js";
 import { getSitegeistStorage } from "../storage/app-storage.js";
 import type { Skill } from "../storage/stores/skills-store.js";
 import { defaultSkills } from "./default-skills.js";
+import { siteSkills } from "./site-skills.js";
 
 const getSkills = () => getSitegeistStorage().skills;
 
 // Initialize default skills on first run
 export async function initializeDefaultSkills() {
 	const skillsRepo = getSkills();
-	for (const skill of defaultSkills) {
+	for (const skill of [...defaultSkills, ...siteSkills]) {
 		const existing = await skillsRepo.getSkill(skill.name);
 		if (!existing) {
 			await skillsRepo.saveSkill(skill);

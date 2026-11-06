@@ -256,6 +256,28 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
 	});
 });
 
+// Right-click menu: open a task on the tab with the question already in the composer.
+const MENU_PAGE = "sitegeist-ask-page";
+const MENU_SELECTION = "sitegeist-ask-selection";
+
+chrome.runtime.onInstalled.addListener(() => {
+	chrome.contextMenus.removeAll(() => {
+		chrome.contextMenus.create({ id: MENU_PAGE, title: "Ask Sitegeist about this page", contexts: ["page"] });
+		chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Ask Sitegeist about "%s"', contexts: ["selection"] });
+	});
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+	if (tab?.id === undefined) return;
+	const prompt =
+		info.menuItemId === MENU_SELECTION
+			? `About this text on the page:\n\n"${info.selectionText}"\n\n`
+			: "About this page: ";
+	// Still inside the click's user gesture, which opening the panel needs.
+	openPanelOnTab(tab.id, "menu");
+	chrome.storage.session.set({ [`panel_prefill_${tab.id}`]: prompt }).catch(() => undefined);
+});
+
 // Keyboard shortcut: open a task on the current tab (Chrome offers no per-tab close API).
 chrome.commands.onCommand.addListener((command: string, sender?: chrome.tabs.Tab) => {
 	if (command !== "toggle-sidepanel") return;

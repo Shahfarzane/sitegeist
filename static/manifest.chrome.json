@@ -38,7 +38,8 @@
 		"tabGroups",
 		"nativeMessaging",
 		"alarms",
-		"offscreen"
+		"offscreen",
+		"contextMenus"
 	],
 	"optional_permissions": [
 		"userScripts",

@@ -13,6 +13,7 @@ import {
 	ChatPanel,
 	createExtractDocumentTool,
 	createStreamFn,
+	type MessageEditor,
 	ModelSelector,
 	ProxyTab,
 	// PersistentStorageDialog,
@@ -20,13 +21,13 @@ import {
 	setShowJsonMode,
 } from "@mariozechner/pi-web-ui";
 import { html, render, type TemplateResult } from "lit";
-import { Circle, Download, History, Link, Plus, Settings, Square } from "lucide";
+import { Circle, Crop, Download, History, Link, Plus, Settings, Square } from "lucide";
 import type { Compaction } from "./agent/context.js";
 import { SUMMARY_SYSTEM_PROMPT } from "./agent/context.js";
 import { ContextManager } from "./agent/context-manager.js";
 import { backoffMs, classifyFailure, MAX_RETRIES } from "./agent/recovery.js";
 import { answerOpenToolCalls, clearInterrupted, RunTracker, wasInterrupted } from "./agent/run-tracker.js";
-import { isRestrictedUrl } from "./browser/cdp.js";
+import { detachTab, isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
 import {
@@ -60,6 +61,7 @@ import {
 	type NavigationMessage,
 	registerNavigationRenderer,
 } from "./messages/NavigationMessage.js";
+import { suggestionsFor } from "./messages/suggestions.js";
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
 import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
@@ -79,6 +81,7 @@ import { createGifTool } from "./tools/gif.js";
 import { AskUserWhichElementTool, skillTool } from "./tools/index.js";
 import { NativeInputEventsRuntimeProvider } from "./tools/NativeInputEventsRuntimeProvider.js";
 import { isToolNavigating, NavigateTool } from "./tools/navigate.js";
+import { captureRegion } from "./tools/region-capture.js";
 import { createReplTool } from "./tools/repl/repl.js";
 import { BrowserJsRuntimeProvider, NavigateRuntimeProvider } from "./tools/repl/runtime-providers.js";
 import { createUploadFileTool } from "./tools/upload-file.js";
@@ -723,6 +726,37 @@ async function acceptNotificationOffer(): Promise<void> {
 	dismissNotificationOffer();
 }
 
+/** The right-click menu leaves a question for this tab's panel, open or just opening. */
+async function applyPrefill(): Promise<void> {
+	if (homeTabId === undefined) return;
+	const key = `panel_prefill_${homeTabId}`;
+	const prompt = (await chrome.storage.session.get(key))[key] as string | undefined;
+	if (!prompt) return;
+	await chrome.storage.session.remove(key);
+	chatPanel.agentInterface?.setInput(prompt);
+}
+
+/** User gesture: drag a region on the tab in front and attach it to the message. */
+async function attachRegion(): Promise<void> {
+	const [tab] = await chrome.tabs.query({ active: true, windowId: currentWindowId });
+	if (tab?.id === undefined || !tab.url || isRestrictedUrl(tab.url)) {
+		Toast.error("This page cannot be captured");
+		return;
+	}
+	try {
+		const attachment = await captureRegion(tab.id);
+		if (!attachment) return;
+		const editor = document.querySelector<MessageEditor>("message-editor");
+		chatPanel.agentInterface?.setInput(editor?.value ?? "", [...(editor?.attachments ?? []), attachment]);
+	} catch (err) {
+		console.error("Region capture failed:", err);
+		Toast.error("Could not capture that area");
+	} finally {
+		// A tab the agent does not own should not keep the debugger attached.
+		if (!browserSession?.tabIds.includes(tab.id)) await detachTab(tab.id, true);
+	}
+}
+
 function dismissInterruptedRun(): void {
 	interruptedRun = false;
 	if (currentSessionId) clearInterrupted(currentSessionId).catch(() => undefined);
@@ -1236,6 +1270,7 @@ const renderApp = () => {
 					.entries=${
 						[
 							{ label: "Share this tab", icon: Link, onSelect: shareActiveTab },
+							{ label: "Capture an area", icon: Crop, onSelect: attachRegion },
 							{
 								label: isRecording ? "Stop recording" : "Record a skill",
 								icon: isRecording ? Square : Circle,
@@ -1530,13 +1565,20 @@ async function initApp() {
 	// Add welcome message for new sessions. With no provider connected it carries the
 	// "Connect a provider" prompt (see registerWelcomeRenderer), so nothing is forced open.
 	if (agent) {
-		const welcomeMessage = createWelcomeMessage(tutorials);
+		const page = await browserSession?.currentTab().catch(() => undefined);
+		const pageSkills = page?.url ? await storage.skills.list(page.url) : [];
+		const siteSkills = pageSkills.filter((s) => !s.domainPatterns.includes(ANY_SITE)).map((s) => s.name);
+		const welcomeMessage = createWelcomeMessage([...suggestionsFor(page?.url, siteSkills), ...tutorials]);
 		agent.appendMessage(welcomeMessage);
 		// appendMessage emits no agent event, so the message list would keep the old array.
 		chatPanel.agentInterface?.requestUpdate();
 	}
 
 	renderApp();
+	await applyPrefill();
+	chrome.storage.onChanged.addListener((changes, area) => {
+		if (area === "session" && homeTabId !== undefined && `panel_prefill_${homeTabId}` in changes) void applyPrefill();
+	});
 }
 
 // Register custom user message renderer early, before any session loads
