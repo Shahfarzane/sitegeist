@@ -16,6 +16,9 @@ const loginPage = `<!doctype html><title>Sign in</title><form>
 	<button>Sign in</button></form>`;
 const usernameStep = `<!doctype html><title>Step one</title><input id="u" name="identifier"><button>Next</button>`;
 const codeStep = `<!doctype html><title>Code</title><label>Code <input id="c" autocomplete="one-time-code"></label>`;
+/** Sends the tab to another origin while 1Password waits for the user. */
+const redirecting = (target) => `<!doctype html><title>Redirecting</title>
+	<input id="p" type="password"><script>setTimeout(() => { location.href = ${JSON.stringify(target)}; }, 500);</script>`;
 
 let browser;
 let server;
@@ -24,7 +27,12 @@ let turns;
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/login": loginPage, "/step": usernameStep, "/code": codeStep },
+		routes: {
+			"/login": loginPage,
+			"/step": usernameStep,
+			"/code": codeStep,
+			"/redirecting": () => redirecting(`http://localhost:${server.port}/login`),
+		},
 		script: (body, index) => turns(body, index),
 	});
 	const op = join(repoRoot, "scripts/e2e/fake-op.mjs");
@@ -69,6 +77,14 @@ test("a site with no saved login says so", async () => {
 test("an item from another site is refused, even when asked for by id", async () => {
 	await harness.callText("navigate", { url: `${server.origin}/login` });
 	await assert.rejects(harness.call("fill_login", { item: "other" }), /not saved for this site/);
+	assert.equal(await value("#p"), "");
+});
+
+test("a redirect during the 1Password prompt does not get the password", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/redirecting` });
+	await assert.rejects(harness.call("fill_login", { item: "slow" }), /page changed while waiting/);
+	const landed = await harness.callText("run_js", { code: "location.host" });
+	assert.equal(landed.value, `localhost:${server.port}`);
 	assert.equal(await value("#p"), "");
 });
 

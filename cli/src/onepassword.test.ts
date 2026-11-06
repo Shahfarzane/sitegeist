@@ -16,3 +16,9 @@ test("look-alike hosts do not match", () => {
 	assert.ok(!hostsMatch(undefined, "https://github.com/"));
 	assert.ok(!hostsMatch("not a url at all", "https://github.com/"));
 });
+
+test("an https login does not fill on plain http", () => {
+	assert.ok(!hostsMatch("https://github.com/login", "http://github.com/login"));
+	assert.ok(!hostsMatch("github.com", "http://github.com/login"));
+	assert.ok(hostsMatch("http://127.0.0.1:3000/login", "http://127.0.0.1:3000/login"));
+});

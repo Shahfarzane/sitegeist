@@ -68,11 +68,15 @@ function hostOf(url: string | undefined): string | undefined {
 	}
 }
 
-/** Same host, or one is a subdomain of the other. example.com.evil.test matches nothing. */
+/**
+ * Same host, or one is a subdomain of the other. example.com.evil.test matches nothing, and a
+ * login saved for https (a bare domain counts as that) never goes to a plain http page.
+ */
 export function hostsMatch(itemUrl: string | undefined, pageUrl: string): boolean {
 	const item = hostOf(itemUrl);
 	const page = hostOf(pageUrl);
 	if (!item || !page) return false;
+	if (!itemUrl?.startsWith("http://") && !pageUrl.startsWith("https://")) return false;
 	return item === page || page.endsWith(`.${item}`) || item.endsWith(`.${page}`);
 }
 

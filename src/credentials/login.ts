@@ -29,7 +29,10 @@ async function askHost<T>(request: Record<string, unknown>): Promise<T> {
 }
 
 /** Page-side: find the fields of a login form and set them the way frameworks expect. */
-function pageFillLogin(values: { username?: string; password?: string; otp?: string }): string[] {
+function pageFillLogin(values: { username?: string; password?: string; otp?: string }, origin: string): string[] {
+	// The tab may have moved on while 1Password waited for the user: this check runs in the page,
+	// right before the values go in, so a redirect cannot receive them.
+	if (location.origin !== origin) throw new Error("The page changed while waiting for 1Password. Try again.");
 	const visible = (el: HTMLElement) => {
 		const r = el.getBoundingClientRect();
 		const style = getComputedStyle(el);
@@ -93,7 +96,11 @@ export async function fillLogin(tabId: number, item?: string): Promise<FillResul
 	}
 	const login = await askHost<LoginValues>({ type: "op_read", id, url });
 	const { title, ...values } = login;
-	const filled = await runInPage<string[]>(tabId, `(${pageFillLogin.toString()})(${JSON.stringify(values)})`);
+	const origin = new URL(url).origin;
+	const filled = await runInPage<string[]>(
+		tabId,
+		`(${pageFillLogin.toString()})(${JSON.stringify(values)}, ${JSON.stringify(origin)})`,
+	);
 	if (filled.length === 0) throw new Error("No sign-in field on this page takes what this login has");
 	return { filled, item: title };
 }
