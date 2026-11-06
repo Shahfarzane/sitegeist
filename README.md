@@ -26,6 +26,22 @@ This fork (0xSero/sitegeist) adds three things to upstream (badlogic/sitegeist):
 4. **A harness bridge.** Claude Code, Codex, omp, pi, or any MCP client can drive the
    browser through Sitegeist, in the background, with no configuration.
 
+## What it does
+
+Agents work in hidden tabs of their own group, on your logins, with full access by default.
+
+|                    |                                                                                                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Long tasks         | Older screenshots and tool output leave the model's view in batches, a chat near the context limit is summarized, failed turns retry on their own, and a run that ended with its panel offers Resume |
+| Parallel tasks     | One panel per tab, each with its own session and tab group                                                                                                                                           |
+| Connectors         | MCP servers next to the browser: remote ones with a token or OAuth, local commands through the native host, and Claude plugin folders (Settings > Connectors)                                        |
+| 1Password          | `fill_login` signs in from your vault. 1Password asks for approval, the values go straight into the page, and an item only fills on its own site                                                     |
+| Files              | Attach files to any page without the native picker: file inputs, hidden ones too, and drop zones                                                                                                     |
+| Recording          | Annotated GIFs of what an agent did, from hidden tabs too                                                                                                                                            |
+| Notifications      | A desktop notification when a task finishes, fails or needs you (Settings > Notifications)                                                                                                           |
+| Skills and prompts | Site skills, recorded workflows, skills for any site, saved prompts in the `/` menu; defaults for GitHub, Gmail, Google Docs, Slack and others                                                       |
+| Debugging          | Console, network, raw CDP and viewport emulation for the panel agent and for harnesses                                                                                                               |
+
 ## Install the extension
 
 This fork ships as a self-signed `.crx` (extension id
@@ -117,8 +133,25 @@ Claude Code's Keychain entry. Codex's login is refreshed by the host when it exp
 written back to `auth.json`, so Codex stays logged in. Logout under Settings > Providers
 stops sitegeist from using a CLI login; "Use Claude Code" / "Use Codex" turns it back on.
 
-CLI commands: `mcp`, `install`, `status`, `allow <host>`, `reload`, `debug`,
-`pi-extension`. See `cli/README.md`.
+1Password sign-in needs the 1Password CLI with 1Password > Settings > Developer > Integrate with
+1Password CLI turned on. The native host runs `op`, so the prompt is 1Password's own. Tool results
+say which fields were filled and never with what. An agent that runs JavaScript in a page can
+still read a field that page holds, as any script there can.
+
+Local connectors are commands in `~/.config/sitegeist/connectors.json`, the same `mcpServers`
+shape Claude uses:
+
+```bash
+sitegeist connectors add files -- npx -y @modelcontextprotocol/server-filesystem ~/Documents
+sitegeist connectors import    # the command-based servers of Claude Code and Claude Desktop
+```
+
+The extension can only name a connector from that file, so nothing a page or a model says can
+start a program. With sitegeist in more than one browser, `sitegeist browsers` lists them,
+`SITEGEIST_BROWSER=<name>` picks one for a harness, and harnesses can switch with `select_browser`.
+
+CLI commands: `mcp`, `install`, `status`, `browsers`, `connectors`, `allow <host>`, `reload`,
+`debug`, `pi-extension`. See `cli/README.md`.
 
 ## What changed in this fork
 
@@ -149,7 +182,7 @@ Extension:
   `tabGroups`, `nativeMessaging`, `alarms`.
 - Fixed the type errors in the custom provider dialogs.
 
-CLI (`cli/`, package `sitegeist`): native host, socket client, MCP server with 24 tools (including raw `cdp`),
+CLI (`cli/`, package `sitegeist`): native host, socket client, MCP server with 35 tools (including raw `cdp`),
 installer for all Chromium browser directories (macOS, Linux, Windows registry), pi
 extension generator.
 
@@ -228,6 +261,21 @@ npm run build && sitegeist reload
 ```
 
 Note: a production build bumps the version in `static/manifest.chrome.json`.
+
+## End-to-end tests
+
+`scripts/e2e/` runs the real extension in Chrome for Testing with a throwaway profile, a fake
+OpenAI-compatible model server and, for the bridge, the real path from an MCP client through
+`sitegeist mcp` and the native host. Nothing touches a real browser profile or provider.
+
+```bash
+SITEGEIST_VERSION=9.9.9 node scripts/build.mjs && (cd cli && npm run build)
+npm run test:e2e
+node scripts/e2e/bench-session.mjs           # what one streamed reply costs the panel
+node scripts/e2e/screens.mjs <output-dir>    # the panel's screens at side panel size, light and dark
+```
+
+`SITEGEIST_VERSION` keeps the build from bumping the manifest version.
 
 ## Checks
 

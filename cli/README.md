@@ -29,6 +29,8 @@ it needs no extra step. Reload the extension once after the first install.
 | `sitegeist mcp` | stdio MCP server exposing the browser tools |
 | `sitegeist install [--force]` | write the native host manifest (Chrome, Chromium, Brave, Edge, Arc, Vivaldi, Opera; Linux and Windows too) |
 | `sitegeist status` | is a browser reachable, is the extension connected |
+| `sitegeist browsers` | list the browsers with a live bridge; `SITEGEIST_BROWSER=<name>` picks one |
+| `sitegeist connectors` | list local MCP servers for the side panel agent; `add <name> -- <command>`, `remove <name>`, `import` |
 | `sitegeist allow <host>` | let agents open a site without a prompt (subdomains included) |
 | `sitegeist reload` | reload the extension (after rebuilding `dist-chrome`) |
 | `sitegeist debug` | bridge state, recent request timings, Chrome API benchmark |
@@ -95,15 +97,24 @@ or run `sitegeist allow <host>`. pi: set `SITEGEIST_AUTO_ALLOW=1` to auto-approv
 
 ## MCP tools
 
-`tabs_context`, `tabs_create`, `tabs_close`, `tabs_select`, `tabs_show`, `navigate`,
-`screenshot`, `read_page`, `get_page_text`, `get_page_html`, `find`, `click`, `hover`,
-`type`, `press`, `fill`, `scroll`, `drag`, `actions`, `run_js`, `cdp`, `wait`, `read_console`,
-`read_network`. `tabs_show` is the only tool that changes what the user sees.
+Pages: `navigate`, `read_page`, `get_page_text`, `get_page_html`, `find`, `screenshot`,
+`resize_window`. Input: `click`, `hover`, `type`, `press`, `fill`, `scroll`, `drag`, `actions`,
+`wait`. Tabs: `tabs_context`, `tabs_create`, `tabs_close`, `tabs_select`, `tabs_show`. Files and
+recording: `file_upload`, `upload_image`, `gif_creator`. Sign-in: `fill_login`. Skills:
+`skills_list`, `skill_get`, `prompts_list`. Debugging: `run_js`, `cdp`, `read_console`,
+`read_network`. Browsers: `list_connected_browsers`, `select_browser`. The user: `notify_user`.
+
+`tabs_show` is the only tool that changes what the user sees.
+
+Every tool call is a full model turn, so do as much as possible per call: `navigate` with
+`read: true` returns the page, `actions` runs a whole form (`fill`, `click`, `navigate` steps)
+and can end with `read` or `screenshot`, and `click`, `fill` and friends name an element by what
+a person reads (`text`) as well as by ref or selector.
 
 `sitegeist update` asks every running browser's extension to check its update URL now (used
 by `scripts/release-crx.sh`); the extension reloads itself once an update is downloaded.
 
 `cdp` sends a raw Chrome DevTools Protocol command to the session's current tab (emulation,
-headers, PDF, DOM, performance, input). `Page.navigate` goes through the site permission
-check; commands that reach other tabs or browser-wide state (`Target.*`, `Browser.*`,
-`Storage.*`, `Network.getAllCookies`, clearing cache or cookies) are refused.
+headers, PDF, DOM, performance, input). Under full access nothing is refused; with "ask before
+opening a new site" on, `Page.navigate` goes through the site check and commands that reach other
+tabs or browser-wide state (`Target.*`, `Browser.*`, `Storage.*`, cookies, cache) are refused.

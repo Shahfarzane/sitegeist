@@ -15,6 +15,7 @@
 - Skills that are not tied to a site (domain pattern `*`).
 - Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
 - `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `scripts/e2e/`: the real extension in Chrome for Testing against a fake model server and the real bridge path, a session benchmark, and a screen renderer (`npm run test:e2e`).
 - `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
 - `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
 - GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.
@@ -122,6 +123,7 @@
 - Skills that are not tied to a site (domain pattern `*`).
 - Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
 - `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `scripts/e2e/`: the real extension in Chrome for Testing against a fake model server and the real bridge path, a session benchmark, and a screen renderer (`npm run test:e2e`).
 - `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
 - `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
 - GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.

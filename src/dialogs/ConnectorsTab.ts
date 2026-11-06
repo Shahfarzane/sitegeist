@@ -25,7 +25,7 @@ function describe(status: ConnectorStatus): string {
 		case "off":
 			return "Off";
 		default:
-			return status.error ?? "Could not connect";
+			return status.error && !/failed to fetch/i.test(status.error) ? status.error : "Could not reach this server";
 	}
 }
 
@@ -219,10 +219,17 @@ export class ConnectorsTab extends SettingsTab {
 					<input
 						type="file"
 						webkitdirectory
-						class="text-xs text-muted-foreground"
+						hidden
+						id="plugin-folder"
 						aria-label="Plugin folder"
 						@change=${(e: Event) => this.installPlugin(e.target as HTMLInputElement)}
 					/>
+					${Button({
+						size: "sm",
+						variant: "secondary",
+						children: "Choose folder",
+						onClick: () => this.querySelector<HTMLInputElement>("#plugin-folder")?.click(),
+					})}
 				</div>
 			</div>
 		`;

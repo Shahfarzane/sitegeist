@@ -141,7 +141,9 @@ export class BridgeTab extends SettingsTab {
 						: ""
 				}
 
-				<div class="space-y-2">
+				${
+					this.mode === "ask"
+						? html`<div class="space-y-2">
 					<div class="text-sm font-medium text-foreground">Allowed sites</div>
 					${
 						this.hosts.length === 0
@@ -177,7 +179,9 @@ export class BridgeTab extends SettingsTab {
 						})}
 						${Button({ size: "sm", variant: "secondary", children: "Add", onClick: () => this.addHost() })}
 					</div>
-				</div>
+				</div>`
+						: ""
+				}
 
 				<div class="space-y-2">
 					<div class="text-sm font-medium text-foreground">Agent sessions in this browser</div>
