@@ -42,6 +42,7 @@
 
 ### Fixed
 
+- Side panel: every streamed token saved the whole chat to IndexedDB, wrote `lastUsedModel` and re-rendered the app, although a token changes nothing that is stored. On a chat with 40 screenshots one reply cost 811 full-session writes and 3.6 s of blocking main-thread time in a 3.7 s stream; it now costs 3 writes and 13 ms. Saves happen on message boundaries and never overlap.
 - Anthropic requests fail with 401 "CORS requests are not allowed for this Organization" for organizations that disallow browser access: a `declarativeNetRequest` rule removes the extension's `Origin` header from its own requests to `api.anthropic.com`, so they are not treated as CORS requests.
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
 - `actions` spaces steps by `settleMs` (default 80 ms) so a keystroke after Enter is not lost while the app opens its text editor, and accepts `key`, `text`, `doubleClick`, `move`, `sleep` and mid-list `screenshot` steps.

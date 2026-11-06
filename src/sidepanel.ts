@@ -59,6 +59,7 @@ import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
 import { SitegeistAppStorage } from "./storage/app-storage.js";
+import { CoalescedTask } from "./storage/coalesced-task.js";
 import { DebuggerTool } from "./tools/debugger.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
 import { AskUserWhichElementTool, skillTool } from "./tools/index.js";
@@ -152,6 +153,7 @@ function publishBusyState(): void {
 }
 window.addEventListener("pagehide", () => {
 	chrome.storage.session.remove(`sidepanel_busy_${currentWindowId}`).catch(() => undefined);
+	void saveSession();
 });
 
 // The tabs this chat session owns (its own tab group; never the user's tabs)
@@ -447,7 +449,7 @@ const shouldSaveSession = (messages: AgentMessage[]): boolean => {
 	return hasUserMsg && hasAssistantMsg;
 };
 
-const saveSession = async () => {
+const writeSession = async () => {
 	if (!storage.sessions || !currentSessionId || !agent || !currentTitle) return;
 
 	const state = agent.state;
@@ -526,6 +528,11 @@ const saveSession = async () => {
 	}
 };
 
+// A save structured-clones the whole chat, screenshots included. Writes never overlap, so a
+// slow one cannot be overtaken by an older snapshot.
+const sessionSaver = new CoalescedTask(writeSession);
+const saveSession = () => sessionSaver.request();
+
 const updateUrl = (sessionId: string) => {
 	const url = new URL(window.location.href);
 	if (homeTabId !== undefined) url.searchParams.set("tabId", String(homeTabId));
@@ -548,6 +555,16 @@ function uncappedStreamFn<F extends (model: Model<any>, ...rest: any[]) => any>(
 		}
 		return inner(model, ...rest);
 	}) as F;
+}
+
+let rememberedModel: string | undefined;
+
+/** Keep the model for the next new chat; written only when it changed. */
+function rememberModel(model: Model<any>): void {
+	const key = `${model.provider}/${model.id}`;
+	if (key === rememberedModel) return;
+	rememberedModel = key;
+	storage.settings.set("lastUsedModel", model).catch((err) => console.error("Failed to save lastUsedModel:", err));
 }
 
 const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true) => {
@@ -626,9 +643,11 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			const messages = agent.state.messages;
 			publishBusyState();
 
-			storage.settings
-				.set("lastUsedModel", agent.state.model)
-				.catch((err) => console.error("Failed to save lastUsedModel:", err));
+			// Hot path: a delta only moves agent.state.streamMessage, which AgentInterface renders
+			// itself. Doing anything more per token cost 98% of the main thread on long chats.
+			if (event.type === "message_update" || event.type === "tool_execution_update") return;
+
+			rememberModel(agent.state.model);
 
 			if (
 				event.type === "message_end" &&
@@ -660,7 +679,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				updateUrl(savedId);
 			}
 
-			if (currentSessionId) {
+			if (currentSessionId && (event.type === "message_end" || event.type === "agent_end")) {
 				saveSession();
 			}
 
