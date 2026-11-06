@@ -60,13 +60,13 @@ try {
 	for (const theme of ["light", "dark"]) {
 		await panel.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
 		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
-		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+		await panel.waitFor(`!!document.querySelector(".welcome-mark")`);
 		await shoot(panel, "welcome", theme);
 
 		await click(panel, "fake-model");
 		await shoot(panel, "models", theme);
 		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
-		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+		await panel.waitFor(`!!document.querySelector(".welcome-mark")`);
 
 		await panel.evaluate(`(() => {
 			const box = document.querySelector("message-editor textarea");
@@ -76,7 +76,7 @@ try {
 		})()`);
 		await shoot(panel, "slash", theme);
 		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
-		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+		await panel.waitFor(`!!document.querySelector(".welcome-mark")`);
 
 		await panel.evaluate(`document.querySelector("overflow-menu button").click()`);
 		await shoot(panel, "menu", theme);

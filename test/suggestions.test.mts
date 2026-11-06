@@ -17,12 +17,12 @@ test("a known page gets its own suggestions first", () => {
 	assert.equal(labels("https://acme.slack.com/archives/C1")[0], "Catch me up");
 });
 
-test("any readable page can be summarized", () => {
-	assert.deepEqual(labels("https://example.com/"), ["Summarize this page"]);
+test("a plain page offers nothing", () => {
+	assert.deepEqual(labels("https://example.com/"), []);
 });
 
 test("skills for the site are offered", () => {
-	assert.deepEqual(labels("https://example.com/", ["shop-search"]), ["Use shop-search", "Summarize this page"]);
+	assert.deepEqual(labels("https://example.com/", ["shop-search"]), ["Use shop-search"]);
 });
 
 test("the list stays short", () => {

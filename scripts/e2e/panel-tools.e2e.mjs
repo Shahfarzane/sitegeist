@@ -178,7 +178,15 @@ test("a saved prompt shows in the / menu and goes in as text", async () => {
 
 test("the welcome screen offers what fits the page", async () => {
 	const context = await openPanel(browser, server, { path: "/welcome" });
-	await context.panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+	const { panel, url } = context;
+	await panel.waitFor(`!!document.querySelector(".welcome-mark")`);
+	assert.equal(await panel.evaluate(`document.querySelectorAll(".tutorial-pill").length`), 0, "a plain page");
+	await panel.evaluate(`${idbPutSource}
+		window.__idbPut("skills", "welcome-skill", { name: "welcome-skill", domainPatterns: ["127.0.0.1"],
+			shortDescription: "Fixture", description: "Fixture", createdAt: "2026-01-01", lastUpdated: "2026-01-01",
+			examples: "", library: "" })`);
+	await panel.send("Page.navigate", { url: `${url}&new=true` });
+	await panel.waitFor(`document.body.innerText.includes("Use welcome-skill")`);
 	await context.panel.close();
 	await context.tab.close();
 });
