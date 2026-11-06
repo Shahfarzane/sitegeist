@@ -16,6 +16,7 @@ import { createServer, type Socket } from "node:net";
 import { basename, join } from "node:path";
 import type {
 	ClientToHost,
+	ExtConnectorRequest,
 	ExtCredentialsRequest,
 	ExtToHost,
 	HostCredentialsResponse,
@@ -23,6 +24,7 @@ import type {
 	HostToExt,
 } from "../../src/bridge/protocol.ts";
 import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
+import { readConnectors, type RunningConnector, runConnector } from "./connectors.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
@@ -214,6 +216,7 @@ function startRelay(): () => void {
 export function runNativeHost(): void {
 	let stopRelay: (() => void) | undefined;
 	let lookups: Promise<unknown> = Promise.resolve();
+	let connector: RunningConnector | undefined;
 
 	// stdin: frames from the extension
 	const parser = new FrameParser(MAX_FRAME_FROM_EXTENSION);
@@ -227,7 +230,19 @@ export function runNativeHost(): void {
 			return;
 		}
 		for (const m of messages) {
-			const message = m as ExtToHost | ExtCredentialsRequest;
+			const message = m as ExtToHost | ExtCredentialsRequest | ExtConnectorRequest;
+			if (message.type === "connector_list") {
+				process.stdout.write(encodeFrame({ names: Object.keys(readConnectors()) }));
+				continue;
+			}
+			if (message.type === "connector_open") {
+				connector = runConnector(message.name, (frame) => process.stdout.write(encodeFrame(frame)));
+				continue;
+			}
+			if (message.type === "connector_send") {
+				connector?.write(message.message);
+				continue;
+			}
 			if (message.type === "credentials") {
 				lookups = Promise.all([
 					lookups,
@@ -241,6 +256,7 @@ export function runNativeHost(): void {
 	});
 
 	const shutdown = () => {
+		connector?.stop();
 		stopRelay?.();
 		process.exit(0);
 	};

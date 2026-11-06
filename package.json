@@ -22,6 +22,7 @@
 		"@mariozechner/pi-agent-core": "file:../pi-mono/packages/agent",
 		"@mariozechner/pi-ai": "file:../pi-mono/packages/ai",
 		"@mariozechner/pi-web-ui": "file:../pi-mono/packages/web-ui",
+		"@modelcontextprotocol/sdk": "1.32.1",
 		"@sinclair/typebox": "^0.34.52",
 		"chart.js": "^4.5.1",
 		"docx-preview": "^0.4.1",

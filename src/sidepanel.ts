@@ -36,6 +36,7 @@ import {
 	sessionIdForTab,
 	sessionOwningTab,
 } from "./browser/session.js";
+import { ConnectorManager } from "./connectors/manager.js";
 import "./components/OverflowMenu.js";
 import type { MenuEntry } from "./components/OverflowMenu.js";
 import { Toast } from "./components/Toast.js";
@@ -43,6 +44,7 @@ import { AboutTab } from "./dialogs/AboutTab.js";
 import { ApiKeyOrOAuthDialog } from "./dialogs/ApiKeyOrOAuthDialog.js";
 import { ApiKeysOAuthTab } from "./dialogs/ApiKeysOAuthTab.js";
 import { BridgeTab } from "./dialogs/BridgeTab.js";
+import { ConnectorsTab } from "./dialogs/ConnectorsTab.js";
 import { CostsTab } from "./dialogs/CostsTab.js";
 import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
 import { NotificationsTab } from "./dialogs/NotificationsTab.js";
@@ -149,6 +151,12 @@ const recordedCostMessages = new Set<AgentMessage>();
 
 // Builds each turn's view of the chat; holds the summary of older turns once there is one.
 let contextManager: ContextManager | undefined;
+
+// MCP servers the agent can use, connected once per panel.
+let connectors: ConnectorManager | undefined;
+let connectorsReady: Promise<void> = Promise.resolve();
+/** The first prompt of a chat should have the connectors, but not wait long for a slow one. */
+const CONNECTORS_WAIT_MS = 3000;
 
 // Knows when a run in this panel is going, so the next panel can tell it died.
 const runTracker = new RunTracker();
@@ -437,12 +445,27 @@ async function hasAnyApiKey(): Promise<boolean> {
 	return providers.length > 0;
 }
 
+function connectorsTab(): ConnectorsTab {
+	const tab = new ConnectorsTab();
+	if (connectors) tab.host = { manager: connectors, refresh: refreshConnectors };
+	return tab;
+}
+
+/** Connect what is on and hand the tools to the agent. Tools take effect on the next turn. */
+async function refreshConnectors(): Promise<void> {
+	if (!connectors || !agent) return;
+	const previous = new Set(connectors.tools);
+	const tools = await connectors.refresh();
+	agent.setTools([...agent.state.tools.filter((t) => !previous.has(t)), ...tools]);
+}
+
 function settingsSections(): SettingsSection[] {
 	return [
 		{ label: "Providers", hint: "Subscriptions and API keys", tab: new ApiKeysOAuthTab() },
 		{ label: "Custom providers", hint: "OpenAI- or Anthropic-compatible endpoints", tab: new CustomProvidersTab() },
 		{ label: "Skills", hint: "Site scripts the agent can reuse", tab: new SkillsTab() },
 		{ label: "Prompts", hint: "Reusable prompts for the / menu", tab: new PromptsTab() },
+		{ label: "Connectors", hint: "MCP servers and plugins", tab: connectorsTab() },
 		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
 		{ label: "Notifications", hint: "When a task finishes or needs you", tab: new NotificationsTab() },
 		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },
@@ -930,6 +953,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		},
 		onBeforeSend: async () => {
 			if (!agent) return;
+			await Promise.race([connectorsReady, new Promise((resolve) => setTimeout(resolve, CONNECTORS_WAIT_MS))]);
 			browserSession?.userAskedAgain();
 			cancelRetry();
 			retryAttempts = 0;
@@ -1019,6 +1043,9 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			return tools;
 		},
 	});
+
+	connectors ??= new ConnectorManager(storage.connectors);
+	connectorsReady = refreshConnectors().catch((err) => console.warn("Connecting connectors failed:", err));
 
 	// Register custom message renderers after agentInterface is available
 	if (chatPanel.agentInterface) {

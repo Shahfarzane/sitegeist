@@ -157,6 +157,17 @@ export interface HostCredentialsResponse {
 	error?: string;
 }
 
+/** Local connectors: the extension names one, the host runs it from its own config. */
+export type ExtConnectorRequest =
+	| { type: "connector_list" }
+	| { type: "connector_open"; name: string }
+	| { type: "connector_send"; message: unknown };
+
+export type HostConnectorMessage =
+	| { type: "connector_message"; message: unknown }
+	| { type: "connector_part"; data: string; last: boolean }
+	| { type: "connector_closed"; error?: string };
+
 /** Error codes the extension returns. */
 export const ERR = {
 	BAD_PARAMS: "bad_params",

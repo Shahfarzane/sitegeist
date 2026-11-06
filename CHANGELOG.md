@@ -4,6 +4,8 @@
 
 ### Added
 
+- Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
+- Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
 - Saved prompts: Settings > Prompts, inserted as text from the `/` menu.
 - Skills that are not tied to a site (domain pattern `*`).
 - Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
@@ -59,6 +61,7 @@
 
 ### Fixed
 
+- A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
 - `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
 - Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
 - Parallel tasks could lose their browser session: every panel and the service worker read and rewrote one table, so concurrent writers dropped each other's records and left tab groups orphaned. Writes now go through a Web Lock, a tab adopted in another context cannot come back with a stale write, and a tool call that changes nothing no longer rewrites the table and wakes the worker.
@@ -103,6 +106,8 @@
 
 ### Added
 
+- Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
+- Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
 - Saved prompts: Settings > Prompts, inserted as text from the `/` menu.
 - Skills that are not tied to a site (domain pattern `*`).
 - Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
@@ -141,6 +146,7 @@
 
 ### Fixed
 
+- A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
 - `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
 - Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
 - Settings dialog tabs not responding to clicks (upstream `pi-web-ui` built with `tsgo` broke Lit decorator reactivity)
