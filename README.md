@@ -272,7 +272,7 @@ OpenAI-compatible model server and, for the bridge, the real path from an MCP cl
 SITEGEIST_VERSION=9.9.9 node scripts/build.mjs && (cd cli && npm run build)
 npm run test:e2e
 node scripts/e2e/bench-session.mjs           # what one streamed reply costs the panel
-node scripts/e2e/screens.mjs <output-dir>    # the panel's screens at side panel size, light and dark
+node scripts/e2e/screens.mjs <output-dir> [width]   # the panel's screens at side panel size, light and dark
 ```
 
 `SITEGEIST_VERSION` keeps the build from bumping the manifest version.

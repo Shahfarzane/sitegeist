@@ -45,6 +45,11 @@
 
 ### Changed
 
+- New look for the panel: warm light and cool dark colors, a teal accent on the caret, focus ring and links, a rounded composer with a `+` and a round send button, and a calmer empty chat.
+- The panel now uses a bundled typeface, Public Sans, with larger text: 16 px in the chat and composer. The theme's font never reached the page before, so it was on the system font.
+- Nothing moves while the panel loads: the header and composer are in place from the first frame, and suggestions arrive in space of their own. Replaces the "Loading..." screen.
+- A row above the composer shows the tab the agent is working on.
+- Padding and gaps follow a 4 px scale everywhere in the panel, and your messages sit on the right.
 - `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
