@@ -229,11 +229,14 @@ test("two browsers: the harness lists them and switches", async () => {
 		const after = await harness.callText("list_connected_browsers", {});
 		assert.equal(after.find((b) => b.inUse).id, other.id);
 		await harness.callText("navigate", { url: `${server.origin}/form` });
-		const targets = await second.targets();
-		assert.ok(
-			targets.some((t) => t.url.endsWith("/form")),
-			"the tab must open in the selected browser",
-		);
+		// The target list trails the navigation by a moment.
+		const until = Date.now() + 3000;
+		let opened = false;
+		while (!opened && Date.now() < until) {
+			opened = (await second.targets()).some((t) => t.url.endsWith("/form"));
+			if (!opened) await new Promise((r) => setTimeout(r, 100));
+		}
+		assert.ok(opened, "the tab must open in the selected browser");
 		await harness.callText("select_browser", { browser: here.id });
 	} finally {
 		await second.close();
