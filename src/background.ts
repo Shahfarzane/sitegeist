@@ -182,8 +182,13 @@ function openPanelOnTab(tabId: number, source: string): void {
 chrome.tabs.onActivated.addListener((info) => void reconcileActiveTab(info.windowId, info.tabId));
 chrome.tabs.onRemoved.addListener((tabId) => panelPathCache.delete(tabId));
 
+// Several tabs joining a session arrive as a burst of writes; one pass handles them all.
+let sessionsChangedTimer: ReturnType<typeof setTimeout> | undefined;
 chrome.storage.onChanged.addListener((changes, area) => {
-	if (area === "local" && "browser_sessions" in changes) void onSessionsChanged();
+	if (area === "local" && "browser_sessions" in changes) {
+		clearTimeout(sessionsChangedTimer);
+		sessionsChangedTimer = setTimeout(() => void onSessionsChanged(), 50);
+	}
 	if (area === "session" && Object.keys(changes).some((k) => k.startsWith(PANEL_BUSY_PREFIX)))
 		void onActiveTabsChanged();
 });

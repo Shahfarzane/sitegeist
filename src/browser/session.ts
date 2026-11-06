@@ -20,6 +20,10 @@ import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport } from
 
 const STORAGE_KEY = "browser_sessions";
 const RELEASED_KEY = "browser_released_tabs";
+const TABLE_LOCK = "sitegeist-browser-sessions";
+const RELEASED_LOCK = "sitegeist-released-tabs";
+/** How stale a session's "last used" time may get before it alone is worth a write. */
+const LAST_USED_WRITE_MS = 30000;
 const GROUP_PREFIX = "Sitegeist";
 /** Tool calls closer together than this belong to one agent run. */
 const RUN_GAP_MS = 2 * 60 * 1000;
@@ -74,6 +78,19 @@ async function writeTable(table: SessionTable): Promise<void> {
 }
 
 /**
+ * Read-modify-write of the table. Every panel and the service worker hold their own copy of this
+ * module and write the same key; without the lock concurrent writers drop each other's records.
+ */
+function updateTable<T>(change: (table: SessionTable) => T | Promise<T>): Promise<T> {
+	return navigator.locks.request(TABLE_LOCK, async () => {
+		const table = await readTable();
+		const result = await change(table);
+		await writeTable(table);
+		return result;
+	});
+}
+
+/**
  * Tabs the user took out of an agent's group (Ungroup, dragged out, pinned). Kept outside the
  * session table so it survives the owning session being dropped: a side panel reopening on
  * such a tab must not pull it back into a group.
@@ -83,15 +100,20 @@ async function readReleased(): Promise<number[]> {
 	return (data[RELEASED_KEY] as number[] | undefined) ?? [];
 }
 
-async function markReleased(tabId: number): Promise<void> {
-	const released = await readReleased();
-	if (!released.includes(tabId)) await chrome.storage.local.set({ [RELEASED_KEY]: [...released, tabId] });
+function updateReleased(change: (released: number[]) => number[]): Promise<void> {
+	return navigator.locks.request(RELEASED_LOCK, async () => {
+		const released = await readReleased();
+		const next = change(released);
+		if (next !== released) await chrome.storage.local.set({ [RELEASED_KEY]: next });
+	});
 }
 
-export async function unmarkReleased(tabId: number): Promise<void> {
-	const released = await readReleased();
-	if (released.includes(tabId))
-		await chrome.storage.local.set({ [RELEASED_KEY]: released.filter((id) => id !== tabId) });
+function markReleased(tabId: number): Promise<void> {
+	return updateReleased((released) => (released.includes(tabId) ? released : [...released, tabId]));
+}
+
+export function unmarkReleased(tabId: number): Promise<void> {
+	return updateReleased((released) => (released.includes(tabId) ? released.filter((id) => id !== tabId) : released));
 }
 
 /** True when the user took this tab back from an agent; automatic adoption must leave it alone. */
@@ -103,9 +125,10 @@ export async function isReleasedByUser(tabId: number): Promise<boolean> {
 export async function forgetReleasedTabs(liveTabIds?: Set<number>): Promise<void> {
 	const live =
 		liveTabIds ?? new Set((await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[])).map((t) => t.id ?? -1));
-	const released = await readReleased();
-	const kept = released.filter((id) => live.has(id));
-	if (kept.length !== released.length) await chrome.storage.local.set({ [RELEASED_KEY]: kept });
+	await updateReleased((released) => {
+		const kept = released.filter((id) => live.has(id));
+		return kept.length === released.length ? released : kept;
+	});
 }
 
 /** Chromium refuses tab edits while a tab is being dragged or animated; retry briefly. */
@@ -194,7 +217,6 @@ export async function pruneSessions(
 	dropped: number;
 	closedTabs: number;
 }> {
-	const table = await readTable();
 	const liveTabs = new Map<number, chrome.tabs.Tab>();
 	for (const t of await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[])) {
 		if (t.id !== undefined) liveTabs.set(t.id, t);
@@ -202,44 +224,45 @@ export async function pruneSessions(
 	let dropped = 0;
 	let closedTabs = 0;
 	const now = Date.now();
-	for (const s of Object.values(table)) {
-		const inst = instances.get(s.id);
-		const state = inst ? (inst as unknown as { state: PersistedSession }).state : s;
-		state.tabIds = state.tabIds.filter((id) => liveTabs.has(id));
-		if (state.groupedTabIds) state.groupedTabIds = state.groupedTabIds.filter((id) => state.tabIds.includes(id));
-		if (state.currentTabId !== undefined && !liveTabs.has(state.currentTabId))
-			state.currentTabId = state.tabIds[state.tabIds.length - 1];
-		if (state.homeTabId !== undefined && !liveTabs.has(state.homeTabId)) state.homeTabId = undefined;
-		const isBridge = state.id.startsWith("bridge-");
-		if (isBridge && !liveIds.has(state.id)) {
-			for (const id of [...state.tabIds]) {
-				const tab = liveTabs.get(id);
-				if (!tab || !isBlankUrl(tab.url ?? tab.pendingUrl) || tab.active) continue;
-				await chrome.tabs.remove(id).catch(() => undefined);
-				state.tabIds = state.tabIds.filter((x) => x !== id);
-				closedTabs++;
-			}
-			if (state.currentTabId !== undefined && !state.tabIds.includes(state.currentTabId))
+	await updateTable(async (table) => {
+		for (const s of Object.values(table)) {
+			const inst = instances.get(s.id);
+			const state = inst ? (inst as unknown as { state: PersistedSession }).state : s;
+			state.tabIds = state.tabIds.filter((id) => liveTabs.has(id));
+			if (state.groupedTabIds) state.groupedTabIds = state.groupedTabIds.filter((id) => state.tabIds.includes(id));
+			if (state.currentTabId !== undefined && !liveTabs.has(state.currentTabId))
 				state.currentTabId = state.tabIds[state.tabIds.length - 1];
-			if (state.tabIds.length === 0) {
+			if (state.homeTabId !== undefined && !liveTabs.has(state.homeTabId)) state.homeTabId = undefined;
+			const isBridge = state.id.startsWith("bridge-");
+			if (isBridge && !liveIds.has(state.id)) {
+				for (const id of [...state.tabIds]) {
+					const tab = liveTabs.get(id);
+					if (!tab || !isBlankUrl(tab.url ?? tab.pendingUrl) || tab.active) continue;
+					await chrome.tabs.remove(id).catch(() => undefined);
+					state.tabIds = state.tabIds.filter((x) => x !== id);
+					closedTabs++;
+				}
+				if (state.currentTabId !== undefined && !state.tabIds.includes(state.currentTabId))
+					state.currentTabId = state.tabIds[state.tabIds.length - 1];
+				if (state.tabIds.length === 0) {
+					delete table[state.id];
+					instances.delete(state.id);
+					dropped++;
+					continue;
+				}
+				const userLooking = state.tabIds.some((id) => liveTabs.get(id)?.active);
+				if (state.groupId !== undefined && !userLooking && now - (state.lastUsedAt ?? 0) > idleMs) {
+					await chrome.tabGroups.update(state.groupId, { collapsed: true }).catch(() => undefined);
+				}
+			} else if (!isBridge && state.tabIds.length === 0 && state.homeTabId === undefined) {
 				delete table[state.id];
 				instances.delete(state.id);
 				dropped++;
 				continue;
 			}
-			const userLooking = state.tabIds.some((id) => liveTabs.get(id)?.active);
-			if (state.groupId !== undefined && !userLooking && now - (state.lastUsedAt ?? 0) > idleMs) {
-				await chrome.tabGroups.update(state.groupId, { collapsed: true }).catch(() => undefined);
-			}
-		} else if (!isBridge && state.tabIds.length === 0 && state.homeTabId === undefined) {
-			delete table[state.id];
-			instances.delete(state.id);
-			dropped++;
-			continue;
+			table[state.id] = state;
 		}
-		table[state.id] = state;
-	}
-	await writeTable(table);
+	});
 	await forgetReleasedTabs(new Set(liveTabs.keys()));
 	return { dropped, closedTabs };
 }
@@ -249,17 +272,17 @@ export async function pruneSessions(
  * session in the window (ungroup its tabs, which stay open, and forget it).
  */
 export async function releaseOtherPanelSessions(windowId: number, keepId: string): Promise<void> {
-	const table = await readTable();
-	for (const s of Object.values(table)) {
-		if (s.id === keepId || s.id.startsWith("bridge-") || s.windowId !== windowId) continue;
-		for (const tabId of s.tabIds) {
-			await detachTab(tabId, true);
-			await chrome.tabs.ungroup(tabId).catch(() => undefined);
+	await updateTable(async (table) => {
+		for (const s of Object.values(table)) {
+			if (s.id === keepId || s.id.startsWith("bridge-") || s.windowId !== windowId) continue;
+			for (const tabId of s.tabIds) {
+				await detachTab(tabId, true);
+				await chrome.tabs.ungroup(tabId).catch(() => undefined);
+			}
+			delete table[s.id];
+			instances.delete(s.id);
 		}
-		delete table[s.id];
-		instances.delete(s.id);
-	}
-	await writeTable(table);
+	});
 }
 
 /** "omp", then "omp 2", "omp 3" ...: two agents must not share a group title. */
@@ -311,6 +334,8 @@ export class BrowserSession {
 	private lostGroupId?: number;
 	/** When the user removed our group mid-run; the agent's next request for a tab is refused once. */
 	private groupRemovedAt?: number;
+	/** The record as last written, to skip writes that change nothing. */
+	private persistedFingerprint?: string;
 
 	private constructor(state: PersistedSession) {
 		this.state = state;
@@ -346,17 +371,17 @@ export class BrowserSession {
 	 * tab maps to exactly one task (e.g. after "New chat" rebinds the tab to a fresh session).
 	 */
 	async setHomeTab(tabId: number): Promise<void> {
-		const table = await readTable();
-		for (const s of Object.values(table)) {
-			if (s.id !== this.state.id && s.homeTabId === tabId) {
-				s.homeTabId = undefined;
-				const other = instances.get(s.id);
-				if (other) other.state.homeTabId = undefined;
+		await updateTable((table) => {
+			for (const s of Object.values(table)) {
+				if (s.id !== this.state.id && s.homeTabId === tabId) {
+					s.homeTabId = undefined;
+					const other = instances.get(s.id);
+					if (other) other.state.homeTabId = undefined;
+				}
 			}
-		}
-		this.state.homeTabId = tabId;
-		table[this.state.id] = this.state;
-		await writeTable(table);
+			this.state.homeTabId = tabId;
+			table[this.state.id] = this.state;
+		});
 	}
 
 	/**
@@ -392,13 +417,15 @@ export class BrowserSession {
 
 	/** Rename a session in place (a sidepanel session gets its real id on first save). */
 	static async rename(oldId: string, newId: string): Promise<void> {
-		const table = await readTable();
-		const state = table[oldId];
-		if (!state) return;
-		delete table[oldId];
-		state.id = newId;
-		table[newId] = state;
-		await writeTable(table);
+		const renamed = await updateTable((table) => {
+			const state = table[oldId];
+			if (!state) return false;
+			delete table[oldId];
+			state.id = newId;
+			table[newId] = state;
+			return true;
+		});
+		if (!renamed) return;
 		const inst = instances.get(oldId);
 		if (inst) {
 			instances.delete(oldId);
@@ -407,18 +434,41 @@ export class BrowserSession {
 		}
 	}
 
+	/**
+	 * Tool calls land here constantly, and every write of the table wakes the service worker's
+	 * panel bookkeeping, so a change of nothing but the time is only written now and then.
+	 */
 	private async persist(): Promise<void> {
-		this.state.lastUsedAt = Date.now();
-		const table = await readTable();
-		table[this.state.id] = this.state;
-		await writeTable(table);
+		const now = Date.now();
+		const fingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
+		if (fingerprint === this.persistedFingerprint && now - (this.state.lastUsedAt ?? 0) < LAST_USED_WRITE_MS) return;
+		this.state.lastUsedAt = now;
+		await updateTable((table) => {
+			// A tab has one owner. One that sits in another record now was adopted after we last
+			// looked, in another context; writing our copy would give it two.
+			const elsewhere = new Set<number>();
+			for (const s of Object.values(table)) if (s.id !== this.state.id) for (const id of s.tabIds) elsewhere.add(id);
+			if (this.state.tabIds.some((id) => elsewhere.has(id))) {
+				this.state.tabIds = this.state.tabIds.filter((id) => !elsewhere.has(id));
+				this.state.groupedTabIds = this.state.groupedTabIds?.filter((id) => !elsewhere.has(id));
+				if (this.state.currentTabId !== undefined && elsewhere.has(this.state.currentTabId)) {
+					this.state.currentTabId = this.state.tabIds[this.state.tabIds.length - 1];
+				}
+			}
+			table[this.state.id] = this.state;
+		});
+		this.persistedFingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 	}
 
 	/** Drop tabs that no longer exist and re-find the group if the id went stale. */
 	async reconcile(): Promise<void> {
 		const alive: number[] = [];
+		const known = new Map<number, chrome.tabs.Tab>();
 		for (const id of this.state.tabIds) {
-			if (await tabExists(id)) alive.push(id);
+			const tab = await tabExists(id);
+			if (!tab) continue;
+			alive.push(id);
+			known.set(id, tab);
 		}
 		this.state.tabIds = alive;
 		if (this.state.currentTabId !== undefined && !alive.includes(this.state.currentTabId)) {
@@ -455,7 +505,7 @@ export class BrowserSession {
 		const groupId = this.state.groupId;
 		const neverGrouped: number[] = [];
 		for (const id of alive) {
-			const tab = await tabExists(id);
+			const tab = known.get(id) ?? (await tabExists(id));
 			if (!tab) continue;
 			if (groupId !== undefined && tab.groupId === groupId) await this.markGrouped(id);
 			else if (this.state.groupedTabIds.includes(id)) await this.handBack(id);
@@ -613,16 +663,16 @@ export class BrowserSession {
 	/** Take ownership of an existing tab (user handed it over, or a popup opened from an owned tab). */
 	async adopt(tabId: number, makeCurrent = true): Promise<void> {
 		// A tab belongs to one session; take it away from whoever had it before.
-		const table = await readTable();
-		for (const s of Object.values(table)) {
-			if (s.id === this.state.id || !s.tabIds.includes(tabId)) continue;
-			const other = instances.get(s.id);
-			const target = other ? other.state : s;
-			target.tabIds = target.tabIds.filter((id) => id !== tabId);
-			if (target.currentTabId === tabId) target.currentTabId = target.tabIds[target.tabIds.length - 1];
-			table[s.id] = target;
-		}
-		await writeTable(table);
+		await updateTable((table) => {
+			for (const s of Object.values(table)) {
+				if (s.id === this.state.id || !s.tabIds.includes(tabId)) continue;
+				const other = instances.get(s.id);
+				const target = other ? other.state : s;
+				target.tabIds = target.tabIds.filter((id) => id !== tabId);
+				if (target.currentTabId === tabId) target.currentTabId = target.tabIds[target.tabIds.length - 1];
+				table[s.id] = target;
+			}
+		});
 		// Adopting is a deliberate hand-over, so it overrides an earlier "taken back".
 		await unmarkReleased(tabId);
 		if (!this.state.tabIds.includes(tabId)) this.state.tabIds.push(tabId);
@@ -764,9 +814,9 @@ export class BrowserSession {
 	/** Detach debuggers and forget the session; tabs stay open for the user. */
 	async close(): Promise<void> {
 		for (const id of this.state.tabIds) await detachTab(id, true);
-		const table = await readTable();
-		delete table[this.state.id];
-		await writeTable(table);
+		await updateTable((table) => {
+			delete table[this.state.id];
+		});
 		instances.delete(this.state.id);
 	}
 }
