@@ -14,6 +14,7 @@ import { createRef, ref } from "lit/directives/ref.js";
 import { Loader2, MousePointer2 } from "lucide";
 import { getCurrentBrowserSession } from "../browser/current.js";
 import { injectScript } from "../browser/inject.js";
+import { notifyFromPanel } from "../notify/notifications.js";
 import { ASK_USER_WHICH_ELEMENT_TOOL_DESCRIPTION } from "../prompts/prompts.js";
 import "../utils/i18n-extension.js";
 
@@ -539,6 +540,13 @@ export class AskUserWhichElementTool implements AgentTool<typeof selectElementSc
 			if (signal?.aborted) {
 				throw new Error("Tool execution was aborted");
 			}
+
+			notifyFromPanel({
+				kind: "needs-you",
+				title: "Sitegeist needs you",
+				message: "Pick an element on the page so the task can continue.",
+				tabId: getCurrentBrowserSession()?.currentTabId,
+			});
 
 			// The user has to see the page to pick an element: bring the session tab forward
 			const session = getCurrentBrowserSession();

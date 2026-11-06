@@ -4,6 +4,7 @@
 
 ### Added
 
+- Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
 - Long chats stay alive: the model now gets a pruned view of the chat (older screenshots and long tool output drop out in batches, so a provider's prompt cache keeps matching between steps), and a chat nearing the context window is summarized instead of failing. The chat on screen stays whole; the summary is stored beside it. A context overflow from the provider triggers the same summary and the run continues.
 - Interrupted runs: a task that ended because its panel closed offers Resume when the chat is opened again. Tool calls left open get an "outcome unknown" result so the model checks the page before repeating them. A Web Lock tells a dead run from one still going in another panel.
 - A failed turn retries on its own with backoff when the cause can pass (rate limit, overloaded server, dropped connection). Usage limits and bad keys still stop. Escape cancels a waiting retry.
@@ -28,6 +29,7 @@
 
 ### Changed
 
+- Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
 - `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
 - Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
@@ -92,6 +94,7 @@
 
 ### Added
 
+- Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
 - Browser-based OAuth login for Anthropic (Claude Pro/Max), OpenAI Codex (ChatGPT Plus/Pro), GitHub Copilot, and Google Gemini CLI
 - Combined "API Keys & OAuth" settings tab with subscription login and API key entry
 - Welcome setup dialog on first launch when no providers are configured
@@ -105,6 +108,7 @@
 
 ### Changed
 
+- Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
 - `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
 - Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.

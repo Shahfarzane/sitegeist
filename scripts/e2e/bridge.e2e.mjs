@@ -85,3 +85,24 @@ test("a line break in long text stays a key press", async () => {
 	const value = await harness.callText("run_js", { code: `document.querySelector("textarea").value` });
 	assert.equal(value.value, text);
 });
+
+test("full access: nothing about raw CDP is refused", async () => {
+	const result = await harness
+		.callText("cdp", { method: "Storage.getStorageKey", params: {} })
+		.catch((err) => err.message);
+	assert.ok(!String(JSON.stringify(result)).includes("not available through the bridge"), JSON.stringify(result));
+});
+
+test("a browser that stored ask moves to full access once", async () => {
+	const worker = await browser.worker();
+	assert.equal(
+		await worker.evaluate(
+			`chrome.storage.local.get("bridge_full_access_applied").then((d) => d.bridge_full_access_applied)`,
+		),
+		true,
+	);
+	assert.notEqual(
+		await worker.evaluate(`chrome.storage.local.get("bridge_permission_mode").then((d) => d.bridge_permission_mode)`),
+		"ask",
+	);
+});

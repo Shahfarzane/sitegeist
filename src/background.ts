@@ -7,6 +7,7 @@ import {
 	listSessions,
 	unmarkReleased,
 } from "./browser/session.js";
+import { startNotifications } from "./notify/notifications.js";
 import { startSelfUpdate } from "./utils/self-update.js";
 
 // Keep popups opened by agent-driven background tabs from stealing the user's focus.
@@ -34,6 +35,7 @@ chrome.webNavigation.onTabReplaced.addListener(async ({ replacedTabId, tabId }) 
 // native-messaging bridge. Connects when the CLI has installed the host manifest.
 startBridge();
 startSelfUpdate(trace);
+startNotifications();
 
 // ============================================================================
 // PER-TAB SIDE PANEL (Claude-in-Chrome model)

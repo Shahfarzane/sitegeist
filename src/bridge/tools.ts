@@ -40,6 +40,8 @@ import {
 	waitForLoad,
 } from "../browser/page.js";
 import type { BrowserSession } from "../browser/session.js";
+import { showNotification } from "../notify/notifications.js";
+import { getPermissionMode } from "./permissions.js";
 import { ERR, type RpcError } from "./protocol.js";
 
 export class BridgeError extends Error {
@@ -89,9 +91,9 @@ function requireStr(params: Params, key: string): string {
 }
 
 /**
- * Raw CDP stays inside the session's own tab: commands that reach other targets or
- * browser-wide state (every site's cookies, cache, storage) would bypass the per-site
- * permission model, so they are refused. Page.navigate goes through the permission check.
+ * With "ask before opening a new site" on, raw CDP stays inside the session's own tab: commands
+ * that reach other targets or browser-wide state (every site's cookies, cache, storage) would
+ * bypass the per-site permissions. Full access has none to bypass, so nothing is refused there.
  */
 const CDP_DENIED_PREFIXES = ["Target.", "Browser.", "Storage.", "SystemInfo."];
 const CDP_DENIED_METHODS = new Set([
@@ -103,11 +105,12 @@ const CDP_DENIED_METHODS = new Set([
 	"Page.setDownloadBehavior",
 ]);
 
-function checkCdpMethod(method: string): void {
+async function checkCdpMethod(method: string): Promise<void> {
 	if (!/^[A-Z][A-Za-z]+\.[a-z][A-Za-z]+$/.test(method)) {
 		throw new BridgeError(ERR.BAD_PARAMS, `method must look like Domain.command, got "${method}"`);
 	}
-	if (CDP_DENIED_METHODS.has(method) || CDP_DENIED_PREFIXES.some((p) => method.startsWith(p))) {
+	const denied = CDP_DENIED_METHODS.has(method) || CDP_DENIED_PREFIXES.some((p) => method.startsWith(p));
+	if (denied && (await getPermissionMode()) === "ask") {
 		throw new BridgeError(
 			ERR.PERMISSION_DENIED,
 			`${method} is not available through the bridge: it reaches beyond this session's tab. Use navigate, tabs_create or tabs_close for tab changes.`,
@@ -427,7 +430,7 @@ export const handlers: Record<string, Handler> = {
 	/** Any Chrome DevTools Protocol command on the session's current tab. */
 	cdp: async (ctx, params) => {
 		const method = requireStr(params, "method");
-		checkCdpMethod(method);
+		await checkCdpMethod(method);
 		const cdpParams = params.params ?? {};
 		if (typeof cdpParams !== "object" || Array.isArray(cdpParams)) {
 			throw new BridgeError(ERR.BAD_PARAMS, "params must be an object");
@@ -439,6 +442,17 @@ export const handlers: Record<string, Handler> = {
 		}
 		const tabId = await resolveTab(ctx, params, true);
 		return { tabId, result: await cdpSend(tabId, method, cdpParams as Params) };
+	},
+
+	/** Tell the user something needs them; clicking the notification shows the tab. */
+	notify: async (ctx, params) => {
+		const shown = await showNotification({
+			kind: "needs-you",
+			title: requireStr(params, "title"),
+			message: str(params, "message") ?? "",
+			tabId: num(params, "tabId") ?? ctx.session.currentTabId,
+		});
+		return { shown };
 	},
 
 	wait: async (ctx, params) => {

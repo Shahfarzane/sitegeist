@@ -37,10 +37,12 @@
 		"declarativeNetRequest",
 		"tabGroups",
 		"nativeMessaging",
-		"alarms"
+		"alarms",
+		"offscreen"
 	],
 	"optional_permissions": [
-		"userScripts"
+		"userScripts",
+		"notifications"
 	],
 	"host_permissions": [
 		"http://*/*",

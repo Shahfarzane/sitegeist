@@ -10,9 +10,11 @@
 import { stopScreencastsOwnedBy } from "../browser/cdp.js";
 import { setCdpMessageHandler } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
+import { showNotification } from "../notify/notifications.js";
 import {
 	addPendingRequest,
 	allowHost,
+	applyFullAccessDefault,
 	DECISION_KEY_PREFIX,
 	getPermissionMode,
 	hostOf,
@@ -163,6 +165,11 @@ async function askPermission(state: ClientState, url: string): Promise<boolean> 
 		event: "permission_request",
 		data: { requestId, host, url, timeoutMs: PERMISSION_TIMEOUT_MS },
 	});
+	showNotification({
+		kind: "needs-you",
+		title: `${state.name} wants to open ${host}`,
+		message: "Answer in the agent, or in Settings > Bridge.",
+	}).catch(() => undefined);
 	const result = await decision;
 	await removePendingRequest(requestId);
 	if (result === "allow_host") await allowHost(host);
@@ -494,6 +501,7 @@ let alarmTicks = 0;
 
 /** Wire the bridge into the service worker. Safe to call on every worker start. */
 export function startBridge(): void {
+	applyFullAccessDefault().catch(() => undefined);
 	dropEmptyBridgeSessions().catch(() => undefined);
 	// Clients are re-announced when the host sees our hello; give that a moment before
 	// deciding which bridge sessions are abandoned.

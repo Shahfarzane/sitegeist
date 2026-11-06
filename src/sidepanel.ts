@@ -19,7 +19,7 @@ import {
 	setAppStorage,
 	setShowJsonMode,
 } from "@mariozechner/pi-web-ui";
-import { html, render } from "lit";
+import { html, render, type TemplateResult } from "lit";
 import { Circle, Download, History, Link, Plus, Settings, Square } from "lucide";
 import type { Compaction } from "./agent/context.js";
 import { SUMMARY_SYSTEM_PROMPT } from "./agent/context.js";
@@ -45,6 +45,7 @@ import { ApiKeysOAuthTab } from "./dialogs/ApiKeysOAuthTab.js";
 import { BridgeTab } from "./dialogs/BridgeTab.js";
 import { CostsTab } from "./dialogs/CostsTab.js";
 import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
+import { NotificationsTab } from "./dialogs/NotificationsTab.js";
 import { RecordSkillDialog } from "./dialogs/RecordSkillDialog.js";
 import { SessionCostDialog } from "./dialogs/SessionCostDialog.js";
 import { SitegeistSessionListDialog } from "./dialogs/SessionListDialog.js";
@@ -59,6 +60,7 @@ import {
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
 import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
+import { notifyFromPanel, notifySettings, setNotifyEnabled } from "./notify/notifications.js";
 import { borrowCliLogin, borrowCliLogins } from "./oauth/cli-login.js";
 import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
@@ -147,6 +149,14 @@ let contextManager: ContextManager | undefined;
 const runTracker = new RunTracker();
 // This chat's last run ended with the panel; the user can resume it.
 let interruptedRun = false;
+
+// When the current run started, to leave quick answers out of notifications.
+let runStartedAt = 0;
+/** A run shorter than this was probably watched. */
+const NOTIFY_MIN_RUN_MS = 15000;
+// Offer notifications once the user has sat through a run long enough to want them.
+let offerNotifications = false;
+const NOTIFY_OFFERED_KEY = "notify_offered";
 
 // Automatic recovery of a failed turn: attempts so far in this run, and the pending retry.
 let retryAttempts = 0;
@@ -412,6 +422,7 @@ function settingsSections(): SettingsSection[] {
 		{ label: "Custom providers", hint: "OpenAI- or Anthropic-compatible endpoints", tab: new CustomProvidersTab() },
 		{ label: "Skills", hint: "Site scripts the agent can reuse", tab: new SkillsTab() },
 		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
+		{ label: "Notifications", hint: "When a task finishes or needs you", tab: new NotificationsTab() },
 		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },
 		{ label: "Proxy", hint: "CORS proxy for providers that need one", tab: new ProxyTab() },
 		{ label: "About", hint: "Version and links", tab: new AboutTab() },
@@ -595,28 +606,28 @@ function cancelRetry(): void {
  * retried with backoff, and a chat that outgrew the context window is summarized and continued.
  * The failed message leaves the chat, so the model never sees it and `continue` is valid.
  */
-async function recoverFailedTurn(): Promise<void> {
+async function recoverFailedTurn(): Promise<boolean> {
 	const last = agent.state.messages.at(-1);
-	if (last?.role !== "assistant") return;
+	if (last?.role !== "assistant") return false;
 	const failure = classifyFailure(last, agent.state.model.contextWindow);
-	if (!failure) return;
+	if (!failure) return false;
 
 	const withoutFailed = agent.state.messages.slice(0, -1);
 	if (failure === "overflow") {
-		if (overflowRecovered) return;
+		if (overflowRecovered) return false;
 		overflowRecovered = true;
 		Toast.show("Summarizing older messages to stay within the context window");
 		const compacted = await contextManager?.compact(withoutFailed).catch((err) => {
 			console.warn("[Context] summary failed:", err);
 			return false;
 		});
-		if (!compacted) return;
+		if (!compacted) return false;
 		agent.replaceMessages(withoutFailed);
 		await agent.continue();
-		return;
+		return true;
 	}
 
-	if (retryAttempts >= MAX_RETRIES) return;
+	if (retryAttempts >= MAX_RETRIES) return false;
 	retryAttempts++;
 	const delay = backoffMs(retryAttempts, last.errorMessage);
 	Toast.show(`Provider error, retrying in ${Math.round(delay / 1000)} s (${retryAttempts} of ${MAX_RETRIES})`);
@@ -625,6 +636,45 @@ async function recoverFailedTurn(): Promise<void> {
 		agent.replaceMessages(withoutFailed);
 		agent.continue().catch((err) => console.error("Retry failed:", err));
 	}, delay);
+	return true;
+}
+
+/** The run is over for good: tell a user who is elsewhere, and offer notifications if they have none. */
+async function announceRunEnd(): Promise<void> {
+	if (Date.now() - runStartedAt < NOTIFY_MIN_RUN_MS) return;
+	const last = agent.state.messages.at(-1);
+	if (last?.role !== "assistant" || last.stopReason === "aborted") return;
+	const failed = last.stopReason === "error";
+	const reply = last.content
+		.filter((c): c is TextContent => c.type === "text")
+		.map((c) => c.text)
+		.join(" ")
+		.trim();
+	notifyFromPanel({
+		kind: failed ? "failed" : "done",
+		title: currentTitle || (failed ? "Task failed" : "Task finished"),
+		message: failed ? (last.errorMessage ?? "The task stopped with an error.") : reply || "Finished.",
+		tabId: browserSession?.currentTabId,
+	});
+	const { granted } = await notifySettings();
+	if (granted) return;
+	const offered = await chrome.storage.local.get(NOTIFY_OFFERED_KEY);
+	if (offered[NOTIFY_OFFERED_KEY]) return;
+	offerNotifications = true;
+	renderApp();
+}
+
+function dismissNotificationOffer(): void {
+	offerNotifications = false;
+	chrome.storage.local.set({ [NOTIFY_OFFERED_KEY]: true }).catch(() => undefined);
+	renderApp();
+}
+
+async function acceptNotificationOffer(): Promise<void> {
+	// First await of the click: the request needs its user gesture.
+	const granted = await chrome.permissions.request({ permissions: ["notifications"] });
+	if (granted) await setNotifyEnabled(true);
+	dismissNotificationOffer();
 }
 
 function dismissInterruptedRun(): void {
@@ -763,6 +813,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		agentUnsubscribe = agent.subscribe((event: AgentEvent) => {
 			const messages = agent.state.messages;
 			publishBusyState();
+			if (event.type === "agent_start" && !retryTimer) runStartedAt = Date.now();
 
 			// Hot path: a delta only moves agent.state.streamMessage, which AgentInterface renders
 			// itself. Doing anything more per token cost 98% of the main thread on long chats.
@@ -807,7 +858,13 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 
 			if (event.type === "agent_end") {
 				runTracker.stop();
-				recoverFailedTurn().catch((err) => console.error("Recovery failed:", err));
+				recoverFailedTurn()
+					.catch((err) => {
+						console.error("Recovery failed:", err);
+						return false;
+					})
+					.then((recovering) => (recovering ? undefined : announceRunEnd()))
+					.catch((err) => console.error("Announcing the run failed:", err));
 			}
 
 			renderApp();
@@ -1008,6 +1065,16 @@ const newSession = () => {
 // ============================================================================
 // RENDER
 // ============================================================================
+function noticeBar(text: string, ...actions: TemplateResult[]): TemplateResult {
+	return html`<div
+		class="flex items-center gap-2 px-3 py-2 border-b border-border text-sm text-foreground shrink-0"
+		role="status"
+	>
+		<span class="flex-1 min-w-0">${text}</span>
+		${actions}
+	</div>`;
+}
+
 const renderApp = () => {
 	const appHtml = html`
 		<div class="w-full h-full flex flex-col bg-background text-foreground overflow-hidden">
@@ -1128,14 +1195,30 @@ const renderApp = () => {
 
 			${
 				interruptedRun
-					? html`<div
-							class="flex items-center gap-2 px-3 py-2 border-b border-border text-sm text-foreground shrink-0"
-							role="status"
-						>
-							<span class="flex-1 min-w-0">This task stopped when the panel closed.</span>
-							${Button({ variant: "default", size: "sm", children: "Resume", onClick: () => void resumeInterruptedRun() })}
-							${Button({ variant: "ghost", size: "sm", children: "Dismiss", onClick: dismissInterruptedRun })}
-						</div>`
+					? noticeBar(
+							"This task stopped when the panel closed.",
+							Button({
+								variant: "default",
+								size: "sm",
+								children: "Resume",
+								onClick: () => void resumeInterruptedRun(),
+							}),
+							Button({ variant: "ghost", size: "sm", children: "Dismiss", onClick: dismissInterruptedRun }),
+						)
+					: ""
+			}
+			${
+				offerNotifications
+					? noticeBar(
+							"Get a notification when tasks finish?",
+							Button({
+								variant: "default",
+								size: "sm",
+								children: "Turn on",
+								onClick: () => void acceptNotificationOffer(),
+							}),
+							Button({ variant: "ghost", size: "sm", children: "Not now", onClick: dismissNotificationOffer }),
+						)
 					: ""
 			}
 

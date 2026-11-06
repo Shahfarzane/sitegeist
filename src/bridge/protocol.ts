@@ -193,6 +193,7 @@ export const BRIDGE_METHODS = [
 	"evaluate",
 	"cdp",
 	"wait",
+	"notify",
 	"console.read",
 	"network.read",
 	"permission.respond",
