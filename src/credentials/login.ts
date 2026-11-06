@@ -4,7 +4,8 @@
  * back which fields were filled and nothing else.
  */
 
-import { type LoginChoice, type LoginValues, NATIVE_HOST_NAME } from "../bridge/protocol.js";
+import { hostCapabilities } from "../bridge/host-capabilities.js";
+import { CAPABILITY_ONEPASSWORD, type LoginChoice, type LoginValues, NATIVE_HOST_NAME } from "../bridge/protocol.js";
 import { runInPage } from "../browser/page.js";
 
 export interface FillResult {
@@ -16,10 +17,13 @@ export interface FillResult {
 }
 
 async function askHost<T>(request: Record<string, unknown>): Promise<T> {
+	if (!(await hostCapabilities()).includes(CAPABILITY_ONEPASSWORD)) {
+		throw new Error("1Password needs a current sitegeist CLI on this computer. Rebuild or update it.");
+	}
 	const response = (await chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, request)) as
 		| { result?: T; error?: string }
 		| undefined;
-	if (!response) throw new Error("The sitegeist CLI on this computer is too old for 1Password. Update it.");
+	if (!response) throw new Error("The native host did not answer");
 	if (response.error) throw new Error(response.error);
 	return response.result as T;
 }

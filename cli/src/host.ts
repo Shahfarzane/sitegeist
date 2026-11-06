@@ -24,7 +24,13 @@ import type {
 	HostToClient,
 	HostToExt,
 } from "../../src/bridge/protocol.ts";
-import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
+import {
+	CAPABILITY_CONNECTORS,
+	CAPABILITY_ONEPASSWORD,
+	HOST_CAPABILITIES_PROVIDER,
+	MAX_FRAME_FROM_EXTENSION,
+	MAX_FRAME_TO_EXTENSION,
+} from "../../src/bridge/protocol.ts";
 import { readConnectors, type RunningConnector, runConnector } from "./connectors.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
 import { readLogin, searchLogins } from "./onepassword.ts";
@@ -255,6 +261,11 @@ export function runNativeHost(): void {
 			}
 			if (message.type === "connector_send") {
 				connector?.write(message.message);
+				continue;
+			}
+			if (message.type === "credentials" && message.provider === HOST_CAPABILITIES_PROVIDER) {
+				const capabilities = [CAPABILITY_CONNECTORS, CAPABILITY_ONEPASSWORD];
+				process.stdout.write(encodeFrame({ type: "credentials", capabilities } satisfies HostCredentialsResponse));
 				continue;
 			}
 			if (message.type === "credentials") {

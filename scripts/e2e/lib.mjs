@@ -126,6 +126,7 @@ export class Browser {
 		env,
 		bridge = false,
 		sharedSocketDir,
+		hostCli = join(repoRoot, "cli/dist/index.js"),
 	} = {}) {
 		const profile = userDataDir ?? mkdtempSync(join(tmpdir(), "sitegeist-e2e-"));
 		let socketDir;
@@ -133,11 +134,7 @@ export class Browser {
 			socketDir = sharedSocketDir ?? mkdtempSync("/tmp/sg-e2e-");
 			chmodSync(socketDir, 0o700);
 			const launcher = join(profile, "host.sh");
-			writeFileSync(
-				launcher,
-				`#!/bin/sh\nexec "${process.execPath}" "${join(repoRoot, "cli/dist/index.js")}" host "$@"\n`,
-				{ mode: 0o755 },
-			);
+			writeFileSync(launcher, `#!/bin/sh\nexec "${process.execPath}" "${hostCli}" host "$@"\n`, { mode: 0o755 });
 			const hosts = join(profile, "NativeMessagingHosts");
 			mkdirSync(hosts, { recursive: true });
 			writeFileSync(

@@ -6,7 +6,8 @@
 
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import { type HostConnectorMessage, NATIVE_HOST_NAME } from "../bridge/protocol.js";
+import { hostCapabilities } from "../bridge/host-capabilities.js";
+import { CAPABILITY_CONNECTORS, type HostConnectorMessage, NATIVE_HOST_NAME } from "../bridge/protocol.js";
 
 export class NativeConnectorTransport implements Transport {
 	onclose?: () => void;
@@ -61,6 +62,7 @@ export class NativeConnectorTransport implements Transport {
 
 /** Names of the local connectors configured on this computer; empty without a current CLI. */
 export async function localConnectorNames(): Promise<string[]> {
+	if (!(await hostCapabilities()).includes(CAPABILITY_CONNECTORS)) return [];
 	try {
 		const response = (await chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, { type: "connector_list" })) as
 			| { names?: string[] }
