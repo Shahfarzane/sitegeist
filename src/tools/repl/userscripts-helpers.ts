@@ -325,17 +325,17 @@ export function buildWrapperCode(
 
 	// Inject everything at the marker (providers + skills)
 	// Replace the string literal marker with our injections
-	code = code.replace(/"__INJECT_PROVIDERS_HERE__";/, providerInjections);
+	code = code.replace(/["'`]__INJECT_PROVIDERS_HERE__["'`];?/, () => providerInjections);
 
 	// If args are provided, inject them before user code
 	if (args && args.length > 0) {
 		// Wrap user code with argument injection
 		const argsCode = `const __args__ = ${JSON.stringify(args)};\n`;
 		const wrappedUserCode = `${argsCode}const __func__ = ${userCode};\nreturn __func__(...__args__);`;
-		code = code.replace(/USER_CODE_PLACEHOLDER/, `async () => { ${wrappedUserCode} }`);
+		code = code.replace(/USER_CODE_PLACEHOLDER/, () => `async () => { ${wrappedUserCode} }`);
 	} else {
 		// No args - just wrap user code
-		code = code.replace(/USER_CODE_PLACEHOLDER/, userCode);
+		code = code.replace(/USER_CODE_PLACEHOLDER/, () => userCode);
 	}
 
 	// Call the function immediately

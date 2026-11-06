@@ -28,6 +28,9 @@
 
 ### Changed
 
+- Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
+- `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
+- Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
 - Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
 - The native host starts its socket relay on the extension's hello instead of at launch, so a one-message `sendNativeMessage` lookup never opens a bridge socket.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
@@ -45,6 +48,8 @@
 
 ### Fixed
 
+- `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
+- Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
 - Parallel tasks could lose their browser session: every panel and the service worker read and rewrote one table, so concurrent writers dropped each other's records and left tab groups orphaned. Writes now go through a Web Lock, a tab adopted in another context cannot come back with a stale write, and a tool call that changes nothing no longer rewrites the table and wakes the worker.
 - Side panel: every streamed token saved the whole chat to IndexedDB, wrote `lastUsedModel` and re-rendered the app, although a token changes nothing that is stored. On a chat with 40 screenshots one reply cost 811 full-session writes and 3.6 s of blocking main-thread time in a 3.7 s stream; it now costs 3 writes and 13 ms. Saves happen on message boundaries and never overlap.
 - Anthropic requests fail with 401 "CORS requests are not allowed for this Organization" for organizations that disallow browser access: a `declarativeNetRequest` rule removes the extension's `Origin` header from its own requests to `api.anthropic.com`, so they are not treated as CORS requests.
@@ -100,6 +105,9 @@
 
 ### Changed
 
+- Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
+- `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
+- Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
 - Default model changed to `claude-sonnet-4-6` with `medium` thinking level
 - CORS proxy enabled by default
 - Model selector only shows models from providers with configured keys
@@ -111,6 +119,8 @@
 
 ### Fixed
 
+- `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
+- Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
 - Settings dialog tabs not responding to clicks (upstream `pi-web-ui` built with `tsgo` broke Lit decorator reactivity)
 - CORS proxy toggle not updating (same root cause)
 - Proxy not applied to API requests (esbuild bundled duplicate `streamSimple` references, breaking identity check)
