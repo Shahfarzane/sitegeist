@@ -59,6 +59,17 @@ test("a plugin cannot install a local command", () => {
 	assert.ok(plugin.connectors.every((c) => c.kind === "remote"));
 });
 
+test("paths already at the plugin root keep their folders", () => {
+	const plugin = parsePlugin([
+		{ path: "skills/a/SKILL.md", text: "body" },
+		{ path: "skills/b/SKILL.md", text: "body" },
+	]);
+	assert.deepEqual(
+		plugin.skills.map((s) => s.name),
+		["a", "b"],
+	);
+});
+
 test("a folder without a manifest still works", () => {
 	const plugin = parsePlugin([{ path: "x/skills/a/SKILL.md", text: "body" }]);
 	assert.equal(plugin.name, "plugin");

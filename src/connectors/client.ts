@@ -194,12 +194,28 @@ export class ConnectorClient {
 		if (!connector.url) throw new Error(`${connector.name} has no URL`);
 		const provider = new StoredAuth(connector, this.persistAuth);
 		const url = new URL(connector.url);
-		const transport = new StreamableHTTPClientTransport(url, this.remoteOptions(provider));
+		const options = this.remoteOptions(provider);
+		let transport: StreamableHTTPClientTransport | SSEClientTransport = new StreamableHTTPClientTransport(
+			url,
+			options,
+		);
+		let reconnect = () => new StreamableHTTPClientTransport(url, options) as Transport;
 		try {
 			await this.attach(transport);
 			return;
 		} catch (err) {
-			if (!(err instanceof UnauthorizedError) || !provider.authorizationUrl) throw err;
+			if (!(err instanceof UnauthorizedError)) {
+				// A server from before Streamable HTTP rejects its POSTs: its login runs over SSE.
+				transport = new SSEClientTransport(url, options);
+				reconnect = () => new SSEClientTransport(url, options);
+				try {
+					await this.attach(transport);
+					return;
+				} catch (fallback) {
+					if (!(fallback instanceof UnauthorizedError)) throw err;
+				}
+			}
+			if (!provider.authorizationUrl) throw err;
 		}
 		const redirect = await waitForOAuthRedirect(provider.authorizationUrl.toString(), REDIRECT_HOST);
 		if (redirect.searchParams.get("state") !== provider.expectedState)
@@ -207,7 +223,7 @@ export class ConnectorClient {
 		const code = redirect.searchParams.get("code");
 		if (!code) throw new Error(redirect.searchParams.get("error") ?? "The login returned no code");
 		await transport.finishAuth(code);
-		await this.attach(new StreamableHTTPClientTransport(url, this.remoteOptions(provider)));
+		await this.attach(reconnect());
 	}
 
 	async tools(): Promise<ConnectorTool[]> {

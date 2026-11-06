@@ -58,7 +58,8 @@ function relative(files: PluginFile[]): PluginFile[] {
 		return files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
 	}
 	const first = files[0]?.path.split("/")[0];
-	if (first && files.every((f) => f.path.startsWith(`${first}/`))) {
+	const isPluginFolder = first === "skills" || first === "commands";
+	if (first && !isPluginFolder && files.every((f) => f.path.startsWith(`${first}/`))) {
 		return files.map((f) => ({ ...f, path: f.path.slice(first.length + 1) }));
 	}
 	return files;

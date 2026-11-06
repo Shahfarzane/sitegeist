@@ -42,10 +42,13 @@ test("a refresh replaces tools it issued earlier, whoever triggered it", async (
 	assert.equal(manager.owns(issued), true);
 });
 
-test("two connectors cannot give the agent the same tool name", () => {
-	const tools = [{ name: "a__b" }, { name: "a__b" }, { name: "a__c" }] as AgentTool<any>[];
+test("colliding tool names stay distinct and no tool is lost", () => {
+	const tools = [{ name: "a__b" }, { name: "a__b" }, { name: "a__b" }, { name: "a__c" }] as AgentTool<any>[];
 	assert.deepEqual(
 		uniqueToolNames(tools).map((t) => t.name),
-		["a__b", "a__c"],
+		["a__b", "a__b_2", "a__b_3", "a__c"],
 	);
+	const long = "x".repeat(64);
+	const [, second] = uniqueToolNames([{ name: long }, { name: long }] as AgentTool<any>[]);
+	assert.ok(second.name.length <= 64 && second.name !== long);
 });

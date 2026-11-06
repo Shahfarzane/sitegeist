@@ -61,13 +61,17 @@ export function toToolContent(content: ToolContent[], structured?: unknown): Arr
 	return out.length > 0 ? out : [{ type: "text", text: "(no output)" }];
 }
 
-/** Two connectors can clean up to the same name, and providers refuse a duplicate tool. */
+/**
+ * Two connectors can clean up to the same name, and providers refuse a duplicate tool. A later one
+ * gets a number; it still reaches its own server, because the name is only what the model sees.
+ */
 export function uniqueToolNames(tools: AgentTool<any>[]): AgentTool<any>[] {
 	const seen = new Set<string>();
-	return tools.filter((tool) => {
-		if (seen.has(tool.name)) return false;
-		seen.add(tool.name);
-		return true;
+	return tools.map((tool) => {
+		let name = tool.name;
+		for (let n = 2; seen.has(name); n++) name = `${tool.name.slice(0, 60)}_${n}`;
+		seen.add(name);
+		return name === tool.name ? tool : { ...tool, name };
 	});
 }
 
