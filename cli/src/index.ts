@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BridgeClient, listSockets } from "./client.ts";
+import { BridgeClient, listBrowsers, listSockets } from "./client.ts";
 import { cliCredentials } from "./credentials.ts";
 import { runNativeHost } from "./host.ts";
 import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
@@ -15,6 +15,7 @@ Usage:
   sitegeist mcp             Run the MCP server on stdio (installs the native host on first run)
   sitegeist install         Write the native messaging manifest for every Chromium browser found
   sitegeist status          Show whether the extension is reachable
+  sitegeist browsers        List the browsers with a live bridge (SITEGEIST_BROWSER=<name> picks one)
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
   sitegeist update          Make every running browser check for a new signed release now
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
@@ -31,6 +32,16 @@ Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegei
   omp:    add an MCP server entry running "sitegeist mcp"
   pi:     sitegeist pi-extension
 `;
+
+async function browsers(): Promise<void> {
+	const found = await listBrowsers();
+	if (found.length === 0) {
+		console.log("No browser with a live bridge. Is the sitegeist extension loaded in a running Chromium browser?");
+		process.exitCode = 1;
+		return;
+	}
+	for (const b of found) console.log(`${b.id}  ${b.name ?? "unknown"}  extension ${b.extensionConnected ? "connected" : "not connected"}`);
+}
 
 async function status(): Promise<void> {
 	const sockets = listSockets();
@@ -86,6 +97,9 @@ async function main(): Promise<void> {
 			console.log(`Claude Code (every project): claude mcp add --scope user sitegeist -- ${mcpCommand().join(" ")}`);
 			return;
 		}
+		case "browsers":
+			await browsers();
+			return;
 		case "status":
 			await status();
 			return;

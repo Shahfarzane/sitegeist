@@ -4,6 +4,9 @@
 
 ### Added
 
+- `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
+- `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
 - GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.
 - File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
 - Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
@@ -31,6 +34,7 @@
 
 ### Changed
 
+- `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
 - `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
@@ -96,6 +100,9 @@
 
 ### Added
 
+- `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
+- `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
 - GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.
 - File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
 - Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
@@ -112,6 +119,7 @@
 
 ### Changed
 
+- `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
 - `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.

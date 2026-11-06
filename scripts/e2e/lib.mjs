@@ -125,11 +125,12 @@ export class Browser {
 		headless = true,
 		env,
 		bridge = false,
+		sharedSocketDir,
 	} = {}) {
 		const profile = userDataDir ?? mkdtempSync(join(tmpdir(), "sitegeist-e2e-"));
 		let socketDir;
 		if (bridge) {
-			socketDir = mkdtempSync("/tmp/sg-e2e-");
+			socketDir = sharedSocketDir ?? mkdtempSync("/tmp/sg-e2e-");
 			chmodSync(socketDir, 0o700);
 			const launcher = join(profile, "host.sh");
 			writeFileSync(
@@ -181,6 +182,7 @@ export class Browser {
 		browser.profile = profile;
 		browser.ownsProfile = !userDataDir;
 		browser.socketDir = socketDir;
+		browser.ownsSockets = !sharedSocketDir;
 		browser.cdp = await Cdp.connect(`ws://127.0.0.1:${port}${path}`);
 		await browser.cdp.send("Target.setDiscoverTargets", { discover: true });
 		return browser;
@@ -223,7 +225,7 @@ export class Browser {
 		this.proc.kill("SIGKILL");
 		this.cdp.ws.close();
 		if (this.ownsProfile) rmSync(this.profile, { recursive: true, force: true });
-		if (this.socketDir) rmSync(this.socketDir, { recursive: true, force: true });
+		if (this.socketDir && this.ownsSockets) rmSync(this.socketDir, { recursive: true, force: true });
 	}
 }
 

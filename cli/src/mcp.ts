@@ -9,7 +9,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, resolve } from "node:path";
 import { z } from "zod";
-import { BridgeClient, BridgeRpcError } from "./client.ts";
+import { BridgeClient, BridgeRpcError, listBrowsers } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
 import { VERSION } from "./version.ts";
 
@@ -213,6 +213,52 @@ export async function runMcpServer(): Promise<void> {
 		.describe("Also return the page: true for elements and text, interactive for elements only");
 
 	server.registerTool(
+		"list_connected_browsers",
+		{
+			description: "List the browsers with sitegeist running on this computer. Tabs belong to one browser; select_browser switches.",
+			inputSchema: {},
+		},
+		async () => {
+			try {
+				if (!client.connected) await client.connect().catch(() => undefined);
+				const browsers = await listBrowsers();
+				return {
+					content: text(
+						browsers.map((b) => ({
+							id: b.id,
+							name: b.name,
+							extensionConnected: b.extensionConnected,
+							inUse: b.path === client.connectedPath,
+						})),
+					),
+				};
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
+		"select_browser",
+		{
+			description: "Use another browser from now on, by the id or name from list_connected_browsers. Your tabs in the current browser stay open there.",
+			inputSchema: { browser: z.string().describe("Id or name, e.g. Helium") },
+		},
+		async ({ browser }) => {
+			try {
+				const browsers = await listBrowsers();
+				const wanted = browser.toLowerCase();
+				const match = browsers.find((b) => b.id === browser) ?? browsers.find((b) => b.name?.toLowerCase().includes(wanted));
+				if (!match) throw new Error(`No connected browser matches ${browser}`);
+				client.close();
+				client.preferred = match.path;
+				await client.connect(match.path);
+				return { content: text({ selected: match.id, name: match.name }) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
 		"tabs_context",
 		{
 			description:
@@ -341,7 +387,8 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"find",
 		{
-			description: "Find elements by words in their role, label, value or href. Returns refs for click/type/fill.",
+			description:
+				'Find elements by what you would call them: "search bar", "login button", "add to cart". Role words and common synonyms are understood. Returns refs for click/type/fill.',
 			inputSchema: { query: z.string(), tabId, limit: z.number().int().optional() },
 		},
 		async (args) => {
@@ -554,6 +601,20 @@ export async function runMcpServer(): Promise<void> {
 			inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
 		},
 		(args) => call("upload.image", args),
+	);
+	server.registerTool(
+		"resize_window",
+		{
+			description:
+				"Render your tab at another size, to test a layout: a preset (mobile, tablet, desktop) or width and height in CSS pixels. Tabs render at 1280x800 by default; desktop goes back to that.",
+			inputSchema: {
+				preset: z.enum(["mobile", "tablet", "desktop"]).optional(),
+				width: z.number().int().optional(),
+				height: z.number().int().optional(),
+				tabId,
+			},
+		},
+		(args) => call("window.resize", args),
 	);
 	server.registerTool(
 		"gif_creator",

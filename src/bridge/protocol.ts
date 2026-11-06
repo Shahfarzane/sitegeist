@@ -46,6 +46,8 @@ export interface HostWelcome {
 	clientId: string;
 	hostVersion: string;
 	extensionConnected: boolean;
+	/** The browser that spawned this host, e.g. "Google Chrome" or "Helium". */
+	browser?: string;
 }
 
 export interface HostResponse {
@@ -187,6 +189,7 @@ export const BRIDGE_METHODS = [
 	"text",
 	"html",
 	"find",
+	"window.resize",
 	"click",
 	"hover",
 	"drag",

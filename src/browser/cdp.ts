@@ -44,6 +44,7 @@ function installListeners(): void {
 	chrome.tabs.onRemoved.addListener((tabId) => {
 		attachedTabs.delete(tabId);
 		viewportTabs.delete(tabId);
+		requestedViewports.delete(tabId);
 		bannedTabs.delete(tabId);
 	});
 }
@@ -88,21 +89,47 @@ export async function ensureAttached(tabId: number): Promise<void> {
 export const AGENT_VIEWPORT = { width: 1280, height: 800 };
 const viewportTabs = new Set<number>();
 
+export interface ViewportSize {
+	width: number;
+	height: number;
+	/** Emulate a phone: mobile layout rules and touch. */
+	mobile?: boolean;
+}
+
+/** Sizes an agent asked for with resize_window, per tab. */
+const requestedViewports = new Map<number, ViewportSize>();
+
+async function applyViewport(tabId: number): Promise<void> {
+	const size = requestedViewports.get(tabId) ?? AGENT_VIEWPORT;
+	const mobile = "mobile" in size && size.mobile === true;
+	await send(tabId, "Emulation.setDeviceMetricsOverride", {
+		width: size.width,
+		height: size.height,
+		deviceScaleFactor: mobile ? 2 : 0,
+		mobile,
+	});
+	await send(tabId, "Emulation.setTouchEmulationEnabled", { enabled: mobile }).catch(() => undefined);
+}
+
 async function ensureAgentViewport(tabId: number): Promise<void> {
 	if (viewportTabs.has(tabId)) return;
 	const tab = await chrome.tabs.get(tabId).catch(() => undefined);
 	if (!tab || tab.active) return;
 	try {
-		await send(tabId, "Emulation.setDeviceMetricsOverride", {
-			width: AGENT_VIEWPORT.width,
-			height: AGENT_VIEWPORT.height,
-			deviceScaleFactor: 0,
-			mobile: false,
-		});
+		await applyViewport(tabId);
 		viewportTabs.add(tabId);
 	} catch {
 		/* not attachable right now; the next call retries */
 	}
+}
+
+/** Render a tab at this size to test a layout; undefined goes back to the default. */
+export async function setAgentViewport(tabId: number, size: ViewportSize | undefined): Promise<void> {
+	await ensureAttached(tabId);
+	if (size) requestedViewports.set(tabId, size);
+	else requestedViewports.delete(tabId);
+	await applyViewport(tabId);
+	viewportTabs.add(tabId);
 }
 
 /** Give the tab its real size back (the user is about to see it, or the agent let go). */
@@ -569,6 +596,20 @@ export function readConsole(tabId: number, clear = false): ConsoleEntry[] {
 	return out;
 }
 
+/** Console messages as tools return them. */
+export function consoleEntries(
+	tabId: number,
+	options: { onlyErrors?: boolean; pattern?: string; clear?: boolean; limit?: number },
+): ConsoleEntry[] {
+	let entries = readConsole(tabId, options.clear === true);
+	if (options.onlyErrors) entries = entries.filter((e) => e.level === "error");
+	if (options.pattern) {
+		const re = new RegExp(options.pattern, "i");
+		entries = entries.filter((e) => re.test(e.text));
+	}
+	return entries.slice(-(options.limit ?? 100));
+}
+
 export async function enableNetworkCapture(tabId: number): Promise<void> {
 	installCaptureListener();
 	if (networkBuffers.has(tabId)) return;
@@ -582,6 +623,19 @@ export function readNetwork(tabId: number, clear = false): NetworkEntry[] {
 	const out = [...buf.values()];
 	if (clear) buf.clear();
 	return out;
+}
+
+/** Network requests as tools return them. */
+export function networkEntries(
+	tabId: number,
+	options: { urlPattern?: string; clear?: boolean; limit?: number },
+): NetworkEntry[] {
+	let entries = readNetwork(tabId, options.clear === true);
+	if (options.urlPattern) {
+		const re = new RegExp(options.urlPattern, "i");
+		entries = entries.filter((e) => re.test(e.url));
+	}
+	return entries.slice(-(options.limit ?? 100));
 }
 
 // ---- Screencast --------------------------------------------------------------

@@ -5,23 +5,27 @@
  */
 
 import {
+	AGENT_VIEWPORT,
 	captureScreenshot,
 	scroll as cdpScroll,
 	cdpSend,
 	click,
+	consoleEntries,
 	drag,
 	enableConsoleCapture,
 	enableNetworkCapture,
 	evaluateMain,
 	hover,
+	networkEntries,
 	pressKey,
-	readConsole,
-	readNetwork,
 	screenshotToCss,
+	setAgentViewport,
 	startScreencast,
 	stopScreencast,
 	typeText,
+	type ViewportSize,
 } from "../browser/cdp.js";
+import { rankNodes } from "../browser/find.js";
 import { injectScript } from "../browser/inject.js";
 import {
 	deliverFiles,
@@ -426,22 +430,32 @@ export const handlers: Record<string, Handler> = {
 	},
 
 	find: async (ctx, params) => {
-		const query = requireStr(params, "query").toLowerCase();
+		const query = requireStr(params, "query");
 		const tabId = await resolveTab(ctx, params, false);
 		const snap = await snapshot(tabId, { filter: "all", maxNodes: 600, maxTextChars: 0 });
-		const words = query.split(/\s+/).filter(Boolean);
-		const scored = snap.nodes
-			.map((n) => {
-				const hay = `${n.role} ${n.name} ${n.value ?? ""} ${n.href ?? ""}`.toLowerCase();
-				let score = 0;
-				for (const w of words) if (hay.includes(w)) score += w.length;
-				if (n.name.toLowerCase() === query) score += 100;
-				return { node: n, score };
-			})
-			.filter((s) => s.score > 0)
-			.sort((a, b) => b.score - a.score)
-			.slice(0, num(params, "limit") ?? 20);
-		return { matches: scored.map((s) => s.node) };
+		return { matches: rankNodes(snap.nodes, query, num(params, "limit") ?? 20) };
+	},
+
+	/** Render the tab at another size, to test a layout. */
+	"window.resize": async (ctx, params) => {
+		const tabId = await resolveTab(ctx, params, true);
+		const presets: Record<string, ViewportSize | undefined> = {
+			mobile: { width: 375, height: 812, mobile: true },
+			tablet: { width: 768, height: 1024 },
+			desktop: undefined,
+		};
+		const preset = str(params, "preset");
+		const width = num(params, "width");
+		const height = num(params, "height");
+		if (preset !== undefined && !(preset in presets)) {
+			throw new BridgeError(ERR.BAD_PARAMS, "preset must be mobile, tablet or desktop");
+		}
+		if (preset === undefined && (width === undefined || height === undefined)) {
+			throw new BridgeError(ERR.BAD_PARAMS, "Provide preset, or width and height");
+		}
+		const size = preset !== undefined ? presets[preset] : { width: width as number, height: height as number };
+		await setAgentViewport(tabId, size);
+		return { tabId, ...(size ?? AGENT_VIEWPORT) };
 	},
 
 	click: async (ctx, params) => {
@@ -627,25 +641,25 @@ export const handlers: Record<string, Handler> = {
 	"console.read": async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, true);
 		await enableConsoleCapture(tabId);
-		let entries = readConsole(tabId, params.clear === true);
-		if (params.onlyErrors === true) entries = entries.filter((e) => e.level === "error");
-		const pattern = str(params, "pattern");
-		if (pattern) {
-			const re = new RegExp(pattern, "i");
-			entries = entries.filter((e) => re.test(e.text));
-		}
-		return { entries: entries.slice(-(num(params, "limit") ?? 100)) };
+		return {
+			entries: consoleEntries(tabId, {
+				onlyErrors: params.onlyErrors === true,
+				pattern: str(params, "pattern"),
+				clear: params.clear === true,
+				limit: num(params, "limit"),
+			}),
+		};
 	},
 
 	"network.read": async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, true);
 		await enableNetworkCapture(tabId);
-		let entries = readNetwork(tabId, params.clear === true);
-		const pattern = str(params, "urlPattern");
-		if (pattern) {
-			const re = new RegExp(pattern, "i");
-			entries = entries.filter((e) => re.test(e.url));
-		}
-		return { entries: entries.slice(-(num(params, "limit") ?? 100)) };
+		return {
+			entries: networkEntries(tabId, {
+				urlPattern: str(params, "urlPattern"),
+				clear: params.clear === true,
+				limit: num(params, "limit"),
+			}),
+		};
 	},
 };

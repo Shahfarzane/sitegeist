@@ -14,7 +14,12 @@ let turns;
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/tools": page, "/upload": page, "/gif": page },
+		routes: {
+			"/tools": page,
+			"/upload": page,
+			"/gif": page,
+			"/devtools": `<!doctype html><title>Dev</title><h1>Dev</h1>`,
+		},
 		script: (body, index) => turns(body, index),
 	});
 	browser = await Browser.launch();
@@ -96,6 +101,37 @@ test("gif_creator works from the panel", async () => {
 	await sendPrompt(context.panel, "record");
 	await context.panel.waitFor(`document.body.innerText.includes("recorded it")`, { timeoutMs: 30000 });
 	assert.match(toolOutput(2), /Saved demo\.gif to Downloads \(\d+ frames/);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("read_console and read_network show what the page does", async () => {
+	server.requests.length = 0;
+	turns = (_body, index) => {
+		if (index === 0) return { toolCalls: [{ name: "read_console", args: {} }] };
+		if (index === 1) return { toolCalls: [{ name: "read_network", args: {} }] };
+		if (index === 2) {
+			return {
+				toolCalls: [
+					{
+						name: "repl",
+						args: {
+							title: "Make noise",
+							code: `await browserjs(() => { console.error("broken thing"); return fetch("/devtools").then((r) => r.status); }); return "ok";`,
+						},
+					},
+				],
+			};
+		}
+		if (index === 3) return { toolCalls: [{ name: "read_console", args: { onlyErrors: true } }] };
+		if (index === 4) return { toolCalls: [{ name: "read_network", args: { urlPattern: "devtools" } }] };
+		return { text: "debugged" };
+	};
+	const context = await openPanel(browser, server, { path: "/devtools" });
+	await sendPrompt(context.panel, "debug this");
+	await context.panel.waitFor(`document.body.innerText.includes("debugged")`, { timeoutMs: 20000 });
+	assert.ok(toolOutput(3).includes("broken thing"), toolOutput(3).slice(0, 200));
+	assert.match(toolOutput(4), /GET 200 .*devtools/);
 	await context.panel.close();
 	await context.tab.close();
 });

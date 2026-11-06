@@ -188,3 +188,54 @@ test("exporting nothing says so", async () => {
 	await harness.callText("gif_creator", { action: "clear" });
 	await assert.rejects(harness.call("gif_creator", { action: "export" }), /Nothing recorded/);
 });
+
+test("find understands what things are called", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/form` });
+	const found = await harness.callText("find", { query: "submit button" });
+	assert.ok(String(found).split("\n")[0].includes("Send"), String(found));
+});
+
+test("resize_window changes what the page sees and goes back", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/form` });
+	const size = async () => (await harness.callText("run_js", { code: "[innerWidth, innerHeight]" })).value;
+	await harness.callText("resize_window", { preset: "mobile" });
+	const screen = await harness.callText("run_js", {
+		code: "[screen.width, screen.height, navigator.maxTouchPoints > 0]",
+	});
+	assert.deepEqual(screen.value, [375, 812, true]);
+	await harness.callText("resize_window", { width: 1000, height: 700 });
+	assert.deepEqual(await size(), [1000, 700]);
+	await harness.callText("resize_window", { preset: "desktop" });
+	assert.deepEqual(await size(), [1280, 800]);
+});
+
+test("two browsers: the harness lists them and switches", async () => {
+	const second = await Browser.launch({ bridge: true, sharedSocketDir: browser.socketDir });
+	try {
+		await second.worker();
+		const deadline = Date.now() + 15000;
+		let browsers = [];
+		while (browsers.length < 2 && Date.now() < deadline) {
+			browsers = await harness.callText("list_connected_browsers", {});
+			await new Promise((r) => setTimeout(r, 200));
+		}
+		assert.equal(browsers.length, 2, JSON.stringify(browsers));
+		assert.match(browsers[0].name, /Chrome for Testing/);
+		assert.equal(browsers.filter((b) => b.inUse).length, 1);
+		const other = browsers.find((b) => !b.inUse);
+		const here = browsers.find((b) => b.inUse);
+		const selected = await harness.callText("select_browser", { browser: other.id });
+		assert.equal(selected.selected, other.id);
+		const after = await harness.callText("list_connected_browsers", {});
+		assert.equal(after.find((b) => b.inUse).id, other.id);
+		await harness.callText("navigate", { url: `${server.origin}/form` });
+		const targets = await second.targets();
+		assert.ok(
+			targets.some((t) => t.url.endsWith("/form")),
+			"the tab must open in the selected browser",
+		);
+		await harness.callText("select_browser", { browser: here.id });
+	} finally {
+		await second.close();
+	}
+});

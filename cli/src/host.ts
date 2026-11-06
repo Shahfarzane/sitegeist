@@ -9,11 +9,11 @@
  * relay only starts on the extension's hello, so it never opens a socket.
  */
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type {
 	ClientToHost,
 	ExtCredentialsRequest,
@@ -54,6 +54,18 @@ function toExtension(message: HostToExt): void {
 	process.stdout.write(frame);
 }
 
+/** The browser that spawned this host: its process name, which also tells Brave from Chrome. */
+function browserName(): string | undefined {
+	try {
+		const command = execFileSync("ps", ["-o", "comm=", "-p", String(process.ppid)], { encoding: "utf8" }).trim();
+		return basename(command) || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+let browser: string | undefined;
+
 function toClient(clientId: string, message: HostToClient): void {
 	const client = clients.get(clientId);
 	if (!client || client.socket.destroyed) return;
@@ -85,7 +97,14 @@ function onExtensionMessage(message: ExtToHost): void {
 function onClientMessage(client: Client, message: ClientToHost): void {
 	if (message.type === "hello") {
 		client.hello = message;
-		toClient(client.id, { type: "welcome", clientId: client.id, hostVersion: VERSION, extensionConnected: extensionReady });
+		browser ??= browserName();
+		toClient(client.id, {
+			type: "welcome",
+			clientId: client.id,
+			hostVersion: VERSION,
+			extensionConnected: extensionReady,
+			browser,
+		});
 		toExtension({ type: "client_connected", clientId: client.id, client: message.client });
 		return;
 	}
