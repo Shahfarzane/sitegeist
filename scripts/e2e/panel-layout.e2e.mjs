@@ -120,7 +120,7 @@ after(async () => {
 	await server.close();
 });
 
-for (const width of [360, 400, 500]) {
+for (const width of [360, 400, 516]) {
 	test(`nothing moves on load at ${width} px`, async () => {
 		await load(width);
 		const { panel } = context;
@@ -146,6 +146,30 @@ test("a long model name truncates instead of pushing the send button out", async
 	assert.equal(await panel.evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
 });
 
+test("suggestions sit in one row on the composer, away from the centered mark", async () => {
+	await load(400);
+	const { panel } = context;
+	const layout = await panel.evaluate(`(() => {
+		const pills = [...document.querySelectorAll(".tutorial-pill")].map((p) => p.getBoundingClientRect());
+		const composer = document.querySelector("message-editor").firstElementChild.getBoundingClientRect();
+		const row = document.querySelector("div.mb-2").getBoundingClientRect();
+		const mark = document.querySelector(".welcome-mark").getBoundingClientRect();
+		const chat = document.querySelector("agent-interface .overflow-y-auto").getBoundingClientRect();
+		return {
+			tops: new Set(pills.map((p) => p.top)).size,
+			left: pills[0].left - composer.left,
+			gap: row.top - pills[0].bottom,
+			offCenter: Math.abs(mark.top + mark.height / 2 - (chat.top + chat.height / 2)),
+			count: pills.length,
+		};
+	})()`);
+	assert.ok(layout.count > 3);
+	assert.equal(layout.tops, 1, "one row");
+	assert.equal(layout.left, 0, "left-aligned with the composer");
+	assert.equal(layout.gap, 8);
+	assert.ok(layout.offCenter <= 1, "the mark stays centered");
+});
+
 test("the shift check can fail", async () => {
 	await load(400);
 	const { panel } = context;
@@ -161,6 +185,19 @@ test("the bundled font renders the panel", async () => {
 	const { panel } = context;
 	assert.equal(await panel.evaluate(`document.fonts.check('14px "Public Sans"')`), true);
 	assert.match(await panel.evaluate(`getComputedStyle(document.body).fontFamily`), /^"?Public Sans/);
+	const spaced = await panel.evaluate(`(() => {
+		const width = (kerning) => {
+			const probe = document.createElement("span");
+			probe.textContent = "it - no";
+			probe.style.cssText = "position:absolute;white-space:pre;font-size:16px;font-kerning:" + kerning;
+			document.body.append(probe);
+			const measured = probe.getBoundingClientRect().width;
+			probe.remove();
+			return measured;
+		};
+		return Math.abs(width("normal") - width("none"));
+	})()`);
+	assert.ok(spaced < 0.5, `kerning must not pinch the spaces around a hyphen, moved ${spaced} px`);
 });
 
 test("a long chat scrolls and the header and composer stay put", async () => {
