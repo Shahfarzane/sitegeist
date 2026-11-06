@@ -4,15 +4,16 @@
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { StringEnum } from "@mariozechner/pi-ai";
 import { type Static, Type } from "@sinclair/typebox";
 import { getCurrentBrowserSession } from "../browser/current.js";
 import { gifRecorderFor } from "../recording/gif-recorder.js";
 
 const schema = Type.Object({
-	action: Type.Union(
-		[Type.Literal("start_recording"), Type.Literal("stop_recording"), Type.Literal("export"), Type.Literal("clear")],
-		{ description: "start_recording, stop_recording, export (saves the GIF to Downloads), clear (discards frames)" },
-	),
+	// StringEnum, not Type.Union: Google's API rejects the anyOf a union becomes.
+	action: StringEnum(["start_recording", "stop_recording", "export", "clear"], {
+		description: "start_recording, stop_recording, export (saves the GIF to Downloads), clear (discards frames)",
+	}),
 	filename: Type.Optional(Type.String({ description: "File name for export, e.g. checkout-flow.gif" })),
 });
 
@@ -60,6 +61,8 @@ export function createGifTool(): AgentTool<typeof schema, { frames: number }> {
 					recorder.clear();
 					text = "Frames discarded.";
 					break;
+				default:
+					throw new Error(`Unknown action ${args.action}`);
 			}
 			return { content: [{ type: "text", text }], details: { frames: recorder.frameCount } };
 		},
