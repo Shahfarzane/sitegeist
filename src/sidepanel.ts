@@ -8,20 +8,26 @@ import {
 	type AgentState,
 	type AgentTool,
 } from "@mariozechner/pi-agent-core";
-import { getModel, getModels, type Model } from "@mariozechner/pi-ai";
+import { getModel, getModels, type Model, type TextContent } from "@mariozechner/pi-ai";
 import {
 	ChatPanel,
 	createExtractDocumentTool,
 	createStreamFn,
+	type MessageEditor,
 	ModelSelector,
 	ProxyTab,
 	// PersistentStorageDialog,
 	setAppStorage,
 	setShowJsonMode,
 } from "@mariozechner/pi-web-ui";
-import { html, render } from "lit";
-import { Circle, Download, History, Link, Plus, Settings, Square } from "lucide";
-import { isRestrictedUrl } from "./browser/cdp.js";
+import { html, render, type TemplateResult } from "lit";
+import { Circle, Crop, Download, History, Link, Plus, Settings, Square } from "lucide";
+import type { Compaction } from "./agent/context.js";
+import { SUMMARY_SYSTEM_PROMPT } from "./agent/context.js";
+import { ContextManager } from "./agent/context-manager.js";
+import { backoffMs, classifyFailure, MAX_RETRIES } from "./agent/recovery.js";
+import { answerOpenToolCalls, clearInterrupted, RunTracker, wasInterrupted } from "./agent/run-tracker.js";
+import { detachTab, isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
 import {
@@ -31,6 +37,7 @@ import {
 	sessionIdForTab,
 	sessionOwningTab,
 } from "./browser/session.js";
+import { ConnectorManager } from "./connectors/manager.js";
 import "./components/OverflowMenu.js";
 import type { MenuEntry } from "./components/OverflowMenu.js";
 import { Toast } from "./components/Toast.js";
@@ -38,8 +45,11 @@ import { AboutTab } from "./dialogs/AboutTab.js";
 import { ApiKeyOrOAuthDialog } from "./dialogs/ApiKeyOrOAuthDialog.js";
 import { ApiKeysOAuthTab } from "./dialogs/ApiKeysOAuthTab.js";
 import { BridgeTab } from "./dialogs/BridgeTab.js";
+import { ConnectorsTab } from "./dialogs/ConnectorsTab.js";
 import { CostsTab } from "./dialogs/CostsTab.js";
 import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
+import { NotificationsTab } from "./dialogs/NotificationsTab.js";
+import { PromptsTab } from "./dialogs/PromptsTab.js";
 import { RecordSkillDialog } from "./dialogs/RecordSkillDialog.js";
 import { SessionCostDialog } from "./dialogs/SessionCostDialog.js";
 import { SitegeistSessionListDialog } from "./dialogs/SessionListDialog.js";
@@ -51,21 +61,30 @@ import {
 	type NavigationMessage,
 	registerNavigationRenderer,
 } from "./messages/NavigationMessage.js";
+import { suggestionsFor } from "./messages/suggestions.js";
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
 import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
+import { notifyFromPanel, notifySettings, setNotifyEnabled } from "./notify/notifications.js";
 import { borrowCliLogin, borrowCliLogins } from "./oauth/cli-login.js";
 import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
 import { SitegeistAppStorage } from "./storage/app-storage.js";
+import { CoalescedTask } from "./storage/coalesced-task.js";
+import { ANY_SITE } from "./storage/skill-match.js";
 import { DebuggerTool } from "./tools/debugger.js";
+import { createConsoleTool, createNetworkTool } from "./tools/devtools.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
+import { createFillLoginTool } from "./tools/fill-login.js";
+import { createGifTool } from "./tools/gif.js";
 import { AskUserWhichElementTool, skillTool } from "./tools/index.js";
 import { NativeInputEventsRuntimeProvider } from "./tools/NativeInputEventsRuntimeProvider.js";
 import { isToolNavigating, NavigateTool } from "./tools/navigate.js";
+import { captureRegion } from "./tools/region-capture.js";
 import { createReplTool } from "./tools/repl/repl.js";
 import { BrowserJsRuntimeProvider, NavigateRuntimeProvider } from "./tools/repl/runtime-providers.js";
+import { createUploadFileTool } from "./tools/upload-file.js";
 import { syncCustomProviderCorsRules } from "./utils/custom-provider-cors.js";
 import { downloadChatMarkdown } from "./utils/export-chat.js";
 import * as port from "./utils/port.js";
@@ -134,6 +153,33 @@ const shownSkills = new Map<string, string>();
 // Use Set with message object identity (not cleared on session switch - persists in memory)
 const recordedCostMessages = new Set<AgentMessage>();
 
+// Builds each turn's view of the chat; holds the summary of older turns once there is one.
+let contextManager: ContextManager | undefined;
+
+// MCP servers the agent can use, connected once per panel.
+let connectors: ConnectorManager | undefined;
+let connectorsReady: Promise<void> = Promise.resolve();
+/** The first prompt of a chat should have the connectors, but not wait long for a slow one. */
+const CONNECTORS_WAIT_MS = 3000;
+
+// Knows when a run in this panel is going, so the next panel can tell it died.
+const runTracker = new RunTracker();
+// This chat's last run ended with the panel; the user can resume it.
+let interruptedRun = false;
+
+// When the current run started, to leave quick answers out of notifications.
+let runStartedAt = 0;
+/** A run shorter than this was probably watched. */
+const NOTIFY_MIN_RUN_MS = 15000;
+// Offer notifications once the user has sat through a run long enough to want them.
+let offerNotifications = false;
+const NOTIFY_OFFERED_KEY = "notify_offered";
+
+// Automatic recovery of a failed turn: attempts so far in this run, and the pending retry.
+let retryAttempts = 0;
+let overflowRecovered = false;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
 // Interaction recorder (record → save as site-scoped skill)
 let recorder: Recorder | undefined;
 let isRecording = false;
@@ -152,6 +198,7 @@ function publishBusyState(): void {
 }
 window.addEventListener("pagehide", () => {
 	chrome.storage.session.remove(`sidepanel_busy_${currentWindowId}`).catch(() => undefined);
+	void saveSession();
 });
 
 // The tabs this chat session owns (its own tab group; never the user's tabs)
@@ -222,8 +269,8 @@ async function shareActiveTab(): Promise<void> {
 }
 
 /**
- * Slash-command provider for the chat input: lists skills (recordings included),
- * site-scoped first, and inserts an @skill:<id> reference the agent retrieves.
+ * Slash-command provider for the chat input: saved prompts, inserted as text, then skills
+ * (recordings included), site-scoped first, as an @skill:<id> reference the agent retrieves.
  */
 function buildSkillSlashProvider() {
 	return async (query: string) => {
@@ -243,13 +290,29 @@ function buildSkillSlashProvider() {
 					(s) => s.name.toLowerCase().includes(q) || (s.shortDescription || "").toLowerCase().includes(q),
 				)
 			: ordered;
-		return filtered.slice(0, 20).map((s) => ({
-			id: s.name,
-			title: s.name,
-			description: s.shortDescription,
-			hint: onSiteNames.has(s.name) ? "this site" : s.domainPatterns[0],
-			value: `@skill:${s.name}`,
-		}));
+		const prompts = (await storage.prompts.list()).filter(
+			(p) => !q || p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q),
+		);
+		return [
+			...prompts.map((p) => ({
+				id: `prompt:${p.name}`,
+				title: p.name,
+				description: p.text,
+				hint: "prompt",
+				value: p.text,
+			})),
+			...filtered.slice(0, 20).map((s) => ({
+				id: s.name,
+				title: s.name,
+				description: s.shortDescription,
+				hint: onSiteNames.has(s.name)
+					? "this site"
+					: s.domainPatterns[0] === ANY_SITE
+						? "any site"
+						: s.domainPatterns[0],
+				value: `@skill:${s.name}`,
+			})),
+		];
 	};
 }
 
@@ -386,12 +449,33 @@ async function hasAnyApiKey(): Promise<boolean> {
 	return providers.length > 0;
 }
 
+function connectorsTab(): ConnectorsTab {
+	const tab = new ConnectorsTab();
+	if (connectors) tab.host = { manager: connectors, refresh: refreshConnectors };
+	return tab;
+}
+
+/**
+ * Connect what is on and hand the tools to the agent; they take effect on the next turn. One at a
+ * time: overlapping refreshes would each add their tools, and providers refuse duplicate names.
+ */
+const connectorRefresh = new CoalescedTask(async () => {
+	const manager = connectors;
+	if (!manager || !agent) return;
+	const tools = await manager.refresh();
+	agent.setTools([...agent.state.tools.filter((t) => !manager.owns(t)), ...tools]);
+});
+const refreshConnectors = () => connectorRefresh.request();
+
 function settingsSections(): SettingsSection[] {
 	return [
 		{ label: "Providers", hint: "Subscriptions and API keys", tab: new ApiKeysOAuthTab() },
 		{ label: "Custom providers", hint: "OpenAI- or Anthropic-compatible endpoints", tab: new CustomProvidersTab() },
 		{ label: "Skills", hint: "Site scripts the agent can reuse", tab: new SkillsTab() },
+		{ label: "Prompts", hint: "Reusable prompts for the / menu", tab: new PromptsTab() },
+		{ label: "Connectors", hint: "MCP servers and plugins", tab: connectorsTab() },
 		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
+		{ label: "Notifications", hint: "When a task finishes or needs you", tab: new NotificationsTab() },
 		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },
 		{ label: "Proxy", hint: "CORS proxy for providers that need one", tab: new ProxyTab() },
 		{ label: "About", hint: "Version and links", tab: new AboutTab() },
@@ -418,8 +502,8 @@ export function getShownSkills(): Map<string, string> {
 // HELPERS
 // ============================================================================
 const generateTitle = (messages: AgentMessage[]): string => {
-	const firstUserMsg = messages.find((m) => m.role === "user");
-	if (firstUserMsg?.role !== "user") return "";
+	const firstUserMsg = messages.find((m) => m.role === "user" || m.role === "user-with-attachments");
+	if (firstUserMsg?.role !== "user" && firstUserMsg?.role !== "user-with-attachments") return "";
 
 	let text = "";
 	const content = firstUserMsg.content;
@@ -432,7 +516,8 @@ const generateTitle = (messages: AgentMessage[]): string => {
 	}
 
 	text = text.trim();
-	if (!text) return "";
+	// A chat without a title is not saved, and an image alone has no words to make one from.
+	if (!text) return firstUserMsg.role === "user-with-attachments" ? "Attached files" : "";
 
 	const sentenceEnd = text.search(/[.!?]/);
 	if (sentenceEnd > 0 && sentenceEnd <= 50) {
@@ -441,13 +526,15 @@ const generateTitle = (messages: AgentMessage[]): string => {
 	return text.length <= 50 ? text : `${text.substring(0, 47)}...`;
 };
 
+const isUserMessage = (m: AgentMessage): boolean => m.role === "user" || m.role === "user-with-attachments";
+
 const shouldSaveSession = (messages: AgentMessage[]): boolean => {
-	const hasUserMsg = messages.some((m: AgentMessage) => m.role === "user");
+	const hasUserMsg = messages.some(isUserMessage);
 	const hasAssistantMsg = messages.some((m: AgentMessage) => m.role === "assistant");
 	return hasUserMsg && hasAssistantMsg;
 };
 
-const saveSession = async () => {
+const writeSession = async () => {
 	if (!storage.sessions || !currentSessionId || !agent || !currentTitle) return;
 
 	const state = agent.state;
@@ -485,7 +572,7 @@ const saveSession = async () => {
 		let preview = "";
 		for (const msg of state.messages) {
 			if (preview.length >= 2048) break;
-			if (msg.role === "user") {
+			if (msg.role === "user" || msg.role === "user-with-attachments") {
 				const text =
 					typeof msg.content === "string"
 						? msg.content
@@ -526,6 +613,11 @@ const saveSession = async () => {
 	}
 };
 
+// A save structured-clones the whole chat, screenshots included. Writes never overlap, so a
+// slow one cannot be overtaken by an older snapshot.
+const sessionSaver = new CoalescedTask(writeSession);
+const saveSession = () => sessionSaver.request();
+
 const updateUrl = (sessionId: string) => {
 	const url = new URL(window.location.href);
 	if (homeTabId !== undefined) url.searchParams.set("tabId", String(homeTabId));
@@ -550,10 +642,177 @@ function uncappedStreamFn<F extends (model: Model<any>, ...rest: any[]) => any>(
 	}) as F;
 }
 
-const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true) => {
+const compactionKey = (sessionId: string) => `compaction.${sessionId}`;
+
+function saveCompaction(compaction: Compaction | undefined): void {
+	if (!compaction || !currentSessionId) return;
+	storage.settings.set(compactionKey(currentSessionId), compaction).catch((err) => {
+		console.error("Failed to save the chat summary:", err);
+	});
+}
+
+/** Stop a retry that is waiting; the user took over. */
+function cancelRetry(): void {
+	if (retryTimer) clearTimeout(retryTimer);
+	retryTimer = undefined;
+}
+
+/**
+ * A failed turn that can pass on its own (rate limit, overloaded server, dropped connection) is
+ * retried with backoff, and a chat that outgrew the context window is summarized and continued.
+ * The failed message leaves the chat, so the model never sees it and `continue` is valid.
+ */
+async function recoverFailedTurn(): Promise<boolean> {
+	const last = agent.state.messages.at(-1);
+	if (last?.role !== "assistant") return false;
+	const failure = classifyFailure(last, agent.state.model.contextWindow);
+	if (!failure) return false;
+
+	const withoutFailed = agent.state.messages.slice(0, -1);
+	if (failure === "overflow") {
+		if (overflowRecovered) return false;
+		overflowRecovered = true;
+		Toast.show("Summarizing older messages to stay within the context window");
+		const compacted = await contextManager?.compact(withoutFailed).catch((err) => {
+			console.warn("[Context] summary failed:", err);
+			return false;
+		});
+		if (!compacted) return false;
+		// The panel looks idle during the summary; what the user sent meanwhile wins.
+		if (agent.state.isStreaming || agent.state.messages.at(-1) !== last) return true;
+		agent.replaceMessages(withoutFailed);
+		await agent.continue();
+		return true;
+	}
+
+	if (retryAttempts >= MAX_RETRIES) return false;
+	retryAttempts++;
+	const delay = backoffMs(retryAttempts, last.errorMessage);
+	Toast.show(`Provider error, retrying in ${Math.round(delay / 1000)} s (${retryAttempts} of ${MAX_RETRIES})`);
+	retryTimer = setTimeout(() => {
+		retryTimer = undefined;
+		if (agent.state.isStreaming || agent.state.messages.at(-1) !== last) return;
+		agent.replaceMessages(withoutFailed);
+		agent.continue().catch((err) => console.error("Retry failed:", err));
+	}, delay);
+	return true;
+}
+
+/** The run is over for good: tell a user who is elsewhere, and offer notifications if they have none. */
+async function announceRunEnd(): Promise<void> {
+	if (Date.now() - runStartedAt < NOTIFY_MIN_RUN_MS) return;
+	const last = agent.state.messages.at(-1);
+	if (last?.role !== "assistant" || last.stopReason === "aborted") return;
+	const failed = last.stopReason === "error";
+	const reply = last.content
+		.filter((c): c is TextContent => c.type === "text")
+		.map((c) => c.text)
+		.join(" ")
+		.trim();
+	await notifyFromPanel({
+		kind: failed ? "failed" : "done",
+		title: currentTitle || (failed ? "Task failed" : "Task finished"),
+		message: failed ? (last.errorMessage ?? "The task stopped with an error.") : reply || "Finished.",
+		tabId: browserSession?.currentTabId,
+	});
+	const { granted } = await notifySettings();
+	if (granted) return;
+	const offered = await chrome.storage.local.get(NOTIFY_OFFERED_KEY);
+	if (offered[NOTIFY_OFFERED_KEY]) return;
+	offerNotifications = true;
+	renderApp();
+}
+
+function dismissNotificationOffer(): void {
+	offerNotifications = false;
+	chrome.storage.local.set({ [NOTIFY_OFFERED_KEY]: true }).catch(() => undefined);
+	renderApp();
+}
+
+async function acceptNotificationOffer(): Promise<void> {
+	// First await of the click: the request needs its user gesture.
+	const granted = await chrome.permissions.request({ permissions: ["notifications"] });
+	if (granted) await setNotifyEnabled(true);
+	dismissNotificationOffer();
+}
+
+/** The right-click menu leaves a question for this tab's panel, open or just opening. */
+async function applyPrefill(): Promise<void> {
+	if (homeTabId === undefined) return;
+	const key = `panel_prefill_${homeTabId}`;
+	const prompt = (await chrome.storage.session.get(key))[key] as string | undefined;
+	if (!prompt) return;
+	await chrome.storage.session.remove(key);
+	chatPanel.agentInterface?.setInput(prompt);
+}
+
+async function watchPrefill(): Promise<void> {
+	await applyPrefill();
+	chrome.storage.onChanged.addListener((changes, area) => {
+		if (area === "session" && homeTabId !== undefined && `panel_prefill_${homeTabId}` in changes) void applyPrefill();
+	});
+}
+
+/** User gesture: drag a region on the tab in front and attach it to the message. */
+async function attachRegion(): Promise<void> {
+	const [tab] = await chrome.tabs.query({ active: true, windowId: currentWindowId });
+	if (tab?.id === undefined || !tab.url || isRestrictedUrl(tab.url)) {
+		Toast.error("This page cannot be captured");
+		return;
+	}
+	try {
+		const attachment = await captureRegion(tab.id);
+		if (!attachment) return;
+		const editor = document.querySelector<MessageEditor>("message-editor");
+		chatPanel.agentInterface?.setInput(editor?.value ?? "", [...(editor?.attachments ?? []), attachment]);
+	} catch (err) {
+		console.error("Region capture failed:", err);
+		Toast.error("Could not capture that area");
+	} finally {
+		// A tab the agent does not own should not keep the debugger attached.
+		if (!browserSession?.tabIds.includes(tab.id)) await detachTab(tab.id, true);
+	}
+}
+
+function dismissInterruptedRun(): void {
+	interruptedRun = false;
+	if (currentSessionId) clearInterrupted(currentSessionId).catch(() => undefined);
+	renderApp();
+}
+
+/** Pick up a run that ended with the panel, from the last thing that was saved. */
+async function resumeInterruptedRun(): Promise<void> {
+	dismissInterruptedRun();
+	// A turn that failed is what the run was about to retry when the panel closed.
+	let messages = agent.state.messages;
+	for (let last = messages.at(-1); last?.role === "assistant"; last = messages.at(-1)) {
+		if (last.stopReason !== "error" && last.stopReason !== "aborted") break;
+		messages = messages.slice(0, -1);
+	}
+	messages = answerOpenToolCalls(messages);
+	agent.replaceMessages(messages);
+	chatPanel.agentInterface?.requestUpdate();
+	if (messages.at(-1)?.role === "assistant") return;
+	retryAttempts = 0;
+	overflowRecovered = false;
+	await agent.continue();
+}
+
+let rememberedModel: string | undefined;
+
+/** Keep the model for the next new chat; written only when it changed. */
+function rememberModel(model: Model<any>): void {
+	const key = `${model.provider}/${model.id}`;
+	if (key === rememberedModel) return;
+	rememberedModel = key;
+	storage.settings.set("lastUsedModel", model).catch((err) => console.error("Failed to save lastUsedModel:", err));
+}
+
+const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true, compaction?: Compaction) => {
 	if (agentUnsubscribe) {
 		agentUnsubscribe();
 	}
+	cancelRetry();
 
 	// Mark all loaded messages as already recorded (by object identity)
 	for (const msg of initialState?.messages || []) {
@@ -595,6 +854,52 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		defaultModel = getModel("anthropic", "claude-sonnet-4-6");
 	}
 
+	const streamFn = uncappedStreamFn(
+		createStreamFn(async () => {
+			const enabled = await storage.settings.get<boolean>("proxy.enabled");
+			if (!enabled) return undefined;
+			return (await storage.settings.get<string>("proxy.url")) || undefined;
+		}),
+	);
+	const getApiKey = async (provider: string) => {
+		const stored = await storage.providerKeys.get(provider);
+		if (!stored) return undefined;
+		const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
+		const proxyUrl = proxyEnabled ? (await storage.settings.get<string>("proxy.url")) || undefined : undefined;
+		return resolveApiKey(stored, provider, storage.providerKeys, proxyUrl);
+	};
+
+	contextManager = new ContextManager(
+		{
+			model: () => agent.state.model,
+			summarize: async (prompt, signal) => {
+				const model = agent.state.model;
+				const stream = await streamFn(
+					model,
+					{
+						systemPrompt: SUMMARY_SYSTEM_PROMPT,
+						messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+					},
+					{ apiKey: await getApiKey(model.provider), signal, maxTokens: 4000 },
+				);
+				const reply = await stream.result();
+				// An aborted summary is a cut-off one; saving it would lose what it never reached.
+				if (reply.stopReason === "error" || reply.stopReason === "aborted") {
+					throw new Error(reply.errorMessage ?? "Summary failed");
+				}
+				return reply.content
+					.filter((c): c is TextContent => c.type === "text")
+					.map((c) => c.text)
+					.join("\n");
+			},
+			onCompaction: (next) => {
+				saveCompaction(next);
+				Toast.show("Older messages summarized to stay within the context window");
+			},
+		},
+		compaction,
+	);
+
 	agent = new Agent({
 		initialState: initialState || {
 			systemPrompt: SYSTEM_PROMPT,
@@ -604,31 +909,24 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			tools: [],
 		},
 		convertToLlm: browserMessageTransformer,
+		transformContext: (messages, signal) => contextManager?.prepare(messages, signal) ?? Promise.resolve(messages),
 		toolExecution: "sequential",
-		streamFn: uncappedStreamFn(
-			createStreamFn(async () => {
-				const enabled = await storage.settings.get<boolean>("proxy.enabled");
-				if (!enabled) return undefined;
-				return (await storage.settings.get<string>("proxy.url")) || undefined;
-			}),
-		),
-		getApiKey: async (provider: string) => {
-			const stored = await storage.providerKeys.get(provider);
-			if (!stored) return undefined;
-			const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
-			const proxyUrl = proxyEnabled ? (await storage.settings.get<string>("proxy.url")) || undefined : undefined;
-			return resolveApiKey(stored, provider, storage.providerKeys, proxyUrl);
-		},
+		streamFn,
+		getApiKey,
 	});
 
 	if (shouldSave) {
 		agentUnsubscribe = agent.subscribe((event: AgentEvent) => {
 			const messages = agent.state.messages;
 			publishBusyState();
+			if (event.type === "agent_start" && retryAttempts === 0 && !overflowRecovered) runStartedAt = Date.now();
 
-			storage.settings
-				.set("lastUsedModel", agent.state.model)
-				.catch((err) => console.error("Failed to save lastUsedModel:", err));
+			// Hot path: a delta only moves agent.state.streamMessage, which AgentInterface renders
+			// itself. Doing anything more per token cost 98% of the main thread on long chats.
+			if (event.type === "message_update" || event.type === "tool_execution_update") return;
+
+			rememberModel(agent.state.model);
+			if (currentSessionId && agent.state.isStreaming) runTracker.start(currentSessionId);
 
 			if (
 				event.type === "message_end" &&
@@ -660,8 +958,23 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				updateUrl(savedId);
 			}
 
-			if (currentSessionId) {
+			if (currentSessionId && (event.type === "message_end" || event.type === "agent_end")) {
 				saveSession();
+			}
+
+			if (event.type === "agent_end") {
+				recoverFailedTurn()
+					.catch((err) => {
+						console.error("Recovery failed:", err);
+						return false;
+					})
+					.then((recovering) => {
+						// While a retry waits the run is not over: a panel closed now can still resume it.
+						if (recovering) return;
+						runTracker.stop();
+						return announceRunEnd();
+					})
+					.catch((err) => console.error("Announcing the run failed:", err));
 			}
 
 			renderApp();
@@ -705,7 +1018,12 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		},
 		onBeforeSend: async () => {
 			if (!agent) return;
+			await Promise.race([connectorsReady, new Promise((resolve) => setTimeout(resolve, CONNECTORS_WAIT_MS))]);
 			browserSession?.userAskedAgain();
+			cancelRetry();
+			retryAttempts = 0;
+			overflowRecovered = false;
+			if (interruptedRun) dismissInterruptedRun();
 
 			// The session's current tab (nothing if the session has no tab yet)
 			const tab = await browserSession?.currentTab();
@@ -735,7 +1053,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			if (!agent) return;
 			SessionCostDialog.open(agent.state.messages);
 		},
-		toolsFactory: (_agent, _agentInterface, _artifactsPanel, runtimeProvidersFactory) => {
+		toolsFactory: (_agent, _agentInterface, artifactsPanel, runtimeProvidersFactory) => {
 			const navigateTool = new NavigateTool();
 			const selectElementTool = new AskUserWhichElementTool();
 
@@ -772,6 +1090,14 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				skillTool,
 				extractDocumentTool,
 				extractImageTool,
+				createUploadFileTool(
+					() => agent.state.messages,
+					() => artifactsPanel,
+				),
+				createGifTool(),
+				createConsoleTool(),
+				createNetworkTool(),
+				createFillLoginTool(),
 			];
 
 			// Conditionally add debugger tool if enabled
@@ -783,6 +1109,9 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			return tools;
 		},
 	});
+
+	connectors ??= new ConnectorManager(storage.connectors);
+	connectorsReady = refreshConnectors().catch((err) => console.warn("Connecting connectors failed:", err));
 
 	// Register custom message renderers after agentInterface is available
 	if (chatPanel.agentInterface) {
@@ -805,7 +1134,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		chatPanel.agentInterface.historyProvider = () => {
 			for (let i = agent.state.messages.length - 1; i >= 0; i--) {
 				const m = agent.state.messages[i];
-				if (m.role !== "user") continue;
+				if (m.role !== "user" && m.role !== "user-with-attachments") continue;
 				const text =
 					typeof m.content === "string"
 						? m.content
@@ -821,14 +1150,14 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 
 		// Only disable auto-scroll for new sessions with welcome message
 		// Check if this is a fresh session (only has welcome message, no user messages)
-		const hasUserMessage = agent.state.messages.some((m) => m.role === "user");
+		const hasUserMessage = agent.state.messages.some(isUserMessage);
 		if (!hasUserMessage) {
 			chatPanel.agentInterface.setAutoScroll(false);
 
 			// Re-enable auto-scroll on first user message
 			let unsubscribe: (() => void) | undefined;
 			unsubscribe = agent.subscribe(() => {
-				const hasUserMsg = agent.state.messages.some((m) => m.role === "user");
+				const hasUserMsg = agent.state.messages.some(isUserMessage);
 				if (hasUserMsg && unsubscribe) {
 					chatPanel.agentInterface?.setAutoScroll(true);
 					unsubscribe();
@@ -858,6 +1187,16 @@ const newSession = () => {
 // ============================================================================
 // RENDER
 // ============================================================================
+function noticeBar(text: string, ...actions: TemplateResult[]): TemplateResult {
+	return html`<div
+		class="flex items-center gap-2 px-3 py-2 border-b border-border text-sm text-foreground shrink-0"
+		role="status"
+	>
+		<span class="flex-1 min-w-0">${text}</span>
+		${actions}
+	</div>`;
+}
+
 const renderApp = () => {
 	const appHtml = html`
 		<div class="w-full h-full flex flex-col bg-background text-foreground overflow-hidden">
@@ -961,6 +1300,7 @@ const renderApp = () => {
 					.entries=${
 						[
 							{ label: "Share this tab", icon: Link, onSelect: shareActiveTab },
+							{ label: "Capture an area", icon: Crop, onSelect: attachRegion },
 							{
 								label: isRecording ? "Stop recording" : "Record a skill",
 								icon: isRecording ? Square : Circle,
@@ -975,6 +1315,35 @@ const renderApp = () => {
 					}
 				></overflow-menu>
 			</div>
+
+			${
+				interruptedRun
+					? noticeBar(
+							"This task stopped when the panel closed.",
+							Button({
+								variant: "default",
+								size: "sm",
+								children: "Resume",
+								onClick: () => void resumeInterruptedRun(),
+							}),
+							Button({ variant: "ghost", size: "sm", children: "Dismiss", onClick: dismissInterruptedRun }),
+						)
+					: ""
+			}
+			${
+				offerNotifications
+					? noticeBar(
+							"Get a notification when tasks finish?",
+							Button({
+								variant: "default",
+								size: "sm",
+								children: "Turn on",
+								onClick: () => void acceptNotificationOffer(),
+							}),
+							Button({ variant: "ghost", size: "sm", children: "Not now", onClick: dismissNotificationOffer }),
+						)
+					: ""
+			}
 
 			<!-- Chat Panel -->
 			${chatPanel}
@@ -1013,6 +1382,10 @@ window.addEventListener(
 	(e) => {
 		// Escape key to abort streaming - works globally in sidepanel
 		// Use capturing phase to intercept before MessageEditor handles it
+		if (e.key === "Escape" && retryTimer) {
+			cancelRetry();
+			runTracker.stop();
+		}
 		if (e.key === "Escape" && agent?.state.isStreaming && !document.querySelector("overflow-menu[open]")) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -1196,15 +1569,23 @@ async function initApp() {
 			const metadata = await storage.sessions.getMetadata(sessionIdFromUrl);
 			currentTitle = metadata?.title || "";
 
-			await createAgent({
-				systemPrompt: SYSTEM_PROMPT,
-				model: sessionData.model,
-				thinkingLevel: sessionData.thinkingLevel,
-				messages: sessionData.messages,
-				tools: [],
-			});
+			const compaction = await storage.settings.get<Compaction>(compactionKey(sessionIdFromUrl));
+			await createAgent(
+				{
+					systemPrompt: SYSTEM_PROMPT,
+					model: sessionData.model,
+					thinkingLevel: sessionData.thinkingLevel,
+					messages: sessionData.messages,
+					tools: [],
+				},
+				true,
+				// A summary past the end of the chat belongs to messages that were never saved.
+				compaction && compaction.cut <= sessionData.messages.length ? compaction : undefined,
+			);
 
+			interruptedRun = await wasInterrupted(sessionIdFromUrl);
 			renderApp();
+			await watchPrefill();
 			return;
 		} else {
 			// Session doesn't exist, redirect to new session
@@ -1219,13 +1600,17 @@ async function initApp() {
 	// Add welcome message for new sessions. With no provider connected it carries the
 	// "Connect a provider" prompt (see registerWelcomeRenderer), so nothing is forced open.
 	if (agent) {
-		const welcomeMessage = createWelcomeMessage(tutorials);
+		const page = await browserSession?.currentTab().catch(() => undefined);
+		const pageSkills = page?.url ? await storage.skills.list(page.url) : [];
+		const siteSkills = pageSkills.filter((s) => !s.domainPatterns.includes(ANY_SITE)).map((s) => s.name);
+		const welcomeMessage = createWelcomeMessage([...suggestionsFor(page?.url, siteSkills), ...tutorials]);
 		agent.appendMessage(welcomeMessage);
 		// appendMessage emits no agent event, so the message list would keep the old array.
 		chatPanel.agentInterface?.requestUpdate();
 	}
 
 	renderApp();
+	await watchPrefill();
 }
 
 // Register custom user message renderer early, before any session loads

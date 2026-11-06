@@ -7,6 +7,8 @@ import {
 	listSessions,
 	unmarkReleased,
 } from "./browser/session.js";
+import { startLoginService } from "./credentials/login.js";
+import { startNotifications } from "./notify/notifications.js";
 import { startSelfUpdate } from "./utils/self-update.js";
 
 // Keep popups opened by agent-driven background tabs from stealing the user's focus.
@@ -34,6 +36,8 @@ chrome.webNavigation.onTabReplaced.addListener(async ({ replacedTabId, tabId }) 
 // native-messaging bridge. Connects when the CLI has installed the host manifest.
 startBridge();
 startSelfUpdate(trace);
+startNotifications();
+startLoginService();
 
 // ============================================================================
 // PER-TAB SIDE PANEL (Claude-in-Chrome model)
@@ -182,8 +186,13 @@ function openPanelOnTab(tabId: number, source: string): void {
 chrome.tabs.onActivated.addListener((info) => void reconcileActiveTab(info.windowId, info.tabId));
 chrome.tabs.onRemoved.addListener((tabId) => panelPathCache.delete(tabId));
 
+// Several tabs joining a session arrive as a burst of writes; one pass handles them all.
+let sessionsChangedTimer: ReturnType<typeof setTimeout> | undefined;
 chrome.storage.onChanged.addListener((changes, area) => {
-	if (area === "local" && "browser_sessions" in changes) void onSessionsChanged();
+	if (area === "local" && "browser_sessions" in changes) {
+		clearTimeout(sessionsChangedTimer);
+		sessionsChangedTimer = setTimeout(() => void onSessionsChanged(), 50);
+	}
 	if (area === "session" && Object.keys(changes).some((k) => k.startsWith(PANEL_BUSY_PREFIX)))
 		void onActiveTabsChanged();
 });
@@ -245,6 +254,31 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
 			chrome.storage.session.set({ [SIDEPANEL_OPEN_KEY]: Array.from(open) });
 		});
 	});
+});
+
+// Right-click menu: open a task on the tab with the question already in the composer.
+const MENU_PAGE = "sitegeist-ask-page";
+const MENU_SELECTION = "sitegeist-ask-selection";
+
+chrome.runtime.onInstalled.addListener(() => {
+	chrome.contextMenus.removeAll(() => {
+		chrome.contextMenus.create({ id: MENU_PAGE, title: "Ask Sitegeist about this page", contexts: ["page"] });
+		chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Ask Sitegeist about "%s"', contexts: ["selection"] });
+	});
+});
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+	if (tab?.id === undefined) return;
+	const prompt =
+		info.menuItemId === MENU_SELECTION
+			? `About this text on the page:\n\n"${info.selectionText}"\n\n`
+			: "About this page: ";
+	// A running task's panel can be up on another tab; it listens under its home tab.
+	const shown = panelPathCache.get(tab.id);
+	const home = shown ? new URLSearchParams(shown.split("?")[1]).get("tabId") : null;
+	// Still inside the click's user gesture, which opening the panel needs.
+	openPanelOnTab(tab.id, "menu");
+	chrome.storage.session.set({ [`panel_prefill_${home ?? tab.id}`]: prompt }).catch(() => undefined);
 });
 
 // Keyboard shortcut: open a task on the current tab (Chrome offers no per-tab close API).

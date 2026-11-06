@@ -4,6 +4,26 @@
 
 ### Added
 
+- Capture an area: drag a rectangle on the page from the header menu and it joins your message as an image.
+- The welcome screen suggests what fits the page (review this PR, summarize my inbox, proofread this doc), plus the site's skills.
+- Right-click menu: "Ask Sitegeist about this page" and about a selection open a task with the question in the composer.
+- Default skills for GitHub, Gmail, Google Docs and Slack.
+- 1Password sign-in: `fill_login` for harnesses and the panel agent. The native host runs `op`, so 1Password asks for approval itself; the values go from the host through the service worker into the page and appear in no tool result, chat or storage, and an item only fills on the site it is saved for. Works per step (username page, password page, one-time code).
+- Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
+- Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
+- Saved prompts: Settings > Prompts, inserted as text from the `/` menu.
+- Skills that are not tied to a site (domain pattern `*`).
+- Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
+- `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `scripts/e2e/`: the real extension in Chrome for Testing against a fake model server and the real bridge path, a session benchmark, and a screen renderer (`npm run test:e2e`).
+- `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
+- `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
+- GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.
+- File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
+- Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
+- Long chats stay alive: the model now gets a pruned view of the chat (older screenshots and long tool output drop out in batches, so a provider's prompt cache keeps matching between steps), and a chat nearing the context window is summarized instead of failing. The chat on screen stays whole; the summary is stored beside it. A context overflow from the provider triggers the same summary and the run continues.
+- Interrupted runs: a task that ended because its panel closed offers Resume when the chat is opened again. Tool calls left open get an "outcome unknown" result so the model checks the page before repeating them. A Web Lock tells a dead run from one still going in another panel.
+- A failed turn retries on its own with backoff when the cause can pass (rate limit, overloaded server, dropped connection). Usage limits and bad keys still stop. Escape cancels a waiting retry.
 - Claude Code's and Codex's logins on this computer connect the Anthropic and ChatGPT providers with no setup. The native host reads them (Claude Code's Keychain entry or `~/.claude/.credentials.json`, `~/.codex/auth.json`) when the extension asks through `chrome.runtime.sendNativeMessage` and hands over the access token only. Claude Code's login is read only; Codex's is refreshed by the host on expiry and written back to `auth.json` under a lock, so Codex stays logged in. The lookup runs in a detached process, so a host that Chrome terminates mid-refresh cannot lose the rotated token, and a file Codex changed during the refresh is left as Codex wrote it. Borrowed tokens are compared with the CLI's every 5 minutes. Settings > Providers shows "Connected through Claude Code/Codex"; Logout stops borrowing that login, "Use Claude Code"/"Use Codex" turns it back on. A sitegeist login for those providers that the token endpoint rejects falls back to the CLI's.
 - Claude fallback login: a sitegeist Claude login next to the borrowed Claude Code one is kept as its fallback and used while Claude Code's login has expired (8 hours after `claude` last ran). Settings > Providers shows the fallback under the Claude card (Log in / Remove) and says when it is in use; Logout of the Claude Code login keeps the sitegeist login connected. A lapsed Claude Code login is asked for again every 5 minutes while the fallback is in use.
 - `actions` bridge method and MCP tool: up to 40 input steps (press, click, drag, type, hover, scroll, wait) in one call with an optional closing screenshot. A canvas flowchart (two shapes, labels, bound arrow) is one call instead of 60 to 120 model turns.
@@ -25,7 +45,12 @@
 
 ### Changed
 
-- Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
+- `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
+- Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
+- Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
+- `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
+- Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
+- Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. `sitegeist ask` / `sitegeist yolo` switch modes.
 - The native host starts its socket relay on the extension's hello instead of at launch, so a one-message `sendNativeMessage` lookup never opens a bridge socket.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
 - Composer: ArrowUp in an empty composer recalls the last prompt; the model picker is a plain model-id button and the send button is an arrow (pi-web-ui `MessageEditor`/`AgentInterface`, see README). The provider/auth label was removed from the header.
@@ -42,6 +67,12 @@
 
 ### Fixed
 
+- A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.
+- A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
+- `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
+- Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
+- Parallel tasks could lose their browser session: every panel and the service worker read and rewrote one table, so concurrent writers dropped each other's records and left tab groups orphaned. Writes now go through a Web Lock, a tab adopted in another context cannot come back with a stale write, and a tool call that changes nothing no longer rewrites the table and wakes the worker.
+- Side panel: every streamed token saved the whole chat to IndexedDB, wrote `lastUsedModel` and re-rendered the app, although a token changes nothing that is stored. On a chat with 40 screenshots one reply cost 811 full-session writes and 3.6 s of blocking main-thread time in a 3.7 s stream; it now costs 3 writes and 13 ms. Saves happen on message boundaries and never overlap.
 - Anthropic requests fail with 401 "CORS requests are not allowed for this Organization" for organizations that disallow browser access: a `declarativeNetRequest` rule removes the extension's `Origin` header from its own requests to `api.anthropic.com`, so they are not treated as CORS requests.
 - Hidden agent tabs render at a fixed 1280x800 viewport (CDP device-metrics override, dropped while the user looks at the tab and restored when the agent acts on it again), so screenshot pixels, DOM coordinates and click coordinates are the same numbers in every window; models mixed the two scales on wide windows and clicked the wrong spots.
 - `actions` spaces steps by `settleMs` (default 80 ms) so a keystroke after Enter is not lost while the app opens its text editor, and accepts `key`, `text`, `doubleClick`, `move`, `sleep` and mid-list `screenshot` steps.
@@ -82,6 +113,23 @@
 
 ### Added
 
+- Capture an area: drag a rectangle on the page from the header menu and it joins your message as an image.
+- The welcome screen suggests what fits the page (review this PR, summarize my inbox, proofread this doc), plus the site's skills.
+- Right-click menu: "Ask Sitegeist about this page" and about a selection open a task with the question in the composer.
+- Default skills for GitHub, Gmail, Google Docs and Slack.
+- 1Password sign-in: `fill_login` for harnesses and the panel agent. The native host runs `op`, so 1Password asks for approval itself; the values go from the host through the service worker into the page and appear in no tool result, chat or storage, and an item only fills on the site it is saved for. Works per step (username page, password page, one-time code).
+- Connectors: the panel agent can use MCP servers. Remote servers are added under Settings > Connectors (Streamable HTTP or SSE, with a token or OAuth). Local command servers run through the native host from `~/.config/sitegeist/connectors.json` (`sitegeist connectors add`, `sitegeist connectors import` copies them from Claude Code and Claude Desktop); the extension can only name one, so nothing a page or model says can start a program.
+- Plugins: installing a Claude plugin folder adds its skills, commands (as saved prompts) and remote MCP servers. Local servers in a plugin are reported, not installed.
+- Saved prompts: Settings > Prompts, inserted as text from the `/` menu.
+- Skills that are not tied to a site (domain pattern `*`).
+- Skills reach harnesses: `skills_list`, `skill_get`, `prompts_list`, `run_js` with `skill` to load a skill's helpers, and `navigate` says when a page has a skill. Recorded workflows used to work in the panel only.
+- `read_console` and `read_network` for the panel agent, which only harnesses had.
+- `scripts/e2e/`: the real extension in Chrome for Testing against a fake model server and the real bridge path, a session benchmark, and a screen renderer (`npm run test:e2e`).
+- `list_connected_browsers` and `select_browser` for harnesses, `sitegeist browsers` and `SITEGEIST_BROWSER=<name>` on the CLI: with sitegeist in two browsers the newest used to win with no way to choose.
+- `resize_window`: render a tab at a preset (mobile, tablet, desktop) or any size to test a layout.
+- GIF recording: `gif_creator` for harnesses and the panel agent. It records hidden tabs from the compositor and draws the agent's clicks, drags and action labels plus a progress bar on top, encoded with `gifenc` in a worker so running tasks are not stalled.
+- File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
+- Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
 - Browser-based OAuth login for Anthropic (Claude Pro/Max), OpenAI Codex (ChatGPT Plus/Pro), GitHub Copilot, and Google Gemini CLI
 - Combined "API Keys & OAuth" settings tab with subscription login and API key entry
 - Welcome setup dialog on first launch when no providers are configured
@@ -95,6 +143,11 @@
 
 ### Changed
 
+- `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
+- Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
+- Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
+- `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
+- Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
 - Default model changed to `claude-sonnet-4-6` with `medium` thinking level
 - CORS proxy enabled by default
 - Model selector only shows models from providers with configured keys
@@ -106,6 +159,10 @@
 
 ### Fixed
 
+- A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.
+- A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
+- `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
+- Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
 - Settings dialog tabs not responding to clicks (upstream `pi-web-ui` built with `tsgo` broke Lit decorator reactivity)
 - CORS proxy toggle not updating (same root cause)
 - Proxy not applied to API requests (esbuild bundled duplicate `streamSimple` references, breaking identity check)

@@ -140,6 +140,44 @@ index 4906044..302b24f 100644
           outline:
              "border border-input bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground",
           secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+diff --git a/src/CodeBlock.ts b/src/CodeBlock.ts
+index 3c82dd5..f4a0896 100644
+--- a/src/CodeBlock.ts
++++ b/src/CodeBlock.ts
+@@ -24,6 +24,21 @@ hljs.registerLanguage("json", json);
+ hljs.registerLanguage("bash", bash);
+ hljs.registerLanguage("sql", sql);
+ 
++/** Above this highlighting blocks the main thread for seconds; the text is shown as is. */
++const MAX_HIGHLIGHT_CHARS = 30000;
++/** Language detection runs every grammar over the text: 60 KB of tool output took 30 s. */
++const MAX_AUTO_DETECT_CHARS = 2000;
++
++function escapeHtml(text: string): string {
++   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
++}
++
++function highlight(code: string, language: string): string {
++   if (code.length > MAX_HIGHLIGHT_CHARS || language === "text") return escapeHtml(code);
++   if (language && hljs.getLanguage(language)) return hljs.highlight(code, { language }).value;
++   return code.length > MAX_AUTO_DETECT_CHARS ? escapeHtml(code) : hljs.highlightAuto(code).value;
++}
++
+ @customElement("code-block")
+ export class CodeBlock extends LitElement {
+    @property() code = "";
+@@ -53,10 +68,7 @@ export class CodeBlock extends LitElement {
+       const decodedCode = this.getDecodedCode();
+ 
+       // Highlight the code
+-      const highlighted =
+-         this.language && hljs.getLanguage(this.language)
+-            ? hljs.highlight(decodedCode, { language: this.language }).value
+-            : hljs.highlightAuto(decodedCode).value;
++      const highlighted = highlight(decodedCode, this.language);
+ 
+       // Format language name for display
+       const displayLanguage = this.language || "plaintext";
 diff --git a/src/Dialog.ts b/src/Dialog.ts
 index 3905aec..0d09b4f 100644
 --- a/src/Dialog.ts

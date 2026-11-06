@@ -6,12 +6,40 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, extname, resolve } from "node:path";
 import { z } from "zod";
-import { BridgeClient, BridgeRpcError } from "./client.ts";
+import { BridgeClient, BridgeRpcError, listBrowsers } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
 import { VERSION } from "./version.ts";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+/** Native messaging frames top out at 1 MiB; a multiple of 4 keeps each chunk valid base64. */
+const UPLOAD_CHUNK_CHARS = 600_000;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+const MIME_TYPES: Record<string, string> = {
+	".csv": "text/csv",
+	".gif": "image/gif",
+	".html": "text/html",
+	".jpeg": "image/jpeg",
+	".jpg": "image/jpeg",
+	".json": "application/json",
+	".log": "text/plain",
+	".md": "text/markdown",
+	".mov": "video/quicktime",
+	".mp3": "audio/mpeg",
+	".mp4": "video/mp4",
+	".pdf": "application/pdf",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".txt": "text/plain",
+	".webm": "video/webm",
+	".webp": "image/webp",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".zip": "application/zip",
+};
 
 /** Raw CDP results can be megabytes (DOM.getDocument depth -1, base64 captures). */
 const CDP_RESULT_MAX_CHARS = 100_000;
@@ -107,7 +135,9 @@ export async function runMcpServer(): Promise<void> {
 			instructions: [
 				"sitegeist drives the user's real Chromium browser in the background.",
 				"You get your own tab group; your tabs never take focus and you cannot see the user's other tabs.",
-				"Workflow: navigate(url) -> read_page (refs) -> click/type/fill by ref -> read_page again to confirm.",
+				"Every tool call is a full model turn, so do as much as you can per call.",
+				"Workflow: navigate with read:true (the page comes back in the same call), then actions for everything you already know: fill fields, click, type, with read:true or screenshot:true to see the result in that same call.",
+				"Fields and buttons can be named by what a person reads (text), so a form you can describe needs no read_page first.",
 				"For canvas apps and multi-step input, batch steps with actions (one call, screenshot at the end) instead of one tool call per key or drag.",
 				"Canvas editors (Excalidraw, tldraw, Figma-like): use the app's keyboard shortcuts and mouse drags, check the result on the screenshot, and do not reverse-engineer the app's internals with run_js.",
 				"Reuse your current tab for step-by-step browsing; tabs_create only when two pages must stay open.",
@@ -177,7 +207,58 @@ export async function runMcpServer(): Promise<void> {
 	}
 
 	const tabId = z.number().int().optional().describe("Tab to act on; defaults to the session's current tab");
+	const readOption = z
+		.union([z.boolean(), z.literal("interactive")])
+		.optional()
+		.describe("Also return the page: true for elements and text, interactive for elements only");
 
+	server.registerTool(
+		"list_connected_browsers",
+		{
+			description: "List the browsers with sitegeist running on this computer. Tabs belong to one browser; select_browser switches.",
+			inputSchema: {},
+		},
+		async () => {
+			try {
+				if (!client.connected) await client.connect().catch(() => undefined);
+				const browsers = await listBrowsers();
+				return {
+					content: text(
+						browsers.map((b) => ({
+							id: b.id,
+							name: b.name,
+							extensionConnected: b.extensionConnected,
+							inUse: b.path === client.connectedPath,
+						})),
+					),
+				};
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
+		"select_browser",
+		{
+			description: "Use another browser from now on, by the id or name from list_connected_browsers. Your tabs in the current browser stay open there.",
+			inputSchema: { browser: z.string().describe("Id or name, e.g. Helium") },
+		},
+		async ({ browser }) => {
+			try {
+				const browsers = await listBrowsers();
+				const wanted = browser.toLowerCase();
+				const match = browsers.find((b) => b.id === browser) ?? browsers.find((b) => b.name?.toLowerCase().includes(wanted));
+				if (!match) throw new Error(`No connected browser matches ${browser}`);
+				client.close();
+				client.preferred = match.path;
+				client.preferredName = match.name;
+				await client.connect(match.path);
+				return { content: text({ selected: match.id, name: match.name }) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
 	server.registerTool(
 		"tabs_context",
 		{
@@ -218,14 +299,22 @@ export async function runMcpServer(): Promise<void> {
 		"navigate",
 		{
 			description:
-				"Load a URL in your current tab (the first call opens your tab), or 'back' / 'forward'. Waits for the page; the result has tabId, url, title, and loading:true if it is still loading.",
+				"Load a URL in your current tab (the first call opens your tab), or 'back' / 'forward'. Waits for the page; the result has tabId, url, title, and loading:true if it is still loading. read:true also returns the page (elements with refs and text), saving a read_page call.",
 			inputSchema: {
 				url: z.string(),
 				tabId,
 				waitUntil: z.enum(["domcontentloaded", "load"]).optional(),
+				read: readOption,
 			},
 		},
-		(args) => call("navigate", args),
+		async (args) => {
+			try {
+				const { page, ...summary } = (await client.call("navigate", args)) as { page?: Parameters<typeof formatSnapshot>[0] };
+				return { content: text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
 	);
 	server.registerTool(
 		"screenshot",
@@ -251,12 +340,13 @@ export async function runMcpServer(): Promise<void> {
 					height: number;
 					cssWidth?: number;
 					cssHeight?: number;
+					imageId: string;
 				};
 				const note = "Give click/drag/hover/scroll x/y in this image's pixels; they are mapped to the page for you.";
 				return {
 					content: [
 						{ type: "image", data: shot.data, mimeType: shot.mimeType },
-						{ type: "text", text: `${shot.width}x${shot.height} screenshot. ${note}` },
+						{ type: "text", text: `${shot.width}x${shot.height} screenshot, imageId ${shot.imageId}. ${note}` },
 					],
 				};
 			} catch (err) {
@@ -298,7 +388,8 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"find",
 		{
-			description: "Find elements by words in their role, label, value or href. Returns refs for click/type/fill.",
+			description:
+				'Find elements by what you would call them: "search bar", "login button", "add to cart". Role words and common synonyms are understood. Returns refs for click/type/fill.',
 			inputSchema: { query: z.string(), tabId, limit: z.number().int().optional() },
 		},
 		async (args) => {
@@ -315,13 +406,14 @@ export async function runMcpServer(): Promise<void> {
 		tabId,
 		ref: z.string().optional().describe("Element ref from read_page or find"),
 		selector: z.string().optional().describe("CSS selector"),
+		text: z.string().optional().describe("What a person reads on it: a label, placeholder, or button text"),
 		x: z.number().optional().describe("Pixel x in the latest screenshot"),
 		y: z.number().optional().describe("Pixel y in the latest screenshot"),
 	};
 	server.registerTool(
 		"click",
 		{
-			description: "Click an element by ref or selector, or at x/y pixels of the latest screenshot, with real input events.",
+			description: "Click an element by ref, selector or text, or at x/y pixels of the latest screenshot, with real input events.",
 			inputSchema: { ...targetSchema, button: z.enum(["left", "right", "middle"]).optional(), clickCount: z.number().int().optional() },
 		},
 		(args) => call("click", args),
@@ -330,8 +422,17 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"type",
 		{
-			description: "Type text with real key events. Clicks the target first when ref/selector is given. submit presses Enter afterwards.",
-			inputSchema: { text: z.string(), tabId, ref: z.string().optional(), selector: z.string().optional(), submit: z.boolean().optional() },
+			description:
+				"Type text with real key events. Long text goes into a text field in one insertion; set keys:true for an editor that needs a key event per character. Clicks the target first when ref, selector or target (visible text) is given. submit presses Enter afterwards.",
+			inputSchema: {
+				text: z.string(),
+				tabId,
+				ref: z.string().optional(),
+				selector: z.string().optional(),
+				target: z.string().optional().describe("Label, placeholder or visible text of the field to click first"),
+				submit: z.boolean().optional(),
+				keys: z.boolean().optional().describe("Send every character as key events, however long the text is"),
+			},
 		},
 		(args) => call("type", args),
 	);
@@ -346,8 +447,14 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"fill",
 		{
-			description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable).",
-			inputSchema: { value: z.string(), tabId, ref: z.string().optional(), selector: z.string().optional() },
+			description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable). Name it by ref, selector or text (its label or placeholder).",
+			inputSchema: {
+				value: z.string(),
+				tabId,
+				ref: z.string().optional(),
+				selector: z.string().optional(),
+				text: z.string().optional().describe("Label or placeholder of the field"),
+			},
 		},
 		(args) => call("fill", args),
 	);
@@ -378,13 +485,15 @@ export async function runMcpServer(): Promise<void> {
 		"actions",
 		{
 			description:
-				"Run several input steps in one call, then optionally screenshot. Best for canvas apps and forms: " +
-				'e.g. steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"press":"Enter"},{"type":"Start"},{"press":"Escape"}], screenshot true. ' +
-				"Step kinds: press (key or chord), click ({x,y} | {ref} | {selector}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), hover ({x,y}|{ref}), scroll ({dx,dy}|{to}), wait (ms). " +
+				"Run several steps in one call, then optionally read the page or screenshot. Use it for anything you already know how to do: " +
+				'a form is one call, e.g. steps [{"fill":{"text":"Name","value":"Ada"}},{"fill":{"text":"Plan","value":"Pro"}},{"click":{"text":"Send"}}], read true. ' +
+				'A canvas: steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"press":"Enter"},{"type":"Start"},{"press":"Escape"}], screenshot true. ' +
+				"Step kinds: navigate (url), fill ({ref|selector|text, value}), press (key or chord), click ({x,y} | {ref} | {selector} | {text}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), hover ({x,y}|{ref}), scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
 				"x/y are pixels of the latest screenshot. Steps are spaced by settleMs (default 80) so the app can react. Stops at the first failing step.",
 			inputSchema: {
 				steps: z.array(z.record(z.string(), z.any())).min(1).max(40),
 				screenshot: z.boolean().optional().describe("Return a screenshot after the last step"),
+				read: readOption,
 				settleMs: z.number().int().optional().describe("Pause between steps in ms (default 80)"),
 				tabId,
 			},
@@ -394,8 +503,10 @@ export async function runMcpServer(): Promise<void> {
 				const res = (await client.call("actions", args)) as {
 					steps: number;
 					screenshot?: { data: string; mimeType: string; width: number; height: number };
+					page?: Parameters<typeof formatSnapshot>[0];
 				};
 				const content: Content[] = [{ type: "text", text: `${res.steps} steps done.` }];
+				if (res.page) content.push({ type: "text", text: formatSnapshot(res.page) });
 				if (res.screenshot) {
 					content.unshift({ type: "image", data: res.screenshot.data, mimeType: res.screenshot.mimeType });
 					content.push({
@@ -413,8 +524,13 @@ export async function runMcpServer(): Promise<void> {
 		"run_js",
 		{
 			description:
-				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals.",
-			inputSchema: { code: z.string(), tabId, world: z.enum(["user", "main"]).optional() },
+				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals. skill loads a skill's library first, so its helpers are there for your code.",
+			inputSchema: {
+				code: z.string(),
+				tabId,
+				world: z.enum(["user", "main"]).optional(),
+				skill: z.string().optional().describe("Name of a skill whose library to load first"),
+			},
 		},
 		(args) => call("evaluate", args),
 	);
@@ -422,7 +538,7 @@ export async function runMcpServer(): Promise<void> {
 		"cdp",
 		{
 			description:
-				"Send a raw Chrome DevTools Protocol command to your current tab and return its result (e.g. Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, DOM.getDocument, Performance.getMetrics, Input.dispatchMouseEvent). The tab is already attached; enable domains first if a command needs it. Page.navigate asks for site permission like navigate does. Commands that reach other tabs or browser-wide state (Target.*, Browser.*, Storage.*, Network.getAllCookies, clearing cache or cookies) are refused. Events are not streamed: use read_console and read_network. Prefer the dedicated tools when one fits.",
+				"Send a raw Chrome DevTools Protocol command to your current tab and return its result (e.g. Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, DOM.getDocument, Performance.getMetrics, Input.dispatchMouseEvent). The tab is already attached; enable domains first if a command needs it. If the user turned on asking for new sites, commands that reach other tabs or browser-wide state are refused. Events are not streamed: use read_console and read_network. Prefer the dedicated tools when one fits.",
 			inputSchema: {
 				method: z.string().describe("CDP method, e.g. Emulation.setDeviceMetricsOverride"),
 				params: z.record(z.string(), z.unknown()).optional().describe("Command parameters as in the CDP docs"),
@@ -452,6 +568,135 @@ export async function runMcpServer(): Promise<void> {
 			},
 		},
 		(args) => call("wait", args),
+	);
+	server.registerTool(
+		"file_upload",
+		{
+			description:
+				"Attach local files to the page. Do not click upload buttons: that opens a native picker you cannot use. Without a target this fills the page's file input, hidden ones included. Name a file input, its label, or a drop zone with ref, selector or text; or give x/y for a drop target. 25 MB per call.",
+			inputSchema: { paths: z.array(z.string()).min(1).describe("Absolute paths of local files"), ...targetSchema },
+		},
+		async ({ paths, ...where }) => {
+			try {
+				let total = 0;
+				for (const path of paths) total += statSync(path).size;
+				if (total > MAX_UPLOAD_BYTES) throw new Error(`The files are ${Math.round(total / 1048576)} MB; at most 25 MB per call`);
+				const files = [];
+				for (const [index, path] of paths.entries()) {
+					const uploadId = `${process.pid}-${Date.now()}-${index}`;
+					const data = readFileSync(path).toString("base64");
+					for (let at = 0; at < data.length || at === 0; at += UPLOAD_CHUNK_CHARS) {
+						const chunk = data.slice(at, at + UPLOAD_CHUNK_CHARS) || " ";
+						await client.call("upload.chunk", { uploadId, offset: at, data: chunk });
+					}
+					files.push({
+						uploadId,
+						name: basename(path),
+						mimeType: MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
+					});
+				}
+				return { content: text(await client.call("upload.commit", { files, ...where })) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
+		"upload_image",
+		{
+			description:
+				"Send a screenshot you took (its imageId) to a file input or drop target, e.g. a bug report or a document. Target as in file_upload; tabId may be another of your tabs.",
+			inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
+		},
+		(args) => call("upload.image", args),
+	);
+	server.registerTool(
+		"skills_list",
+		{
+			description:
+				"List the skills saved in the browser: ready-made instructions and helper code for sites, recorded workflows included. navigate tells you when a page has one. Give url to see what applies there.",
+			inputSchema: { url: z.string().optional() },
+		},
+		(args) => call("skills.list", args),
+	);
+	server.registerTool(
+		"skill_get",
+		{
+			description: "Read a skill: what it does, how to use it, examples. Run its helpers with run_js and skill set to its name.",
+			inputSchema: { name: z.string(), includeLibrary: z.boolean().optional().describe("Include the helper code itself") },
+		},
+		(args) => call("skills.get", args),
+	);
+	server.registerTool(
+		"prompts_list",
+		{ description: "List the prompts the user saved in the browser, to run one when they refer to it by name.", inputSchema: {} },
+		() => call("prompts.list"),
+	);
+	server.registerTool(
+		"resize_window",
+		{
+			description:
+				"Render your tab at another size, to test a layout: a preset (mobile, tablet, desktop) or width and height in CSS pixels. Tabs render at 1280x800 by default; desktop goes back to that.",
+			inputSchema: {
+				preset: z.enum(["mobile", "tablet", "desktop"]).optional(),
+				width: z.number().int().optional(),
+				height: z.number().int().optional(),
+				tabId,
+			},
+		},
+		(args) => call("window.resize", args),
+	);
+	server.registerTool(
+		"gif_creator",
+		{
+			description:
+				"Record your tab as an animated GIF with click markers, drag arrows, action labels and a progress bar, to show how something works. start_recording, do the steps, then export (it stops by itself). The recording shows everything on screen, logged-in details too, so review it before sharing.",
+			inputSchema: {
+				action: z.enum(["start_recording", "stop_recording", "export", "clear"]),
+				path: z.string().optional().describe("For export: where to write the file. Default: recording-<time>.gif in the working directory"),
+				options: z
+					.object({
+						maxWidth: z.number().int().optional().describe("Output width in pixels (default 800)"),
+						showClickIndicators: z.boolean().optional(),
+						showDragPaths: z.boolean().optional(),
+						showActionLabels: z.boolean().optional(),
+						showProgressBar: z.boolean().optional(),
+						quality: z.number().int().min(1).max(30).optional().describe("Lower is better and larger (default 10)"),
+					})
+					.optional(),
+				tabId,
+			},
+		},
+		async ({ path, ...args }) => {
+			try {
+				const result = (await client.call("gif", args, 300000)) as { data?: string; width?: number; height?: number; frames?: number; bytes?: number };
+				if (args.action !== "export" || !result.data) return { content: text(result) };
+				const file = resolve(path ?? `recording-${Date.now()}.gif`);
+				writeFileSync(file, Buffer.from(result.data, "base64"));
+				const { data: _data, ...summary } = result;
+				return { content: text({ path: file, ...summary }) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
+		"fill_login",
+		{
+			description:
+				"Fill the sign-in form on your current page from the user's 1Password. They approve it in 1Password; you never see the password. Works per step: a page with only a username field gets that, a one-time-code page gets the code. Then press the sign-in button yourself. Several logins for the site come back as a list; call again with item set to one id. Use this instead of asking the user for a password.",
+			inputSchema: { item: z.string().optional().describe("Id of a login from an earlier list"), tabId },
+		},
+		(args) => call("login.fill", args),
+	);
+	server.registerTool(
+		"notify_user",
+		{
+			description:
+				"Show the user a desktop notification when they must act: a login, a captcha, a decision. Pair it with tabs_show. Clicking it opens your tab. Does nothing if the user has notifications off.",
+			inputSchema: { title: z.string(), message: z.string().optional(), tabId },
+		},
+		(args) => call("notify", args),
 	);
 	server.registerTool(
 		"read_console",

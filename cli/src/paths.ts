@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 /** Socket directory: per user, outside $TMPDIR so every process finds the same path. */
 export function socketDir(): string {
+	// The e2e suite runs its own browser beside the user's, on its own sockets.
+	if (process.env.SITEGEIST_SOCKET_DIR) return process.env.SITEGEIST_SOCKET_DIR;
 	if (process.platform === "win32") return `\\\\.\\pipe\\sitegeist-bridge-${userInfo().username}`;
 	return `/tmp/sitegeist-bridge-${userInfo().username}`;
 }

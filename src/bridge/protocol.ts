@@ -46,6 +46,8 @@ export interface HostWelcome {
 	clientId: string;
 	hostVersion: string;
 	extensionConnected: boolean;
+	/** The browser that spawned this host, e.g. "Google Chrome" or "Helium". */
+	browser?: string;
 }
 
 export interface HostResponse {
@@ -134,7 +136,7 @@ export type CliLoginProvider = "anthropic" | "openai-codex";
 
 export interface ExtCredentialsRequest {
 	type: "credentials";
-	provider: CliLoginProvider;
+	provider: CliLoginProvider | typeof HOST_CAPABILITIES_PROVIDER;
 }
 
 /** An access token only: the refresh token stays with the CLI. */
@@ -153,7 +155,41 @@ export interface HostCredentialsResponse {
 	credentials?: CliCredentials;
 	/** Why there is no usable login: not logged in, expired, refresh failed. */
 	error?: string;
+	/** What this host supports, when asked with HOST_CAPABILITIES_PROVIDER. */
+	capabilities?: string[];
 }
+
+/** Asked as a provider because every host, old ones included, answers a credentials message. */
+export const HOST_CAPABILITIES_PROVIDER = "host-capabilities";
+export const CAPABILITY_CONNECTORS = "connectors";
+export const CAPABILITY_ONEPASSWORD = "1password";
+
+/** 1Password through the host. */
+export interface LoginChoice {
+	id: string;
+	title: string;
+	username?: string;
+}
+
+export interface LoginValues {
+	title: string;
+	username?: string;
+	password?: string;
+	otp?: string;
+}
+
+export type ExtOnePasswordRequest = { type: "op_search"; url: string } | { type: "op_read"; id: string; url: string };
+
+/** Local connectors: the extension names one, the host runs it from its own config. */
+export type ExtConnectorRequest =
+	| { type: "connector_list" }
+	| { type: "connector_open"; name: string }
+	| { type: "connector_send"; message: unknown };
+
+export type HostConnectorMessage =
+	| { type: "connector_message"; message: unknown }
+	| { type: "connector_part"; data: string; last: boolean }
+	| { type: "connector_closed"; error?: string };
 
 /** Error codes the extension returns. */
 export const ERR = {
@@ -176,6 +212,10 @@ export const BRIDGE_METHODS = [
 	"tabs.show",
 	"navigate",
 	"screenshot",
+	"upload.chunk",
+	"upload.commit",
+	"upload.image",
+	"gif",
 	"screencast.start",
 	"screencast.stop",
 	"snapshot",
@@ -183,6 +223,7 @@ export const BRIDGE_METHODS = [
 	"text",
 	"html",
 	"find",
+	"window.resize",
 	"click",
 	"hover",
 	"drag",
@@ -191,8 +232,13 @@ export const BRIDGE_METHODS = [
 	"scroll",
 	"fill",
 	"evaluate",
+	"skills.list",
+	"skills.get",
+	"prompts.list",
 	"cdp",
 	"wait",
+	"notify",
+	"login.fill",
 	"console.read",
 	"network.read",
 	"permission.respond",

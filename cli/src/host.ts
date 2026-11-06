@@ -9,21 +9,31 @@
  * relay only starts on the extension's hello, so it never opens a socket.
  */
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type {
 	ClientToHost,
+	ExtConnectorRequest,
 	ExtCredentialsRequest,
+	ExtOnePasswordRequest,
 	ExtToHost,
 	HostCredentialsResponse,
 	HostToClient,
 	HostToExt,
 } from "../../src/bridge/protocol.ts";
-import { MAX_FRAME_FROM_EXTENSION, MAX_FRAME_TO_EXTENSION } from "../../src/bridge/protocol.ts";
+import {
+	CAPABILITY_CONNECTORS,
+	CAPABILITY_ONEPASSWORD,
+	HOST_CAPABILITIES_PROVIDER,
+	MAX_FRAME_FROM_EXTENSION,
+	MAX_FRAME_TO_EXTENSION,
+} from "../../src/bridge/protocol.ts";
+import { readConnectors, type RunningConnector, runConnector } from "./connectors.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
+import { readLogin, searchLogins } from "./onepassword.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
 
@@ -53,6 +63,18 @@ function toExtension(message: HostToExt): void {
 	}
 	process.stdout.write(frame);
 }
+
+/** The browser that spawned this host: its process name, which also tells Brave from Chrome. */
+function browserName(): string | undefined {
+	try {
+		const command = execFileSync("ps", ["-o", "comm=", "-p", String(process.ppid)], { encoding: "utf8" }).trim();
+		return basename(command) || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+let browser: string | undefined;
 
 function toClient(clientId: string, message: HostToClient): void {
 	const client = clients.get(clientId);
@@ -85,7 +107,14 @@ function onExtensionMessage(message: ExtToHost): void {
 function onClientMessage(client: Client, message: ClientToHost): void {
 	if (message.type === "hello") {
 		client.hello = message;
-		toClient(client.id, { type: "welcome", clientId: client.id, hostVersion: VERSION, extensionConnected: extensionReady });
+		browser ??= browserName();
+		toClient(client.id, {
+			type: "welcome",
+			clientId: client.id,
+			hostVersion: VERSION,
+			extensionConnected: extensionReady,
+			browser,
+		});
 		toExtension({ type: "client_connected", clientId: client.id, client: message.client });
 		return;
 	}
@@ -195,6 +224,7 @@ function startRelay(): () => void {
 export function runNativeHost(): void {
 	let stopRelay: (() => void) | undefined;
 	let lookups: Promise<unknown> = Promise.resolve();
+	let connector: RunningConnector | undefined;
 
 	// stdin: frames from the extension
 	const parser = new FrameParser(MAX_FRAME_FROM_EXTENSION);
@@ -208,7 +238,36 @@ export function runNativeHost(): void {
 			return;
 		}
 		for (const m of messages) {
-			const message = m as ExtToHost | ExtCredentialsRequest;
+			const message = m as ExtToHost | ExtCredentialsRequest | ExtConnectorRequest | ExtOnePasswordRequest;
+			if (message.type === "op_search" || message.type === "op_read") {
+				const answer =
+					message.type === "op_search" ? searchLogins(message.url) : readLogin(message.id, message.url);
+				lookups = Promise.all([
+					lookups,
+					answer.then(
+						(result) => process.stdout.write(encodeFrame({ result })),
+						(err: Error) => process.stdout.write(encodeFrame({ error: err.message })),
+					),
+				]);
+				continue;
+			}
+			if (message.type === "connector_list") {
+				process.stdout.write(encodeFrame({ names: Object.keys(readConnectors()) }));
+				continue;
+			}
+			if (message.type === "connector_open") {
+				connector = runConnector(message.name, (frame) => process.stdout.write(encodeFrame(frame)));
+				continue;
+			}
+			if (message.type === "connector_send") {
+				connector?.write(message.message);
+				continue;
+			}
+			if (message.type === "credentials" && message.provider === HOST_CAPABILITIES_PROVIDER) {
+				const capabilities = [CAPABILITY_CONNECTORS, CAPABILITY_ONEPASSWORD];
+				process.stdout.write(encodeFrame({ type: "credentials", capabilities } satisfies HostCredentialsResponse));
+				continue;
+			}
 			if (message.type === "credentials") {
 				lookups = Promise.all([
 					lookups,
@@ -222,6 +281,7 @@ export function runNativeHost(): void {
 	});
 
 	const shutdown = () => {
+		connector?.stop();
 		stopRelay?.();
 		process.exit(0);
 	};

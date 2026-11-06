@@ -103,18 +103,18 @@ export class BridgeTab extends SettingsTab {
 				<div class="space-y-2">
 					<div class="text-sm font-medium text-foreground">Site access</div>
 					<label class="flex items-center gap-2 text-sm text-foreground">
+						<input type="radio" name="bridge-mode" value="allow_all" .checked=${this.mode === "allow_all"} @change=${async () => {
+							await setPermissionMode("allow_all");
+							await this.load();
+						}} />
+						Full access: agents may open any site
+					</label>
+					<label class="flex items-center gap-2 text-sm text-foreground">
 						<input type="radio" name="bridge-mode" value="ask" .checked=${this.mode === "ask"} @change=${async () => {
 							await setPermissionMode("ask");
 							await this.load();
 						}} />
 						Ask before opening a new site (the agent prompts you, or you answer here)
-					</label>
-					<label class="flex items-center gap-2 text-sm text-foreground">
-						<input type="radio" name="bridge-mode" value="allow_all" .checked=${this.mode === "allow_all"} @change=${async () => {
-							await setPermissionMode("allow_all");
-							await this.load();
-						}} />
-						Allow any site
 					</label>
 				</div>
 
@@ -141,7 +141,9 @@ export class BridgeTab extends SettingsTab {
 						: ""
 				}
 
-				<div class="space-y-2">
+				${
+					this.mode === "ask"
+						? html`<div class="space-y-2">
 					<div class="text-sm font-medium text-foreground">Allowed sites</div>
 					${
 						this.hosts.length === 0
@@ -177,7 +179,9 @@ export class BridgeTab extends SettingsTab {
 						})}
 						${Button({ size: "sm", variant: "secondary", children: "Add", onClick: () => this.addHost() })}
 					</div>
-				</div>
+				</div>`
+						: ""
+				}
 
 				<div class="space-y-2">
 					<div class="text-sm font-medium text-foreground">Agent sessions in this browser</div>

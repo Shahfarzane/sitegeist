@@ -10,7 +10,7 @@ import { join } from "node:path";
 
 const TOOLS: Array<{ name: string; method: string; description: string; params: string }> = [
 	{ name: "browser_tabs", method: "tabs.context", description: "List the tabs this session owns", params: "{}" },
-	{ name: "browser_navigate", method: "navigate", description: "Navigate the current tab to a URL ('back'/'forward' allowed)", params: "{ url: Type.String(), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_navigate", method: "navigate", description: "Navigate the current tab to a URL ('back'/'forward' allowed). read: true also returns the page", params: "{ url: Type.String(), tabId: Type.Optional(Type.Number()), read: Type.Optional(Type.Boolean()) }" },
 	{ name: "browser_new_tab", method: "tabs.create", description: "Open a new background tab in the session", params: "{ url: Type.Optional(Type.String()) }" },
 	{ name: "browser_close_tab", method: "tabs.close", description: "Close one of the session's tabs", params: "{ tabId: Type.Number() }" },
 	{ name: "browser_show_tab", method: "tabs.show", description: "Bring a tab in front of the user (only when they must see it)", params: "{ tabId: Type.Optional(Type.Number()) }" },
@@ -18,14 +18,16 @@ const TOOLS: Array<{ name: string; method: string; description: string; params: 
 	{ name: "browser_read_page", method: "snapshot", description: "Interactive elements with refs plus page text", params: "{ tabId: Type.Optional(Type.Number()), filter: Type.Optional(Type.String()), maxNodes: Type.Optional(Type.Number()) }" },
 	{ name: "browser_text", method: "text", description: "Readable text of the page or a selector", params: "{ tabId: Type.Optional(Type.Number()), selector: Type.Optional(Type.String()), maxChars: Type.Optional(Type.Number()) }" },
 	{ name: "browser_find", method: "find", description: "Find elements by words in role/label/value/href", params: "{ query: Type.String(), tabId: Type.Optional(Type.Number()) }" },
-	{ name: "browser_click", method: "click", description: "Click by ref, selector, or x/y", params: "{ ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), x: Type.Optional(Type.Number()), y: Type.Optional(Type.Number()), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_click", method: "click", description: "Click by ref, selector, text, or x/y", params: "{ ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), text: Type.Optional(Type.String()), x: Type.Optional(Type.Number()), y: Type.Optional(Type.Number()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_type", method: "type", description: "Type text with real key events; submit presses Enter", params: "{ text: Type.String(), ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), submit: Type.Optional(Type.Boolean()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_press", method: "press", description: "Press a key or chord (Enter, Control+a, ...)", params: "{ key: Type.String(), tabId: Type.Optional(Type.Number()) }" },
-	{ name: "browser_fill", method: "fill", description: "Set a form control's value", params: "{ value: Type.String(), ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_fill", method: "fill", description: "Set a form control's value; name it by ref, selector or text (label)", params: "{ value: Type.String(), ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), text: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_scroll", method: "scroll", description: "Scroll by dx/dy, to top/bottom, or to an element", params: "{ dx: Type.Optional(Type.Number()), dy: Type.Optional(Type.Number()), to: Type.Optional(Type.String()), ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
-	{ name: "browser_actions", method: "actions", description: "Several input steps in one call (press/click/drag/type/hover/scroll/wait, x/y = latest screenshot pixels), optional screenshot at the end", params: "{ steps: Type.Array(Type.Record(Type.String(), Type.Any())), screenshot: Type.Optional(Type.Boolean()), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_actions", method: "actions", description: "Several steps in one call (navigate/fill/press/click/drag/type/hover/scroll/wait, x/y = latest screenshot pixels), optional screenshot or page read at the end", params: "{ steps: Type.Array(Type.Record(Type.String(), Type.Any())), screenshot: Type.Optional(Type.Boolean()), read: Type.Optional(Type.Boolean()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_js", method: "evaluate", description: "Run JavaScript in the page and return its JSON value", params: "{ code: Type.String(), world: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_wait", method: "wait", description: "Wait for selector/text/url or ms", params: "{ selector: Type.Optional(Type.String()), text: Type.Optional(Type.String()), urlIncludes: Type.Optional(Type.String()), ms: Type.Optional(Type.Number()), timeoutMs: Type.Optional(Type.Number()), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_upload_image", method: "upload.image", description: "Send a screenshot (its imageId) to a file input or drop target", params: "{ imageId: Type.String(), ref: Type.Optional(Type.String()), selector: Type.Optional(Type.String()), text: Type.Optional(Type.String()), x: Type.Optional(Type.Number()), y: Type.Optional(Type.Number()), filename: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
+	{ name: "browser_notify", method: "notify", description: "Desktop notification for the user when they must act", params: "{ title: Type.String(), message: Type.Optional(Type.String()), tabId: Type.Optional(Type.Number()) }" },
 	{ name: "browser_console", method: "console.read", description: "Console messages captured on the tab", params: "{ onlyErrors: Type.Optional(Type.Boolean()), pattern: Type.Optional(Type.String()), clear: Type.Optional(Type.Boolean()), tabId: Type.Optional(Type.Number()) }" },
 ];
 
@@ -143,18 +145,19 @@ class Bridge {
 const bridge = new Bridge();
 
 function toResult(value: unknown): { content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>; details: unknown } {
-	// actions: { steps, screenshot? } -> the screenshot as an image plus the step count
-	if (value && typeof value === "object" && "steps" in value && "screenshot" in value) {
-		const v = value as { steps: number; screenshot: unknown };
-		const shot = toResult(v.screenshot);
-		return { content: [...shot.content, { type: "text" as const, text: \`\${v.steps} steps done\` }], details: { steps: v.steps } };
+	// actions: { steps, screenshot?, page? } -> what was asked for, plus the step count
+	if (value && typeof value === "object" && "steps" in value && ("screenshot" in value || "page" in value)) {
+		const v = value as { steps: number; screenshot?: unknown; page?: unknown };
+		const shot = v.screenshot ? toResult(v.screenshot).content : [];
+		const page = v.page ? [{ type: "text" as const, text: JSON.stringify(v.page) }] : [];
+		return { content: [...shot, ...page, { type: "text" as const, text: \`\${v.steps} steps done\` }], details: { steps: v.steps } };
 	}
 	if (value && typeof value === "object" && "data" in value && "mimeType" in value) {
-		const shot = value as { data: string; mimeType: string; width: number; height: number };
+		const shot = value as { data: string; mimeType: string; width: number; height: number; imageId?: string };
 		return {
 			content: [
 				{ type: "image" as const, data: shot.data, mimeType: shot.mimeType },
-				{ type: "text" as const, text: \`\${shot.width}x\${shot.height} screenshot; give x/y in this image's pixels\` },
+				{ type: "text" as const, text: \`\${shot.width}x\${shot.height} screenshot\${shot.imageId ? \`, imageId \${shot.imageId}\` : ""}; give x/y in this image's pixels\` },
 			],
 			details: { width: shot.width, height: shot.height },
 		};

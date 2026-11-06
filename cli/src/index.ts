@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BridgeClient, listSockets } from "./client.ts";
+import { BridgeClient, listBrowsers, listSockets } from "./client.ts";
+import { importableConnectors, readConnectors, writeConnectors } from "./connectors.ts";
 import { cliCredentials } from "./credentials.ts";
 import { runNativeHost } from "./host.ts";
 import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
@@ -15,12 +16,17 @@ Usage:
   sitegeist mcp             Run the MCP server on stdio (installs the native host on first run)
   sitegeist install         Write the native messaging manifest for every Chromium browser found
   sitegeist status          Show whether the extension is reachable
+  sitegeist browsers        List the browsers with a live bridge (SITEGEIST_BROWSER=<name> picks one)
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
   sitegeist update          Make every running browser check for a new signed release now
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
   sitegeist yolo            Allow agents to open ANY site, no per-site prompts (default)
   sitegeist ask             Require a prompt before agents open an un-allowed site
   sitegeist debug           Print the extension's bridge state and recent timing log
+  sitegeist connectors      List local MCP servers for the side panel agent
+  sitegeist connectors add <name> -- <command> [args...]
+  sitegeist connectors remove <name>
+  sitegeist connectors import   Copy the command-based servers of Claude Code and Claude Desktop
   sitegeist pi-extension    Write a pi extension to ~/.pi/agent/extensions/sitegeist.ts
   sitegeist host            (internal) native messaging host, spawned by the browser
   sitegeist credentials <p> (internal) one login lookup for the host, printed as JSON
@@ -31,6 +37,45 @@ Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegei
   omp:    add an MCP server entry running "sitegeist mcp"
   pi:     sitegeist pi-extension
 `;
+
+function connectors(args: string[]): void {
+	const current = readConnectors();
+	const [action, name] = args;
+	if (action === "add") {
+		const separator = args.indexOf("--");
+		const [command, ...commandArgs] = separator >= 0 ? args.slice(separator + 1) : [];
+		if (!name || name === "--" || !command) throw new Error("usage: sitegeist connectors add <name> -- <command> [args...]");
+		writeConnectors({ ...current, [name]: { command, args: commandArgs } });
+		console.log(`Added ${name}. Open it in the side panel under Settings > Connectors.`);
+		return;
+	}
+	if (action === "remove") {
+		if (!name || !(name in current)) throw new Error("usage: sitegeist connectors remove <name>");
+		delete current[name];
+		writeConnectors(current);
+		console.log(`Removed ${name}.`);
+		return;
+	}
+	if (action === "import") {
+		const found = importableConnectors();
+		writeConnectors({ ...found, ...current });
+		console.log(`Imported ${Object.keys(found).length} server(s): ${Object.keys(found).join(", ") || "none"}`);
+		return;
+	}
+	const names = Object.keys(current);
+	if (names.length === 0) console.log("No local connectors. Add one: sitegeist connectors add <name> -- <command> [args...]");
+	for (const entry of names) console.log(`${entry}  ${current[entry].command} ${(current[entry].args ?? []).join(" ")}`);
+}
+
+async function browsers(): Promise<void> {
+	const found = await listBrowsers();
+	if (found.length === 0) {
+		console.log("No browser with a live bridge. Is the sitegeist extension loaded in a running Chromium browser?");
+		process.exitCode = 1;
+		return;
+	}
+	for (const b of found) console.log(`${b.id}  ${b.name ?? "unknown"}  extension ${b.extensionConnected ? "connected" : "not connected"}`);
+}
 
 async function status(): Promise<void> {
 	const sockets = listSockets();
@@ -86,6 +131,12 @@ async function main(): Promise<void> {
 			console.log(`Claude Code (every project): claude mcp add --scope user sitegeist -- ${mcpCommand().join(" ")}`);
 			return;
 		}
+		case "browsers":
+			await browsers();
+			return;
+		case "connectors":
+			connectors(process.argv.slice(3));
+			return;
 		case "status":
 			await status();
 			return;

@@ -19,6 +19,8 @@ const entryPoints = {
 	debug: join(packageRoot, "src/debug.ts"),
 	icons: join(packageRoot, "src/icons.ts"),
 	background: join(packageRoot, "src/background.ts"),
+	offscreen: join(packageRoot, "src/offscreen.ts"),
+	"gif-worker": join(packageRoot, "src/recording/gif-worker.ts"),
 };
 
 rmSync(outDir, { recursive: true, force: true });
@@ -33,6 +35,11 @@ const buildOptions = {
 	target: ["chrome120"],
 	platform: "browser",
 	sourcemap: isWatch ? "inline" : true,
+	// Half the size: every panel parses this bundle, and they share one renderer main thread.
+	// Not minifySyntax: page scripts are built from Function.toString() and placeholders in the
+	// source (tools/repl/userscripts-helpers.ts), which syntax rewriting removes or folds away.
+	minifyWhitespace: !isWatch,
+	minifyIdentifiers: !isWatch,
 	entryNames: "[name]",
 	loader: {
 		".ts": "ts",

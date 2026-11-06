@@ -21,6 +21,12 @@ export class SitegeistSessionsStore extends SessionsStore {
 		return session;
 	}
 
+	async delete(id: string): Promise<void> {
+		await super.delete(id);
+		// The chat summary lives beside the chat (see agent/context-manager.ts).
+		await this.getBackend().delete("settings", `compaction.${id}`);
+	}
+
 	private migrateSession(session: SessionData): SessionData {
 		return {
 			...session,

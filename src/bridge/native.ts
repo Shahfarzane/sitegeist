@@ -10,9 +10,11 @@
 import { stopScreencastsOwnedBy } from "../browser/cdp.js";
 import { setCdpMessageHandler } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
+import { showNotification } from "../notify/notifications.js";
 import {
 	addPendingRequest,
 	allowHost,
+	applyFullAccessDefault,
 	DECISION_KEY_PREFIX,
 	getPermissionMode,
 	hostOf,
@@ -33,7 +35,7 @@ import {
 	NATIVE_HOST_NAME,
 	PROTOCOL_VERSION,
 } from "./protocol.js";
-import { BridgeError, type HandlerContext, handlers } from "./tools.js";
+import { BridgeError, forgetClient, type HandlerContext, handlers } from "./tools.js";
 
 const ALARM_NAME = "sitegeist-bridge-keepalive";
 const WORKER_STARTED_AT = Date.now();
@@ -124,6 +126,7 @@ async function onClientConnected(msg: HostClientConnected): Promise<void> {
 async function onClientDisconnected(clientId: string): Promise<void> {
 	const state = clients.get(clientId);
 	clients.delete(clientId);
+	forgetClient(clientId);
 	await stopScreencastsOwnedBy(clientId).catch(() => undefined);
 	if (state?.session) {
 		// A session that never opened a tab has nothing to re-adopt; drop it instead of piling up.
@@ -163,6 +166,12 @@ async function askPermission(state: ClientState, url: string): Promise<boolean> 
 		event: "permission_request",
 		data: { requestId, host, url, timeoutMs: PERMISSION_TIMEOUT_MS },
 	});
+	showNotification({
+		kind: "needs-you",
+		title: `${state.name} wants to open ${host}`,
+		message: "Answer in the agent, or in Settings > Bridge.",
+		tabId: state.session?.currentTabId,
+	}).catch(() => undefined);
 	const result = await decision;
 	await removePendingRequest(requestId);
 	if (result === "allow_host") await allowHost(host);
@@ -451,7 +460,10 @@ function connect(): void {
 		// "Specified native messaging host not found" means the CLI installer has not run yet.
 		console.debug("[Bridge] native host disconnected:", reason);
 		if (port === next) port = undefined;
-		for (const state of clients.values()) void state.session?.suspend();
+		for (const state of clients.values()) {
+			forgetClient(state.clientId);
+			void state.session?.suspend();
+		}
 		clients.clear();
 		void stopScreencastsOwnedBy(undefined).catch(() => undefined);
 		scheduleReconnect();
@@ -494,6 +506,7 @@ let alarmTicks = 0;
 
 /** Wire the bridge into the service worker. Safe to call on every worker start. */
 export function startBridge(): void {
+	applyFullAccessDefault().catch(() => undefined);
 	dropEmptyBridgeSessions().catch(() => undefined);
 	// Clients are re-announced when the host sees our hello; give that a moment before
 	// deciding which bridge sessions are abandoned.
