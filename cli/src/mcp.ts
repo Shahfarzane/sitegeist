@@ -6,12 +6,40 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { readFileSync, statSync } from "node:fs";
+import { basename, extname } from "node:path";
 import { z } from "zod";
 import { BridgeClient, BridgeRpcError } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
 import { VERSION } from "./version.ts";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+/** Native messaging frames top out at 1 MiB; a multiple of 4 keeps each chunk valid base64. */
+const UPLOAD_CHUNK_CHARS = 600_000;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+const MIME_TYPES: Record<string, string> = {
+	".csv": "text/csv",
+	".gif": "image/gif",
+	".html": "text/html",
+	".jpeg": "image/jpeg",
+	".jpg": "image/jpeg",
+	".json": "application/json",
+	".log": "text/plain",
+	".md": "text/markdown",
+	".mov": "video/quicktime",
+	".mp3": "audio/mpeg",
+	".mp4": "video/mp4",
+	".pdf": "application/pdf",
+	".png": "image/png",
+	".svg": "image/svg+xml",
+	".txt": "text/plain",
+	".webm": "video/webm",
+	".webp": "image/webp",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".zip": "application/zip",
+};
 
 /** Raw CDP results can be megabytes (DOM.getDocument depth -1, base64 captures). */
 const CDP_RESULT_MAX_CHARS = 100_000;
@@ -265,12 +293,13 @@ export async function runMcpServer(): Promise<void> {
 					height: number;
 					cssWidth?: number;
 					cssHeight?: number;
+					imageId: string;
 				};
 				const note = "Give click/drag/hover/scroll x/y in this image's pixels; they are mapped to the page for you.";
 				return {
 					content: [
 						{ type: "image", data: shot.data, mimeType: shot.mimeType },
-						{ type: "text", text: `${shot.width}x${shot.height} screenshot. ${note}` },
+						{ type: "text", text: `${shot.width}x${shot.height} screenshot, imageId ${shot.imageId}. ${note}` },
 					],
 				};
 			} catch (err) {
@@ -485,6 +514,46 @@ export async function runMcpServer(): Promise<void> {
 			},
 		},
 		(args) => call("wait", args),
+	);
+	server.registerTool(
+		"file_upload",
+		{
+			description:
+				"Attach local files to the page. Do not click upload buttons: that opens a native picker you cannot use. Without a target this fills the page's file input, hidden ones included. Name a file input, its label, or a drop zone with ref, selector or text; or give x/y for a drop target. 25 MB per call.",
+			inputSchema: { paths: z.array(z.string()).min(1).describe("Absolute paths of local files"), ...targetSchema },
+		},
+		async ({ paths, ...where }) => {
+			try {
+				let total = 0;
+				for (const path of paths) total += statSync(path).size;
+				if (total > MAX_UPLOAD_BYTES) throw new Error(`The files are ${Math.round(total / 1048576)} MB; at most 25 MB per call`);
+				const files = [];
+				for (const [index, path] of paths.entries()) {
+					const uploadId = `${process.pid}-${Date.now()}-${index}`;
+					const data = readFileSync(path).toString("base64");
+					for (let at = 0; at < data.length || at === 0; at += UPLOAD_CHUNK_CHARS) {
+						await client.call("upload.chunk", { uploadId, data: data.slice(at, at + UPLOAD_CHUNK_CHARS) || " " });
+					}
+					files.push({
+						uploadId,
+						name: basename(path),
+						mimeType: MIME_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
+					});
+				}
+				return { content: text(await client.call("upload.commit", { files, ...where })) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
+	);
+	server.registerTool(
+		"upload_image",
+		{
+			description:
+				"Send a screenshot you took (its imageId) to a file input or drop target, e.g. a bug report or a document. Target as in file_upload; tabId may be another of your tabs.",
+			inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
+		},
+		(args) => call("upload.image", args),
 	);
 	server.registerTool(
 		"notify_user",

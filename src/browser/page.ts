@@ -454,6 +454,85 @@ export async function locate(
 	return runInPage(tabId, code);
 }
 
+export interface PageFile {
+	name: string;
+	mimeType: string;
+	/** Base64 contents. */
+	data: string;
+}
+
+/**
+ * Page-side file delivery. A file input gets the files as if the user had picked them, without
+ * the native picker a click would open. Anything else is treated as a drop zone: the page's own
+ * drag and drop handlers receive the files, which is how editors and chat apps take uploads.
+ */
+function pageDeliverFiles(
+	resolve: (target: ElementTarget) => Element,
+	target: ElementTarget,
+	files: PageFile[],
+	point: { x: number; y: number } | null,
+): { delivered: "input" | "drop"; files: number } {
+	const transfer = new DataTransfer();
+	for (const f of files) {
+		const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+		transfer.items.add(new File([bytes], f.name, { type: f.mimeType }));
+	}
+	const named = target.ref || target.selector || target.text;
+	const el = point
+		? document.elementFromPoint(point.x, point.y)
+		: named
+			? resolve(target)
+			: document.querySelector("input[type=file]");
+	if (!el) throw new Error("No file input on this page. Name a drop target with ref, selector, text or x/y.");
+	const fileInput = (candidate: Element | null | undefined) =>
+		candidate instanceof HTMLInputElement && candidate.type === "file" ? candidate : null;
+	const labelFor = el instanceof HTMLLabelElement ? el.control : null;
+	const input =
+		fileInput(el) ??
+		fileInput(labelFor) ??
+		el.querySelector<HTMLInputElement>("input[type=file]") ??
+		el.closest("label")?.querySelector<HTMLInputElement>("input[type=file]") ??
+		el.closest("form")?.querySelector<HTMLInputElement>("input[type=file]");
+	if (input) {
+		input.files = transfer.files;
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+		input.dispatchEvent(new Event("change", { bubbles: true }));
+		return { delivered: "input", files: input.files?.length ?? 0 };
+	}
+	const r = el.getBoundingClientRect();
+	const clientX = point?.x ?? r.left + r.width / 2;
+	const clientY = point?.y ?? r.top + r.height / 2;
+	for (const type of ["dragenter", "dragover", "drop"]) {
+		el.dispatchEvent(
+			new DragEvent(type, {
+				bubbles: true,
+				cancelable: true,
+				composed: true,
+				clientX,
+				clientY,
+				dataTransfer: transfer,
+			}),
+		);
+	}
+	return { delivered: "drop", files: files.length };
+}
+
+/** Hand files to the page: to a file input, or dropped onto an element or point. */
+export function deliverFiles(
+	tabId: number,
+	target: ElementTarget,
+	files: PageFile[],
+	point?: { x: number; y: number },
+): Promise<{ delivered: "input" | "drop"; files: number }> {
+	return runInPage(
+		tabId,
+		`(() => {
+			${resolverSource(target)}
+			return (${pageDeliverFiles.toString()})(resolve, target, ${JSON.stringify(files)}, ${JSON.stringify(point ?? null)});
+		})()`,
+	);
+}
+
 /** Set a form control's value the way frameworks expect (native setter + input/change). */
 export async function fillElement(tabId: number, target: ElementTarget, value: string): Promise<void> {
 	const code = `(() => {

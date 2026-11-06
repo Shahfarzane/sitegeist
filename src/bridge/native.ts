@@ -35,7 +35,7 @@ import {
 	NATIVE_HOST_NAME,
 	PROTOCOL_VERSION,
 } from "./protocol.js";
-import { BridgeError, type HandlerContext, handlers } from "./tools.js";
+import { BridgeError, forgetClient, type HandlerContext, handlers } from "./tools.js";
 
 const ALARM_NAME = "sitegeist-bridge-keepalive";
 const WORKER_STARTED_AT = Date.now();
@@ -126,6 +126,7 @@ async function onClientConnected(msg: HostClientConnected): Promise<void> {
 async function onClientDisconnected(clientId: string): Promise<void> {
 	const state = clients.get(clientId);
 	clients.delete(clientId);
+	forgetClient(clientId);
 	await stopScreencastsOwnedBy(clientId).catch(() => undefined);
 	if (state?.session) {
 		// A session that never opened a tab has nothing to re-adopt; drop it instead of piling up.

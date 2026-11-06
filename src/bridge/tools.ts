@@ -24,12 +24,14 @@ import {
 } from "../browser/cdp.js";
 import { injectScript } from "../browser/inject.js";
 import {
+	deliverFiles,
 	type ElementTarget,
 	fillElement,
 	goBack,
 	goForward,
 	locate,
 	navigateTabDetailed,
+	type PageFile,
 	pageHtml,
 	pageText,
 	runInPage,
@@ -190,6 +192,40 @@ function normalizeStep(step: Params, i: number): [string, Params] {
 	);
 }
 
+// Native messaging caps host->extension frames at 1 MiB, so files arrive in chunks and wait here.
+const MAX_UPLOAD_CHARS = 36 * 1024 * 1024;
+const uploads = new Map<string, { chunks: string[]; chars: number }>();
+
+/** The last screenshots each client took, so upload_image can send one without a round trip. */
+const SHOTS_KEPT = 4;
+const shots = new Map<string, Map<string, { data: string; mimeType: string }>>();
+
+function rememberShot(clientId: string, shot: { data: string; mimeType: string }): string {
+	let kept = shots.get(clientId);
+	if (!kept) {
+		kept = new Map();
+		shots.set(clientId, kept);
+	}
+	const imageId = crypto.randomUUID().slice(0, 8);
+	kept.set(imageId, { data: shot.data, mimeType: shot.mimeType });
+	if (kept.size > SHOTS_KEPT) kept.delete(kept.keys().next().value as string);
+	return imageId;
+}
+
+/** Drop what a client left behind when it disconnects. */
+export function forgetClient(clientId: string): void {
+	shots.delete(clientId);
+	for (const key of uploads.keys()) if (key.startsWith(`${clientId}:`)) uploads.delete(key);
+}
+
+/** Where files go: a named element or the page's file input, or a point of the latest screenshot. */
+async function deliverTo(params: Params, tabId: number, files: PageFile[]) {
+	const x = num(params, "x");
+	const y = num(params, "y");
+	const point = x !== undefined && y !== undefined ? screenshotToCss(tabId, { x, y }) : undefined;
+	return deliverFiles(tabId, target(params), files, point);
+}
+
 export const handlers: Record<string, Handler> = {
 	"tabs.context": async (ctx) => {
 		const tabs = await ctx.session.tabs();
@@ -269,7 +305,47 @@ export const handlers: Record<string, Handler> = {
 			format: str(params, "format") === "png" ? "png" : "jpeg",
 			quality: num(params, "quality"),
 		});
-		return shot;
+		return { ...shot, imageId: rememberShot(ctx.clientId, shot) };
+	},
+
+	"upload.chunk": async (ctx, params) => {
+		const key = `${ctx.clientId}:${requireStr(params, "uploadId")}`;
+		const data = requireStr(params, "data");
+		const upload = uploads.get(key) ?? { chunks: [], chars: 0 };
+		upload.chars += data.length;
+		if (upload.chars > MAX_UPLOAD_CHARS) {
+			uploads.delete(key);
+			throw new BridgeError(ERR.BAD_PARAMS, "The upload is too large (25 MB at most)");
+		}
+		upload.chunks.push(data);
+		uploads.set(key, upload);
+		return { received: upload.chars };
+	},
+
+	/** Hand chunked files to the page. */
+	"upload.commit": async (ctx, params) => {
+		const specs = params.files as Array<{ uploadId: string; name: string; mimeType: string }> | undefined;
+		if (!Array.isArray(specs) || specs.length === 0) throw new BridgeError(ERR.BAD_PARAMS, "files is required");
+		const files = specs.map((spec) => {
+			const key = `${ctx.clientId}:${spec.uploadId}`;
+			const upload = uploads.get(key);
+			if (!upload) throw new BridgeError(ERR.NOT_FOUND, `No upload ${spec.uploadId}`);
+			uploads.delete(key);
+			return { name: spec.name, mimeType: spec.mimeType, data: upload.chunks.join("") };
+		});
+		const tabId = await resolveTab(ctx, params, true);
+		return deliverTo(params, tabId, files);
+	},
+
+	/** Send a screenshot taken earlier to a file input or drop target, e.g. into a bug report. */
+	"upload.image": async (ctx, params) => {
+		const imageId = requireStr(params, "imageId");
+		const shot = shots.get(ctx.clientId)?.get(imageId);
+		if (!shot) throw new BridgeError(ERR.NOT_FOUND, `No screenshot ${imageId}; take a new one`);
+		const extension = shot.mimeType === "image/png" ? "png" : "jpg";
+		const name = str(params, "filename") ?? `screenshot.${extension}`;
+		const tabId = await resolveTab(ctx, params, true);
+		return deliverTo(params, tabId, [{ name, mimeType: shot.mimeType, data: shot.data }]);
 	},
 
 	"screencast.start": async (ctx, params) => {

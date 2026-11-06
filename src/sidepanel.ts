@@ -74,6 +74,7 @@ import { NativeInputEventsRuntimeProvider } from "./tools/NativeInputEventsRunti
 import { isToolNavigating, NavigateTool } from "./tools/navigate.js";
 import { createReplTool } from "./tools/repl/repl.js";
 import { BrowserJsRuntimeProvider, NavigateRuntimeProvider } from "./tools/repl/runtime-providers.js";
+import { createUploadFileTool } from "./tools/upload-file.js";
 import { syncCustomProviderCorsRules } from "./utils/custom-provider-cors.js";
 import { downloadChatMarkdown } from "./utils/export-chat.js";
 import * as port from "./utils/port.js";
@@ -942,7 +943,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			if (!agent) return;
 			SessionCostDialog.open(agent.state.messages);
 		},
-		toolsFactory: (_agent, _agentInterface, _artifactsPanel, runtimeProvidersFactory) => {
+		toolsFactory: (_agent, _agentInterface, artifactsPanel, runtimeProvidersFactory) => {
 			const navigateTool = new NavigateTool();
 			const selectElementTool = new AskUserWhichElementTool();
 
@@ -979,6 +980,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				skillTool,
 				extractDocumentTool,
 				extractImageTool,
+				createUploadFileTool(
+					() => agent.state.messages,
+					() => artifactsPanel,
+				),
 			];
 
 			// Conditionally add debugger tool if enabled

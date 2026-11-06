@@ -4,6 +4,7 @@
 
 ### Added
 
+- File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
 - Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
 - Long chats stay alive: the model now gets a pruned view of the chat (older screenshots and long tool output drop out in batches, so a provider's prompt cache keeps matching between steps), and a chat nearing the context window is summarized instead of failing. The chat on screen stays whole; the summary is stored beside it. A context overflow from the provider triggers the same summary and the run continues.
 - Interrupted runs: a task that ended because its panel closed offers Resume when the chat is opened again. Tool calls left open get an "outcome unknown" result so the model checks the page before repeating them. A Web Lock tells a dead run from one still going in another panel.
@@ -94,6 +95,7 @@
 
 ### Added
 
+- File uploads: `file_upload` and `upload_image` for harnesses, `upload_file` for the panel agent. Files go to a file input without the native picker (hidden inputs included) or to a page's drag and drop handlers, up to 25 MB per call, in chunks under the 1 MiB native messaging limit.
 - Desktop notifications when a task finishes, fails, or needs you (Settings > Notifications, off until you turn it on, offered once after a long run), with a sound played from a new offscreen document. Clicking one opens the tab. Runs under 15 seconds and runs you are watching stay quiet. Harnesses get `notify_user`. `notifications` is an optional permission so that updating does not disable the extension.
 - Browser-based OAuth login for Anthropic (Claude Pro/Max), OpenAI Codex (ChatGPT Plus/Pro), GitHub Copilot, and Google Gemini CLI
 - Combined "API Keys & OAuth" settings tab with subscription login and API key entry
