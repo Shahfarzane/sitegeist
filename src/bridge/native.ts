@@ -170,6 +170,7 @@ async function askPermission(state: ClientState, url: string): Promise<boolean> 
 		kind: "needs-you",
 		title: `${state.name} wants to open ${host}`,
 		message: "Answer in the agent, or in Settings > Bridge.",
+		tabId: state.session?.currentTabId,
 	}).catch(() => undefined);
 	const result = await decision;
 	await removePendingRequest(requestId);
@@ -459,7 +460,10 @@ function connect(): void {
 		// "Specified native messaging host not found" means the CLI installer has not run yet.
 		console.debug("[Bridge] native host disconnected:", reason);
 		if (port === next) port = undefined;
-		for (const state of clients.values()) void state.session?.suspend();
+		for (const state of clients.values()) {
+			forgetClient(state.clientId);
+			void state.session?.suspend();
+		}
 		clients.clear();
 		void stopScreencastsOwnedBy(undefined).catch(() => undefined);
 		scheduleReconnect();

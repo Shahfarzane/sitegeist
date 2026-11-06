@@ -108,6 +108,15 @@ export class ConnectorsTab extends SettingsTab {
 		const storage = getSitegeistStorage();
 		try {
 			const plugin = parsePlugin(await readPluginFolder(input.files));
+			const prompts = new Set((await storage.prompts.list()).map((p) => p.name));
+			const taken = [
+				...(await Promise.all(plugin.skills.map(async (s) => ((await storage.skills.get(s.name)) ? s.name : "")))),
+				...plugin.prompts.filter((p) => prompts.has(p.name)).map((p) => p.name),
+				...(await Promise.all(
+					plugin.connectors.map(async (c) => ((await storage.connectors.get(c.name)) ? c.name : "")),
+				)),
+			].filter(Boolean);
+			if (taken.length > 0 && !confirm(`This plugin replaces what you have: ${taken.join(", ")}. Continue?`)) return;
 			for (const skill of plugin.skills) await storage.skills.save(skill);
 			for (const prompt of plugin.prompts) await storage.prompts.save(prompt);
 			for (const connector of plugin.connectors) await storage.connectors.save(connector);

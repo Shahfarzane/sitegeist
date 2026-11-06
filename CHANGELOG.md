@@ -50,7 +50,7 @@
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
 - `type` inserts long text into a text field in one step instead of two debugger calls per character (2,000 characters: 1.5 s to 40 ms); Enter stays a key press.
 - Production bundles are minified (whitespace and identifiers), which every panel benefits from when it parses `sidepanel.js`.
-- Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. Browsers that explicitly chose "Ask before opening a new site" keep asking; `sitegeist ask` / `sitegeist yolo` switch modes.
+- Bridge site access defaults to "Allow any site": installs that never picked a mode stop asking before an agent opens a new site. `sitegeist ask` / `sitegeist yolo` switch modes.
 - The native host starts its socket relay on the extension's hello instead of at launch, so a one-message `sendNativeMessage` lookup never opens a bridge socket.
 - `navigate` gained `showTab` and `closeTab`; `switchToTab` no longer focuses the tab.
 - Composer: ArrowUp in an empty composer recalls the last prompt; the model picker is a plain model-id button and the send button is an arrow (pi-web-ui `MessageEditor`/`AgentInterface`, see README). The provider/auth label was removed from the header.

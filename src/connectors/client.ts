@@ -37,6 +37,12 @@ export class LoginRequiredError extends Error {
 
 class StoredAuth implements OAuthClientProvider {
 	authorizationUrl?: URL;
+	/** Ties the redirect to this login; PKCE already stops a foreign code from being exchanged. */
+	readonly expectedState = crypto.randomUUID();
+
+	state(): string {
+		return this.expectedState;
+	}
 
 	constructor(
 		private readonly connector: Connector,
@@ -125,6 +131,8 @@ export class ConnectorClient {
 	private client?: Client;
 	/** Kept apart from the client: a connect that times out has a transport but no client yet. */
 	private transport?: Transport;
+	/** Set once closed: a connect still in flight (it timed out) must not open anything new. */
+	private closed = false;
 
 	constructor(
 		readonly connector: Connector,
@@ -139,9 +147,14 @@ export class ConnectorClient {
 	}
 
 	private async attach(transport: Transport): Promise<void> {
+		if (this.closed) throw new Error(`${this.connector.name} was closed`);
 		this.transport = transport;
 		const client = this.makeClient();
 		await client.connect(transport);
+		if (this.closed) {
+			await client.close().catch(() => undefined);
+			throw new Error(`${this.connector.name} was closed`);
+		}
 		this.client = client;
 	}
 
@@ -164,6 +177,7 @@ export class ConnectorClient {
 			await this.attach(new StreamableHTTPClientTransport(url, this.remoteOptions(provider)));
 		} catch (err) {
 			if (err instanceof UnauthorizedError) throw new LoginRequiredError(connector.name);
+			if (this.closed) throw err;
 			// Servers from before Streamable HTTP only speak SSE.
 			try {
 				await this.attach(new SSEClientTransport(url, this.remoteOptions(provider)));
@@ -188,6 +202,8 @@ export class ConnectorClient {
 			if (!(err instanceof UnauthorizedError) || !provider.authorizationUrl) throw err;
 		}
 		const redirect = await waitForOAuthRedirect(provider.authorizationUrl.toString(), REDIRECT_HOST);
+		if (redirect.searchParams.get("state") !== provider.expectedState)
+			throw new Error("The login redirect did not match");
 		const code = redirect.searchParams.get("code");
 		if (!code) throw new Error(redirect.searchParams.get("error") ?? "The login returned no code");
 		await transport.finishAuth(code);
@@ -210,17 +226,22 @@ export class ConnectorClient {
 		name: string,
 		args: Record<string, unknown>,
 		signal?: AbortSignal,
-	): Promise<{ content: ToolContent[]; isError: boolean }> {
+	): Promise<{ content: ToolContent[]; isError: boolean; structured?: unknown }> {
 		if (!this.client) throw new Error("Not connected");
 		const result = await this.client.callTool({ name, arguments: args }, undefined, {
 			signal,
 			timeout: 120000,
 			resetTimeoutOnProgress: true,
 		});
-		return { content: (result.content as ToolContent[]) ?? [], isError: result.isError === true };
+		return {
+			content: (result.content as ToolContent[]) ?? [],
+			isError: result.isError === true,
+			structured: result.structuredContent,
+		};
 	}
 
 	async close(): Promise<void> {
+		this.closed = true;
 		await this.client?.close().catch(() => undefined);
 		await this.transport?.close().catch(() => undefined);
 		this.client = undefined;

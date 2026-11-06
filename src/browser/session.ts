@@ -443,6 +443,7 @@ export class BrowserSession {
 		const fingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 		if (fingerprint === this.persistedFingerprint && now - (this.state.lastUsedAt ?? 0) < LAST_USED_WRITE_MS) return;
 		this.state.lastUsedAt = now;
+		let written: string | undefined;
 		await updateTable((table) => {
 			// A tab has one owner. One that sits in another record now was adopted after we last
 			// looked, in another context; writing our copy would give it two.
@@ -456,9 +457,11 @@ export class BrowserSession {
 				}
 			}
 			table[this.state.id] = this.state;
-			// Taken here, not after the write: a change made during the write must not look saved.
-			this.persistedFingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
+			// Taken before the write, so a change made during it does not look saved, and kept only
+			// after it, so a failed write is tried again.
+			written = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 		});
+		this.persistedFingerprint = written;
 	}
 
 	/** Drop tabs that no longer exist and re-find the group if the id went stale. */

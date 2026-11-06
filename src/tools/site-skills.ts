@@ -155,7 +155,9 @@ const text = await browserjs(() => document.body.innerText);`,
     return input ? input.value : document.title.replace(/ - Google Docs$/, "");
   },
   readUrl() {
-    return "https://docs.google.com/document/d/" + this.id() + "/mobilebasic";
+    const id = this.id();
+    if (!id) throw new Error("Open a document first");
+    return "https://docs.google.com/document/d/" + id + "/mobilebasic";
   },
 };
 `,

@@ -20,6 +20,7 @@ export interface ConnectorStatus {
 
 export interface ConnectorStorage {
 	list(): Promise<Connector[]>;
+	get(name: string): Promise<Connector | null>;
 	save(connector: Connector): Promise<void>;
 }
 
@@ -32,20 +33,31 @@ export function connectorToolName(connector: string, tool: string): string {
 /** More text than a model can use, and rendering it freezes every panel of the extension. */
 const MAX_RESULT_CHARS = 60000;
 
-function capped(text: string): string {
-	if (text.length <= MAX_RESULT_CHARS) return text;
-	return `${text.slice(0, MAX_RESULT_CHARS)}\n[Truncated: the result has ${text.length} characters. Ask for less, for example with a narrower query.]`;
-}
-
-/** MCP content in the shape tool results use. */
-export function toToolContent(content: ToolContent[]): Array<TextContent | ImageContent> {
+/** MCP content in the shape tool results use. The text budget is for the whole result. */
+export function toToolContent(content: ToolContent[], structured?: unknown): Array<TextContent | ImageContent> {
 	const out: Array<TextContent | ImageContent> = [];
+	let budget = MAX_RESULT_CHARS;
+	const addText = (text: string) => {
+		if (budget <= 0) return;
+		if (text.length <= budget) {
+			out.push({ type: "text", text });
+			budget -= text.length;
+			return;
+		}
+		out.push({
+			type: "text",
+			text: `${text.slice(0, budget)}\n[Truncated: the result has ${text.length} characters. Ask for less, for example with a narrower query.]`,
+		});
+		budget = 0;
+	};
 	for (const block of content) {
-		if (block.type === "text") out.push({ type: "text", text: capped(block.text ?? "") });
+		if (block.type === "text") addText(block.text ?? "");
 		else if (block.type === "image" && block.data) {
 			out.push({ type: "image", data: block.data, mimeType: block.mimeType ?? "image/png" });
-		} else out.push({ type: "text", text: capped(JSON.stringify(block.resource ?? block)) });
+		} else addText(JSON.stringify(block.resource ?? block));
 	}
+	// Tools with an output schema may answer in structuredContent alone.
+	if (out.length === 0 && structured !== undefined) addText(JSON.stringify(structured));
 	return out.length > 0 ? out : [{ type: "text", text: "(no output)" }];
 }
 
@@ -68,7 +80,7 @@ function toAgentTool(client: ConnectorClient, tool: ConnectorTool): AgentTool<an
 		parameters: Type.Unsafe<Record<string, unknown>>(tool.inputSchema),
 		execute: async (_toolCallId, args, signal) => {
 			const result = await client.call(tool.name, (args ?? {}) as Record<string, unknown>, signal);
-			const content = toToolContent(result.content);
+			const content = toToolContent(result.content, result.structured);
 			if (result.isError) {
 				throw new Error(content.map((c) => (c.type === "text" ? c.text : "")).join("\n") || `${tool.name} failed`);
 			}
@@ -113,7 +125,9 @@ export class ConnectorManager {
 	private clientFor(connector: Connector): ConnectorClient {
 		return new ConnectorClient(connector, async (auth: ConnectorAuth) => {
 			connector.auth = auth;
-			await this.storage.save(connector);
+			// Against the stored record: another panel may have turned this off or removed it.
+			const current = await this.storage.get(connector.name);
+			if (current) await this.storage.save({ ...current, auth });
 		});
 	}
 

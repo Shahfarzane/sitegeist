@@ -165,7 +165,8 @@ function hasTarget(t: ElementTarget): boolean {
 
 /** The page after a step, for callers that asked for it instead of a separate read_page. */
 function readPage(tabId: number, read: unknown): Promise<Snapshot> {
-	return snapshot(tabId, { filter: read === "interactive" ? "interactive" : "all", maxTextChars: 3000 });
+	const interactive = read === "interactive";
+	return snapshot(tabId, { filter: interactive ? "interactive" : "all", maxTextChars: interactive ? 0 : 3000 });
 }
 
 async function pointFor(_ctx: HandlerContext, params: Params, tabId: number): Promise<{ x: number; y: number }> {
@@ -203,6 +204,9 @@ function normalizeStep(step: Params, i: number): [string, Params] {
 	);
 }
 
+/** The largest viewport or GIF side an agent may ask for. */
+const MAX_VIEWPORT_SIDE = 10000;
+
 // Native messaging caps host->extension frames at 1 MiB, so files arrive in chunks and wait here.
 const MAX_UPLOAD_CHARS = 36 * 1024 * 1024;
 const uploads = new Map<string, { chunks: string[]; chars: number }>();
@@ -223,10 +227,14 @@ function rememberShot(clientId: string, shot: { data: string; mimeType: string }
 	return imageId;
 }
 
+function forgetUploads(clientId: string): void {
+	for (const key of uploads.keys()) if (key.startsWith(`${clientId}:`)) uploads.delete(key);
+}
+
 /** Drop what a client left behind when it disconnects. */
 export function forgetClient(clientId: string): void {
 	shots.delete(clientId);
-	for (const key of uploads.keys()) if (key.startsWith(`${clientId}:`)) uploads.delete(key);
+	forgetUploads(clientId);
 }
 
 function describeTarget(params: Params): string {
@@ -352,8 +360,11 @@ export const handlers: Record<string, Handler> = {
 			throw new BridgeError(ERR.BAD_PARAMS, "The upload was interrupted. Call file_upload again.");
 		}
 		upload.chars += data.length;
-		if (upload.chars > MAX_UPLOAD_CHARS) {
-			uploads.delete(key);
+		// Per client, not per upload: abandoned uploads add up until the client disconnects.
+		let held = data.length;
+		for (const [other, entry] of uploads) if (other.startsWith(`${ctx.clientId}:`)) held += entry.chars;
+		if (upload.chars > MAX_UPLOAD_CHARS || held > MAX_UPLOAD_CHARS) {
+			forgetUploads(ctx.clientId);
 			throw new BridgeError(ERR.BAD_PARAMS, "The upload is too large (25 MB at most)");
 		}
 		upload.chunks.push(data);
@@ -397,8 +408,14 @@ export const handlers: Record<string, Handler> = {
 			case "stop_recording":
 				await recorder.stop();
 				return { recording: false, frames: recorder.frameCount };
-			case "export":
-				return recorder.export((params.options ?? {}) as GifOptions);
+			case "export": {
+				const options = (params.options ?? {}) as GifOptions;
+				const width = options.maxWidth;
+				if (width !== undefined && (!Number.isInteger(width) || width < 1 || width > MAX_VIEWPORT_SIDE)) {
+					throw new BridgeError(ERR.BAD_PARAMS, `maxWidth must be a whole number from 1 to ${MAX_VIEWPORT_SIDE}`);
+				}
+				return recorder.export(options);
+			}
 			case "clear":
 				recorder.clear();
 				return { frames: 0 };
@@ -455,9 +472,12 @@ export const handlers: Record<string, Handler> = {
 
 	find: async (ctx, params) => {
 		const query = requireStr(params, "query");
+		const limit = num(params, "limit") ?? 20;
+		if (!Number.isInteger(limit) || limit < 1)
+			throw new BridgeError(ERR.BAD_PARAMS, "limit must be a positive integer");
 		const tabId = await resolveTab(ctx, params, false);
 		const snap = await snapshot(tabId, { filter: "all", maxNodes: 600, maxTextChars: 0 });
-		return { matches: rankNodes(snap.nodes, query, num(params, "limit") ?? 20) };
+		return { matches: rankNodes(snap.nodes, query, limit) };
 	},
 
 	/** Render the tab at another size, to test a layout. */
@@ -476,6 +496,14 @@ export const handlers: Record<string, Handler> = {
 		}
 		if (preset === undefined && (width === undefined || height === undefined)) {
 			throw new BridgeError(ERR.BAD_PARAMS, "Provide preset, or width and height");
+		}
+		for (const side of preset === undefined ? [width, height] : []) {
+			if (!Number.isInteger(side) || (side as number) < 1 || (side as number) > MAX_VIEWPORT_SIDE) {
+				throw new BridgeError(
+					ERR.BAD_PARAMS,
+					`width and height must be whole numbers from 1 to ${MAX_VIEWPORT_SIDE}`,
+				);
+			}
 		}
 		const size = preset !== undefined ? presets[preset] : { width: width as number, height: height as number };
 		await setAgentViewport(tabId, size);
@@ -522,7 +550,7 @@ export const handlers: Record<string, Handler> = {
 			await click(tabId, rect.x, rect.y);
 		}
 		record(ctx, { kind: "label", label: `Type "${text.slice(0, 40)}"` });
-		await typeText(tabId, text);
+		await typeText(tabId, text, { keys: params.keys === true });
 		if (params.submit === true) await pressKey(tabId, "Enter");
 		return { typed: text.length };
 	},
@@ -582,7 +610,7 @@ export const handlers: Record<string, Handler> = {
 		const name = requireStr(params, "name");
 		const skill = (await readStore<Skill>("skills")).find((s) => s.name === name);
 		if (!skill) throw new BridgeError(ERR.NOT_FOUND, `No skill named ${name}`);
-		const { library, ...rest } = skill;
+		const { library = "", ...rest } = skill;
 		return params.includeLibrary === true ? skill : { ...rest, hasLibrary: library.trim().length > 0 };
 	},
 
@@ -594,7 +622,7 @@ export const handlers: Record<string, Handler> = {
 		if (skillName) {
 			const skill = (await readStore<Skill>("skills")).find((s) => s.name === skillName);
 			if (!skill) throw new BridgeError(ERR.NOT_FOUND, `No skill named ${skillName}`);
-			code = `(async () => { ${skill.library}\n; return (${code}); })()`;
+			code = `(async () => { ${skill.library ?? ""}\n; return (${code}); })()`;
 		}
 		const world = str(params, "world") === "main" ? "main" : "user";
 		if (world === "main") {
@@ -627,11 +655,15 @@ export const handlers: Record<string, Handler> = {
 
 	/** Tell the user something needs them; clicking the notification shows the tab. */
 	notify: async (ctx, params) => {
+		const tabId = num(params, "tabId") ?? ctx.session.currentTabId;
+		if (tabId !== undefined && !ctx.session.tabIds.includes(tabId)) {
+			throw new BridgeError(ERR.NOT_FOUND, `Tab ${tabId} is not owned by this session`);
+		}
 		const shown = await showNotification({
 			kind: "needs-you",
 			title: requireStr(params, "title"),
 			message: str(params, "message") ?? "",
-			tabId: num(params, "tabId") ?? ctx.session.currentTabId,
+			tabId,
 		});
 		return { shown };
 	},
@@ -667,6 +699,8 @@ export const handlers: Record<string, Handler> = {
 		// its shortcut); without a short settle the next keystroke lands before it and is lost.
 		const settleMs = Math.max(0, Math.min(1000, num(params, "settleMs") ?? 80));
 		let wantShot = params.screenshot === true;
+		// A step can name its own tab; what comes back after the last step shows where it ended.
+		let lastTab: unknown = params.tabId;
 		const done: unknown[] = [];
 		for (let i = 0; i < steps.length; i++) {
 			const [kind, sub] = normalizeStep(steps[i] as Params, i);
@@ -675,6 +709,7 @@ export const handlers: Record<string, Handler> = {
 				continue;
 			}
 			const withTab = params.tabId !== undefined && sub.tabId === undefined ? { ...sub, tabId: params.tabId } : sub;
+			if (withTab.tabId !== undefined) lastTab = withTab.tabId;
 			try {
 				done.push(await handlers[kind](ctx, withTab));
 			} catch (err) {
@@ -684,10 +719,8 @@ export const handlers: Record<string, Handler> = {
 			if (settleMs > 0 && i < steps.length - 1) await new Promise((r) => setTimeout(r, settleMs));
 		}
 		const out: Record<string, unknown> = { steps: done.length };
-		if (wantShot) out.screenshot = await handlers.screenshot(ctx, { tabId: params.tabId });
-		if (params.read) {
-			out.page = await readPage(await resolveTab(ctx, { tabId: params.tabId }, true), params.read);
-		}
+		if (wantShot) out.screenshot = await handlers.screenshot(ctx, { tabId: lastTab });
+		if (params.read) out.page = await readPage(await resolveTab(ctx, { tabId: lastTab }, true), params.read);
 		return out;
 	},
 

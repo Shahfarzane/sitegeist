@@ -81,8 +81,12 @@ function attachmentsToUser(m: UserMessageWithAttachments): Message {
 	for (const attachment of m.attachments ?? []) {
 		if (attachment.type === "image") {
 			content.push({ type: "image", data: attachment.content, mimeType: attachment.mimeType });
-		} else if (attachment.extractedText) {
-			content.push({ type: "text", text: `\n\n[Document: ${attachment.fileName}]\n${attachment.extractedText}` });
+		} else {
+			// An empty text file has no extracted text, and the model should still know it was sent.
+			const text = attachment.extractedText
+				? `\n\n[Document: ${attachment.fileName}]\n${attachment.extractedText}`
+				: `[Attached file: ${attachment.fileName}]`;
+			content.push({ type: "text", text });
 		}
 	}
 	return { role: "user", content, timestamp: m.timestamp };

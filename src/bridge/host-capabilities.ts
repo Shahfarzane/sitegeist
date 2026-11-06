@@ -8,6 +8,8 @@
 import { HOST_CAPABILITIES_PROVIDER, type HostCredentialsResponse, NATIVE_HOST_NAME } from "./protocol.js";
 
 const CACHE_MS = 60000;
+/** A failed probe may be a host that was just restarting: ask again soon. */
+const RETRY_MS = 5000;
 /** The oldest hosts do not answer this message at all. */
 const ANSWER_MS = 3000;
 
@@ -28,6 +30,10 @@ export function hostCapabilities(): Promise<string[]> {
 		answer,
 		new Promise<string[]>((resolve) => setTimeout(() => resolve([]), ANSWER_MS)),
 	]);
-	cached = { at: Date.now(), capabilities };
+	const entry = { at: Date.now(), capabilities };
+	cached = entry;
+	void capabilities.then((found) => {
+		if (found.length === 0) entry.at = Date.now() - CACHE_MS + RETRY_MS;
+	});
 	return capabilities;
 }

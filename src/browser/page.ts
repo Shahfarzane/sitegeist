@@ -419,7 +419,13 @@ function pageResolveTarget(target: ElementTarget): Element {
 	let bestScore = 0;
 	for (const el of Array.from(candidates)) {
 		const r = el.getBoundingClientRect();
-		const visible = r.width > 0 && r.height > 0;
+		const style = getComputedStyle(el);
+		const visible =
+			r.width > 0 &&
+			r.height > 0 &&
+			style.visibility !== "hidden" &&
+			style.display !== "none" &&
+			style.opacity !== "0";
 		for (const name of labelsOf(el)) {
 			const score =
 				(name === want ? 4 : name.startsWith(want) ? 3 : name.includes(want) ? 2 : 0) * (visible ? 2 : 1);
@@ -487,12 +493,16 @@ function pageDeliverFiles(
 	const fileInput = (candidate: Element | null | undefined) =>
 		candidate instanceof HTMLInputElement && candidate.type === "file" ? candidate : null;
 	const labelFor = el instanceof HTMLLabelElement ? el.control : null;
+	// An upload button stands for its form's file input; a drop zone in the same form does not.
+	const formInput = el.matches("button,[role=button],a")
+		? el.closest("form")?.querySelector<HTMLInputElement>("input[type=file]")
+		: null;
 	const input =
 		fileInput(el) ??
 		fileInput(labelFor) ??
 		el.querySelector<HTMLInputElement>("input[type=file]") ??
 		el.closest("label")?.querySelector<HTMLInputElement>("input[type=file]") ??
-		el.closest("form")?.querySelector<HTMLInputElement>("input[type=file]");
+		formInput;
 	if (input) {
 		input.files = transfer.files;
 		input.dispatchEvent(new Event("input", { bubbles: true }));

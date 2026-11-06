@@ -2,6 +2,7 @@ import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { SettingsTab } from "@mariozechner/pi-web-ui";
 import { html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { Toast } from "../components/Toast.js";
 import { notifySettings, setNotifyEnabled, setNotifySound } from "../notify/notifications.js";
 
 /** Settings > Notifications. */
@@ -27,10 +28,16 @@ export class NotificationsTab extends SettingsTab {
 
 	private async toggle(input: HTMLInputElement) {
 		if (input.checked) {
-			// Must be the first await: the request needs this click's user gesture.
-			const granted = await chrome.permissions.request({ permissions: ["notifications"] });
-			if (!granted) {
+			try {
+				// Must be the first await: the request needs this click's user gesture.
+				const granted = await chrome.permissions.request({ permissions: ["notifications"] });
+				if (!granted) {
+					input.checked = false;
+					return;
+				}
+			} catch (err) {
 				input.checked = false;
+				Toast.error(err instanceof Error ? err.message : "Could not turn on notifications");
 				return;
 			}
 		}

@@ -113,8 +113,14 @@ export function startNotifications(): void {
 	});
 }
 
-/** From a panel: notify unless the user is looking at this panel right now. */
-export function notifyFromPanel(request: NotifyRequest): void {
-	if (document.hasFocus()) return;
-	chrome.runtime.sendMessage({ type: "sitegeist-notify", request }).catch(() => undefined);
+/**
+ * From a panel: notify unless the user can see it. Focus alone says too little: someone reading
+ * the panel while their cursor sits in the page next to it has the panel in view.
+ */
+export async function notifyFromPanel(request: NotifyRequest): Promise<void> {
+	if (document.visibilityState === "visible") {
+		const window = await chrome.windows.getCurrent().catch(() => undefined);
+		if (window?.focused) return;
+	}
+	await chrome.runtime.sendMessage({ type: "sitegeist-notify", request }).catch(() => undefined);
 }

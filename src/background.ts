@@ -273,9 +273,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 		info.menuItemId === MENU_SELECTION
 			? `About this text on the page:\n\n"${info.selectionText}"\n\n`
 			: "About this page: ";
+	// A running task's panel can be up on another tab; it listens under its home tab.
+	const shown = panelPathCache.get(tab.id);
+	const home = shown ? new URLSearchParams(shown.split("?")[1]).get("tabId") : null;
 	// Still inside the click's user gesture, which opening the panel needs.
 	openPanelOnTab(tab.id, "menu");
-	chrome.storage.session.set({ [`panel_prefill_${tab.id}`]: prompt }).catch(() => undefined);
+	chrome.storage.session.set({ [`panel_prefill_${home ?? tab.id}`]: prompt }).catch(() => undefined);
 });
 
 // Keyboard shortcut: open a task on the current tab (Chrome offers no per-tab close API).

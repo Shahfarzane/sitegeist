@@ -44,6 +44,7 @@ function pageSelectRegion(): Promise<Region | null> {
 		};
 		const finish = (region: Region | null) => {
 			window.removeEventListener("keydown", onKey, true);
+			window.removeEventListener("mouseup", onUp, true);
 			overlay.remove();
 			// Two frames: the overlay must be off the screen before the tab is captured.
 			requestAnimationFrame(() => requestAnimationFrame(() => resolve(region)));
@@ -70,10 +71,13 @@ function pageSelectRegion(): Promise<Region | null> {
 				height: `${r.height}px`,
 			});
 		});
-		overlay.addEventListener("mouseup", (e) => {
+		// On the window: a drag that ends outside the page never reaches the overlay.
+		const onUp = (e: MouseEvent) => {
+			if (!start) return;
 			const r = rect(e);
 			finish(r.width < 4 || r.height < 4 ? null : { ...r, x: r.x + window.scrollX, y: r.y + window.scrollY });
-		});
+		};
+		window.addEventListener("mouseup", onUp, true);
 		window.addEventListener("keydown", onKey, true);
 	});
 }

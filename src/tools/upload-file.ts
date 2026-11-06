@@ -36,6 +36,8 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 	txt: "text/plain",
 	webp: "image/webp",
 };
+/** The file travels inside a page script, base64 encoded, and is decoded once more there. */
+const MAX_FILE_CHARS = 36 * 1024 * 1024;
 const BINARY_ARTIFACT = /\.(png|jpe?g|gif|webp|pdf|zip|xlsx|docx|pptx)$/i;
 
 function mimeOf(name: string): string {
@@ -80,6 +82,7 @@ export function createUploadFileTool(
 				};
 			}
 			if (!file) throw new Error(`No attachment or artifact named ${args.name}`);
+			if (file.data.length > MAX_FILE_CHARS) throw new Error(`${file.name} is too large (25 MB at most)`);
 			const tab = await getCurrentBrowserSession().attachedCurrentTab();
 			if (tab.id === undefined) throw new Error("No tab");
 			const result = await deliverFiles(tab.id, { selector: args.selector, text: args.text }, [file]);

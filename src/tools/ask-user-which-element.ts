@@ -541,13 +541,6 @@ export class AskUserWhichElementTool implements AgentTool<typeof selectElementSc
 				throw new Error("Tool execution was aborted");
 			}
 
-			notifyFromPanel({
-				kind: "needs-you",
-				title: "Sitegeist needs you",
-				message: "Pick an element on the page so the task can continue.",
-				tabId: getCurrentBrowserSession()?.currentTabId,
-			});
-
 			// The user has to see the page to pick an element: bring the session tab forward
 			const session = getCurrentBrowserSession();
 			const tab = await session.requireCurrentTab();
@@ -565,6 +558,13 @@ export class AskUserWhichElementTool implements AgentTool<typeof selectElementSc
 			) {
 				throw new Error(`Cannot select elements on ${tab.url}. Extension pages and internal URLs are protected.`);
 			}
+
+			void notifyFromPanel({
+				kind: "needs-you",
+				title: "Sitegeist needs you",
+				message: "Pick an element on the page so the task can continue.",
+				tabId: tab.id,
+			});
 
 			// Build the script code - just call the async function and return result
 			const scriptCode = `(${createElementPickerOverlay.toString()})(${JSON.stringify(args.message || "")})`;

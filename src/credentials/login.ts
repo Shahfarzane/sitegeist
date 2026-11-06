@@ -57,16 +57,18 @@ function pageFillLogin(values: { username?: string; password?: string; otp?: str
 	};
 	const filled: string[] = [];
 	const password = inputs.find((i) => i.type === "password");
-	const otp = inputs.find(
+	// A password field's form is the login form: a newsletter box elsewhere on the page is not.
+	const fields = password?.form ? inputs.filter((i) => i.form === password.form) : inputs;
+	const otp = fields.find(
 		(i) =>
 			i.autocomplete === "one-time-code" ||
 			/\b(otp|totp|2fa|mfa|one.?time|verification|auth.?code)\b/i.test(describe(i)),
 	);
 	const username =
-		inputs.find((i) => i.autocomplete === "username" || i.autocomplete === "email" || i.type === "email") ??
-		inputs.find((i) => /user|email|login|account|identifier/i.test(describe(i)) && i !== otp && i !== password) ??
+		fields.find((i) => i.autocomplete === "username" || i.autocomplete === "email" || i.type === "email") ??
+		fields.find((i) => /user|email|login|account|identifier/i.test(describe(i)) && i !== otp && i !== password) ??
 		// A password's neighbour, or the only field of a first step, is the username.
-		(password || inputs.length === 1 ? inputs.find((i) => i.type === "text" && i !== otp) : undefined);
+		(password || fields.length === 1 ? fields.find((i) => i.type === "text" && i !== otp) : undefined);
 	if (password && values.password) {
 		set(password, values.password);
 		filled.push("password");

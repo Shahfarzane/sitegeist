@@ -40,6 +40,8 @@ export interface GifAction {
 interface CapturedFrame {
 	data: string;
 	at: number;
+	/** CSS width of the page in this frame: resize_window can change it mid-recording. */
+	viewportWidth: number;
 }
 
 export class GifRecorder {
@@ -59,16 +61,16 @@ export class GifRecorder {
 		return this.frames.length;
 	}
 
-	private keep(data: string): void {
-		this.frames.push({ data, at: Date.now() });
+	private keep(data: string, viewportWidth: number): void {
+		this.viewportWidth = viewportWidth;
+		this.frames.push({ data, at: Date.now(), viewportWidth });
 		// Past the cap every other frame goes: the whole recording stays covered.
 		if (this.frames.length > MAX_FRAMES) this.frames = this.frames.filter((_f, i) => i % 2 === 0);
 	}
 
 	private async still(tabId: number): Promise<void> {
 		const shot = await captureScreenshot(tabId, { maxWidth: FRAME_WIDTH, format: "jpeg", quality: 70 });
-		this.viewportWidth = shot.cssWidth;
-		this.keep(shot.data);
+		this.keep(shot.data, shot.cssWidth);
 	}
 
 	/** Start or follow the agent to another tab; frames add to the same recording. */
@@ -82,7 +84,7 @@ export class GifRecorder {
 			tabId,
 			this.owner,
 			{ format: "jpeg", quality: 60, maxWidth: FRAME_WIDTH, maxFps: MAX_FPS },
-			(frame) => this.keep(frame.data),
+			(frame) => this.keep(frame.data, Number(frame.metadata.deviceWidth) || this.viewportWidth),
 			() => {
 				if (this.tabId === tabId) this.tabId = undefined;
 			},
@@ -117,10 +119,11 @@ export class GifRecorder {
 			const overlays: GifOverlay[] = [];
 			let label: string | undefined;
 			for (const action of this.actions) {
-				if (action.at > (next?.at ?? Number.POSITIVE_INFINITY)) break;
+				const until = next?.at ?? frame.at;
+				if (action.at > until) break;
 				if (action.label) label = action.label;
 				if (action.kind === "label" || action.x === undefined || action.y === undefined) continue;
-				if (next && next.at - action.at > OVERLAY_MS) continue;
+				if (until - action.at > OVERLAY_MS) continue;
 				overlays.push({ kind: action.kind, x: action.x, y: action.y, toX: action.toX, toY: action.toY });
 			}
 			return {
@@ -129,7 +132,7 @@ export class GifRecorder {
 				overlays,
 				label,
 				progress: (frame.at - start) / span,
-				viewportWidth: this.viewportWidth,
+				viewportWidth: frame.viewportWidth,
 			};
 		});
 	}

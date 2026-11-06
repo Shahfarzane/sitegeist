@@ -19,13 +19,18 @@ export class CoalescedTask {
 	}
 
 	private async loop(): Promise<void> {
-		try {
-			do {
-				this.rerun = false;
+		let failure: { error: unknown } | undefined;
+		do {
+			this.rerun = false;
+			failure = undefined;
+			try {
 				await this.task();
-			} while (this.rerun);
-		} finally {
-			this.running = undefined;
-		}
+			} catch (error) {
+				// A request that came in meanwhile still gets its run; only the last outcome counts.
+				failure = { error };
+			}
+		} while (this.rerun);
+		this.running = undefined;
+		if (failure) throw failure.error;
 	}
 }

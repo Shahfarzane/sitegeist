@@ -13,6 +13,8 @@ export class PromptsTab extends SettingsTab {
 	@state() private prompts: SavedPrompt[] = [];
 	@state() private name = "";
 	@state() private text = "";
+	/** The prompt being edited, so a rename replaces it instead of adding a second one. */
+	private editing?: string;
 
 	getTabName(): string {
 		return "Prompts";
@@ -34,13 +36,21 @@ export class PromptsTab extends SettingsTab {
 			Toast.error("A prompt needs a name and text");
 			return;
 		}
-		await getSitegeistStorage().prompts.save({ name, text, createdAt: new Date().toISOString() });
+		const prompts = getSitegeistStorage().prompts;
+		if (name !== this.editing && this.prompts.some((p) => p.name === name)) {
+			Toast.error(`A prompt named ${name} already exists`);
+			return;
+		}
+		await prompts.save({ name, text, createdAt: new Date().toISOString() });
+		if (this.editing && this.editing !== name) await prompts.delete(this.editing);
+		this.editing = undefined;
 		this.name = "";
 		this.text = "";
 		await this.load();
 	}
 
 	private edit(prompt: SavedPrompt) {
+		this.editing = prompt.name;
 		this.name = prompt.name;
 		this.text = prompt.text;
 	}

@@ -46,30 +46,33 @@ export function clearInterrupted(sessionId: string): Promise<void> {
 	return chrome.storage.local.remove(markerKey(sessionId));
 }
 
-/** Tool calls the run never answered get a result, so the chat is valid to continue from. */
+/**
+ * Tool calls of the last turn that never got a result get one, so the chat can continue. Only the
+ * last turn: the provider layer fills gaps in earlier ones itself, and a second result there would
+ * be a duplicate. A failed turn never reaches the provider, so its calls need no answer at all.
+ */
 export function answerOpenToolCalls(messages: AgentMessage[]): AgentMessage[] {
+	const at = messages.map((m) => m.role).lastIndexOf("assistant");
+	const turn = messages[at];
+	if (turn?.role !== "assistant" || turn.stopReason === "error" || turn.stopReason === "aborted") return messages;
 	const answered = new Set<string>();
-	for (const m of messages) if (m.role === "toolResult") answered.add(m.toolCallId);
+	for (const m of messages.slice(at)) if (m.role === "toolResult") answered.add(m.toolCallId);
 	const open: AgentMessage[] = [];
-	for (const m of messages) {
-		// Providers never see a failed turn, so a result for one of its calls would be an orphan.
-		if (m.role !== "assistant" || m.stopReason === "error" || m.stopReason === "aborted") continue;
-		for (const block of m.content) {
-			if (block.type !== "toolCall" || answered.has(block.id)) continue;
-			open.push({
-				role: "toolResult",
-				toolCallId: block.id,
-				toolName: block.name,
-				isError: true,
-				content: [
-					{
-						type: "text",
-						text: "The panel closed before this finished, so its outcome is unknown. Check the page before repeating it.",
-					},
-				],
-				timestamp: Date.now(),
-			});
-		}
+	for (const block of turn.content) {
+		if (block.type !== "toolCall" || answered.has(block.id)) continue;
+		open.push({
+			role: "toolResult",
+			toolCallId: block.id,
+			toolName: block.name,
+			isError: true,
+			content: [
+				{
+					type: "text",
+					text: "The panel closed before this finished, so its outcome is unknown. Check the page before repeating it.",
+				},
+			],
+			timestamp: Date.now(),
+		});
 	}
 	return open.length > 0 ? [...messages, ...open] : messages;
 }

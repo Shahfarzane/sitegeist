@@ -62,10 +62,11 @@ export function pruneContext(messages: AgentMessage[], options: PruneOptions = D
 	let resultsToShorten = steppedCount(results, options.keepToolResults, options.toolResultStep);
 	if (imagesToDrop === 0 && resultsToShorten === 0) return messages;
 
-	return messages.map((m) => {
+	const currentPage = messages.map((m) => m.role).lastIndexOf("navigation");
+	return messages.map((m, index) => {
 		if (m.role === "navigation") {
-			// The skills list of a page the agent left long ago is noise; refs to it are not needed.
-			return resultsToShorten > 0 && m.skillsOutput ? { ...m, skillsOutput: "" } : m;
+			// The skills list of a page the agent left long ago is noise; the current page's is not.
+			return index !== currentPage && resultsToShorten > 0 && m.skillsOutput ? { ...m, skillsOutput: "" } : m;
 		}
 		if (!isToolResult(m)) return m;
 		const shortenThis = resultsToShorten > 0;
@@ -193,8 +194,15 @@ export function transcript(messages: AgentMessage[]): string {
 			.join("\n");
 	};
 	for (const m of messages) {
-		if (m.role === "user" || m.role === "user-with-attachments") lines.push(`USER: ${textOf(m.content)}`);
-		else if (m.role === "assistant") lines.push(`ASSISTANT: ${textOf(m.content)}`);
+		if (m.role === "user") lines.push(`USER: ${textOf(m.content)}`);
+		else if (m.role === "user-with-attachments") {
+			lines.push(`USER: ${textOf(m.content)}`);
+			for (const a of m.attachments ?? []) {
+				lines.push(
+					`[attached ${a.fileName}]${a.extractedText ? ` ${shorten(a.extractedText, SUMMARY_TOOL_CHARS)}` : ""}`,
+				);
+			}
+		} else if (m.role === "assistant") lines.push(`ASSISTANT: ${textOf(m.content)}`);
 		else if (m.role === "toolResult")
 			lines.push(`TOOL ${m.toolName}: ${shorten(textOf(m.content), SUMMARY_TOOL_CHARS)}`);
 		else if (m.role === "navigation") lines.push(`NAVIGATED: ${m.title} ${m.url}`);

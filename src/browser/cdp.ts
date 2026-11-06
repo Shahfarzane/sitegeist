@@ -128,6 +128,12 @@ export async function setAgentViewport(tabId: number, size: ViewportSize | undef
 	await ensureAttached(tabId);
 	if (size) requestedViewports.set(tabId, size);
 	else requestedViewports.delete(tabId);
+	// The default is for tabs nobody sees; on a tab in front it would letterbox the page.
+	const tab = await chrome.tabs.get(tabId);
+	if (!size && tab.active) {
+		await releaseAgentViewport(tabId);
+		return;
+	}
 	await applyViewport(tabId);
 	viewportTabs.add(tabId);
 }
@@ -380,9 +386,9 @@ async function focusTakesText(tabId: number): Promise<boolean> {
  * is two debugger round trips, so long text in a real text field is inserted line by line;
  * Enter stays a key press, which is what submits a form or starts a line in an editor.
  */
-export async function typeText(tabId: number, text: string): Promise<void> {
+export async function typeText(tabId: number, text: string, options: { keys?: boolean } = {}): Promise<void> {
 	await ensureAttached(tabId);
-	if (text.length >= INSERT_TEXT_FROM && (await focusTakesText(tabId))) {
+	if (!options.keys && text.length >= INSERT_TEXT_FROM && (await focusTakesText(tabId))) {
 		const lines = text.split("\n");
 		for (let i = 0; i < lines.length; i++) {
 			if (lines[i]) await send(tabId, "Input.insertText", { text: lines[i] });

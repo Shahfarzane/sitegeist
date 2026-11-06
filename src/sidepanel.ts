@@ -709,7 +709,7 @@ async function announceRunEnd(): Promise<void> {
 		.map((c) => c.text)
 		.join(" ")
 		.trim();
-	notifyFromPanel({
+	await notifyFromPanel({
 		kind: failed ? "failed" : "done",
 		title: currentTitle || (failed ? "Task failed" : "Task finished"),
 		message: failed ? (last.errorMessage ?? "The task stopped with an error.") : reply || "Finished.",
@@ -783,7 +783,13 @@ function dismissInterruptedRun(): void {
 /** Pick up a run that ended with the panel, from the last thing that was saved. */
 async function resumeInterruptedRun(): Promise<void> {
 	dismissInterruptedRun();
-	const messages = answerOpenToolCalls(agent.state.messages);
+	// A turn that failed is what the run was about to retry when the panel closed.
+	let messages = agent.state.messages;
+	for (let last = messages.at(-1); last?.role === "assistant"; last = messages.at(-1)) {
+		if (last.stopReason !== "error" && last.stopReason !== "aborted") break;
+		messages = messages.slice(0, -1);
+	}
+	messages = answerOpenToolCalls(messages);
 	agent.replaceMessages(messages);
 	chatPanel.agentInterface?.requestUpdate();
 	if (messages.at(-1)?.role === "assistant") return;
@@ -957,13 +963,17 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			}
 
 			if (event.type === "agent_end") {
-				runTracker.stop();
 				recoverFailedTurn()
 					.catch((err) => {
 						console.error("Recovery failed:", err);
 						return false;
 					})
-					.then((recovering) => (recovering ? undefined : announceRunEnd()))
+					.then((recovering) => {
+						// While a retry waits the run is not over: a panel closed now can still resume it.
+						if (recovering) return;
+						runTracker.stop();
+						return announceRunEnd();
+					})
 					.catch((err) => console.error("Announcing the run failed:", err));
 			}
 
@@ -1372,7 +1382,10 @@ window.addEventListener(
 	(e) => {
 		// Escape key to abort streaming - works globally in sidepanel
 		// Use capturing phase to intercept before MessageEditor handles it
-		if (e.key === "Escape" && retryTimer) cancelRetry();
+		if (e.key === "Escape" && retryTimer) {
+			cancelRetry();
+			runTracker.stop();
+		}
 		if (e.key === "Escape" && agent?.state.isStreaming && !document.querySelector("overflow-menu[open]")) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -1566,7 +1579,8 @@ async function initApp() {
 					tools: [],
 				},
 				true,
-				compaction ?? undefined,
+				// A summary past the end of the chat belongs to messages that were never saved.
+				compaction && compaction.cut <= sessionData.messages.length ? compaction : undefined,
 			);
 
 			interruptedRun = await wasInterrupted(sessionIdFromUrl);
