@@ -224,6 +224,48 @@ test("capture an area attaches the dragged part of the page", async () => {
 		!(await context.tab.evaluate(`document.body.innerText`)).includes("Drag to select"),
 		"the overlay must be gone",
 	);
+
+	// The point of it all: the model receives the words and the picture.
+	server.requests.length = 0;
+	turns = () => ({ text: "I see the heading" });
+	await sendPrompt(context.panel, "what is in this area?");
+	await context.panel.waitFor(`document.body.innerText.includes("I see the heading")`);
+	const sent = JSON.stringify(server.requests[0].messages);
+	assert.ok(sent.includes("what is in this area?"), "the words must reach the model");
+	assert.ok(sent.includes("image_url"), "the picture must reach the model");
+	await context.panel.waitFor(`location.search.includes("session=")`);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a right-click question reaches a tab that already has a saved chat", async () => {
+	turns = () => ({ text: "first answer" });
+	const context = await openPanel(browser, server, { path: "/saved" });
+	await sendPrompt(context.panel, "hello");
+	await context.panel.waitFor(
+		`document.body.innerText.includes("first answer") && location.search.includes("session=")`,
+	);
+	await new Promise((r) => setTimeout(r, 300));
+	await context.panel.send("Page.reload");
+	await context.panel.waitFor(`document.body.innerText.includes("first answer")`);
+	await context.worker.evaluate(`chrome.storage.session.set({ panel_prefill_${context.tabId}: "About this page: " })`);
+	await context.panel.waitFor(`document.querySelector("message-editor textarea").value === "About this page: "`);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a message that is only an attachment still saves the chat", async () => {
+	server.requests.length = 0;
+	turns = () => ({ text: "nice picture" });
+	const context = await openPanel(browser, server, { path: "/imageonly" });
+	await context.panel.evaluate(
+		`document.querySelector("agent-interface").sendMessage("", [{ id: "1", type: "image", fileName: "a.png", mimeType: "image/png", size: 4, content: "iVBORw0KGgo=", preview: "iVBORw0KGgo=" }])`,
+	);
+	await context.panel.waitFor(`document.body.innerText.includes("nice picture")`);
+	await context.panel.waitFor(`location.search.includes("session=")`);
+	await context.panel.waitFor(
+		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const q = r.result.transaction("sessions-metadata").objectStore("sessions-metadata").getAll(); q.onsuccess = () => { r.result.close(); res(q.result.some((m) => m.title === "Attached files")); }; }; })`,
+	);
 	await context.panel.close();
 	await context.tab.close();
 });

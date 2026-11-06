@@ -67,6 +67,7 @@
 
 ### Fixed
 
+- A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.
 - A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
 - `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
 - Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.
@@ -158,6 +159,7 @@
 
 ### Fixed
 
+- A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.
 - A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
 - `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
 - Debugger tools no longer fail with "Debugger is not attached" while DevTools is open on the tab: any other client on the tab was taken for our own attachment, so the extension never attached.

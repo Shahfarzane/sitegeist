@@ -455,13 +455,17 @@ function connectorsTab(): ConnectorsTab {
 	return tab;
 }
 
-/** Connect what is on and hand the tools to the agent. Tools take effect on the next turn. */
-async function refreshConnectors(): Promise<void> {
-	if (!connectors || !agent) return;
-	const previous = new Set(connectors.tools);
-	const tools = await connectors.refresh();
-	agent.setTools([...agent.state.tools.filter((t) => !previous.has(t)), ...tools]);
-}
+/**
+ * Connect what is on and hand the tools to the agent; they take effect on the next turn. One at a
+ * time: overlapping refreshes would each add their tools, and providers refuse duplicate names.
+ */
+const connectorRefresh = new CoalescedTask(async () => {
+	const manager = connectors;
+	if (!manager || !agent) return;
+	const tools = await manager.refresh();
+	agent.setTools([...agent.state.tools.filter((t) => !manager.owns(t)), ...tools]);
+});
+const refreshConnectors = () => connectorRefresh.request();
 
 function settingsSections(): SettingsSection[] {
 	return [
@@ -498,8 +502,8 @@ export function getShownSkills(): Map<string, string> {
 // HELPERS
 // ============================================================================
 const generateTitle = (messages: AgentMessage[]): string => {
-	const firstUserMsg = messages.find((m) => m.role === "user");
-	if (firstUserMsg?.role !== "user") return "";
+	const firstUserMsg = messages.find((m) => m.role === "user" || m.role === "user-with-attachments");
+	if (firstUserMsg?.role !== "user" && firstUserMsg?.role !== "user-with-attachments") return "";
 
 	let text = "";
 	const content = firstUserMsg.content;
@@ -512,7 +516,8 @@ const generateTitle = (messages: AgentMessage[]): string => {
 	}
 
 	text = text.trim();
-	if (!text) return "";
+	// A chat without a title is not saved, and an image alone has no words to make one from.
+	if (!text) return firstUserMsg.role === "user-with-attachments" ? "Attached files" : "";
 
 	const sentenceEnd = text.search(/[.!?]/);
 	if (sentenceEnd > 0 && sentenceEnd <= 50) {
@@ -521,8 +526,10 @@ const generateTitle = (messages: AgentMessage[]): string => {
 	return text.length <= 50 ? text : `${text.substring(0, 47)}...`;
 };
 
+const isUserMessage = (m: AgentMessage): boolean => m.role === "user" || m.role === "user-with-attachments";
+
 const shouldSaveSession = (messages: AgentMessage[]): boolean => {
-	const hasUserMsg = messages.some((m: AgentMessage) => m.role === "user");
+	const hasUserMsg = messages.some(isUserMessage);
 	const hasAssistantMsg = messages.some((m: AgentMessage) => m.role === "assistant");
 	return hasUserMsg && hasAssistantMsg;
 };
@@ -565,7 +572,7 @@ const writeSession = async () => {
 		let preview = "";
 		for (const msg of state.messages) {
 			if (preview.length >= 2048) break;
-			if (msg.role === "user") {
+			if (msg.role === "user" || msg.role === "user-with-attachments") {
 				const text =
 					typeof msg.content === "string"
 						? msg.content
@@ -671,6 +678,8 @@ async function recoverFailedTurn(): Promise<boolean> {
 			return false;
 		});
 		if (!compacted) return false;
+		// The panel looks idle during the summary; what the user sent meanwhile wins.
+		if (agent.state.isStreaming || agent.state.messages.at(-1) !== last) return true;
 		agent.replaceMessages(withoutFailed);
 		await agent.continue();
 		return true;
@@ -682,6 +691,7 @@ async function recoverFailedTurn(): Promise<boolean> {
 	Toast.show(`Provider error, retrying in ${Math.round(delay / 1000)} s (${retryAttempts} of ${MAX_RETRIES})`);
 	retryTimer = setTimeout(() => {
 		retryTimer = undefined;
+		if (agent.state.isStreaming || agent.state.messages.at(-1) !== last) return;
 		agent.replaceMessages(withoutFailed);
 		agent.continue().catch((err) => console.error("Retry failed:", err));
 	}, delay);
@@ -734,6 +744,13 @@ async function applyPrefill(): Promise<void> {
 	if (!prompt) return;
 	await chrome.storage.session.remove(key);
 	chatPanel.agentInterface?.setInput(prompt);
+}
+
+async function watchPrefill(): Promise<void> {
+	await applyPrefill();
+	chrome.storage.onChanged.addListener((changes, area) => {
+		if (area === "session" && homeTabId !== undefined && `panel_prefill_${homeTabId}` in changes) void applyPrefill();
+	});
 }
 
 /** User gesture: drag a region on the tab in front and attach it to the message. */
@@ -860,7 +877,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 					{ apiKey: await getApiKey(model.provider), signal, maxTokens: 4000 },
 				);
 				const reply = await stream.result();
-				if (reply.stopReason === "error") throw new Error(reply.errorMessage ?? "Summary failed");
+				// An aborted summary is a cut-off one; saving it would lose what it never reached.
+				if (reply.stopReason === "error" || reply.stopReason === "aborted") {
+					throw new Error(reply.errorMessage ?? "Summary failed");
+				}
 				return reply.content
 					.filter((c): c is TextContent => c.type === "text")
 					.map((c) => c.text)
@@ -893,7 +913,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		agentUnsubscribe = agent.subscribe((event: AgentEvent) => {
 			const messages = agent.state.messages;
 			publishBusyState();
-			if (event.type === "agent_start" && !retryTimer) runStartedAt = Date.now();
+			if (event.type === "agent_start" && retryAttempts === 0 && !overflowRecovered) runStartedAt = Date.now();
 
 			// Hot path: a delta only moves agent.state.streamMessage, which AgentInterface renders
 			// itself. Doing anything more per token cost 98% of the main thread on long chats.
@@ -1104,7 +1124,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		chatPanel.agentInterface.historyProvider = () => {
 			for (let i = agent.state.messages.length - 1; i >= 0; i--) {
 				const m = agent.state.messages[i];
-				if (m.role !== "user") continue;
+				if (m.role !== "user" && m.role !== "user-with-attachments") continue;
 				const text =
 					typeof m.content === "string"
 						? m.content
@@ -1120,14 +1140,14 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 
 		// Only disable auto-scroll for new sessions with welcome message
 		// Check if this is a fresh session (only has welcome message, no user messages)
-		const hasUserMessage = agent.state.messages.some((m) => m.role === "user");
+		const hasUserMessage = agent.state.messages.some(isUserMessage);
 		if (!hasUserMessage) {
 			chatPanel.agentInterface.setAutoScroll(false);
 
 			// Re-enable auto-scroll on first user message
 			let unsubscribe: (() => void) | undefined;
 			unsubscribe = agent.subscribe(() => {
-				const hasUserMsg = agent.state.messages.some((m) => m.role === "user");
+				const hasUserMsg = agent.state.messages.some(isUserMessage);
 				if (hasUserMsg && unsubscribe) {
 					chatPanel.agentInterface?.setAutoScroll(true);
 					unsubscribe();
@@ -1551,6 +1571,7 @@ async function initApp() {
 
 			interruptedRun = await wasInterrupted(sessionIdFromUrl);
 			renderApp();
+			await watchPrefill();
 			return;
 		} else {
 			// Session doesn't exist, redirect to new session
@@ -1575,10 +1596,7 @@ async function initApp() {
 	}
 
 	renderApp();
-	await applyPrefill();
-	chrome.storage.onChanged.addListener((changes, area) => {
-		if (area === "session" && homeTabId !== undefined && `panel_prefill_${homeTabId}` in changes) void applyPrefill();
-	});
+	await watchPrefill();
 }
 
 // Register custom user message renderer early, before any session loads

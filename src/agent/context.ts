@@ -106,6 +106,13 @@ function contentTokens(content: unknown): number {
 
 export function messageTokens(message: AgentMessage): number {
 	if (message.role === "navigation") return 60 + Math.ceil((message.skillsOutput ?? "").length / 4);
+	if (message.role === "user-with-attachments") {
+		const attachments = (message.attachments ?? []).reduce(
+			(tokens, a) => tokens + (a.type === "image" ? IMAGE_TOKENS : Math.ceil((a.extractedText ?? "").length / 4)),
+			0,
+		);
+		return 4 + contentTokens(message.content) + attachments;
+	}
 	if (message.role === "user" || message.role === "assistant" || message.role === "toolResult") {
 		return 4 + contentTokens(message.content);
 	}
@@ -159,7 +166,11 @@ function summaryMessage(summary: string): AgentMessage {
 /** The chat as the model should see it after `compaction`. */
 export function applyCompaction(messages: AgentMessage[], compaction: Compaction | undefined): AgentMessage[] {
 	if (!compaction) return messages;
-	return [summaryMessage(compaction.summary), ...messages.slice(Math.min(compaction.cut, messages.length))];
+	// The stored index can drift: artifacts saved from the REPL join the chat but not the running
+	// loop, and the welcome message leaves it. A tool result must not end up first.
+	let start = Math.min(compaction.cut, messages.length);
+	while (start < messages.length && isToolResult(messages[start])) start++;
+	return [summaryMessage(compaction.summary), ...messages.slice(start)];
 }
 
 const SUMMARY_TOOL_CHARS = 1200;
@@ -182,7 +193,7 @@ export function transcript(messages: AgentMessage[]): string {
 			.join("\n");
 	};
 	for (const m of messages) {
-		if (m.role === "user") lines.push(`USER: ${textOf(m.content)}`);
+		if (m.role === "user" || m.role === "user-with-attachments") lines.push(`USER: ${textOf(m.content)}`);
 		else if (m.role === "assistant") lines.push(`ASSISTANT: ${textOf(m.content)}`);
 		else if (m.role === "toolResult")
 			lines.push(`TOOL ${m.toolName}: ${shorten(textOf(m.content), SUMMARY_TOOL_CHARS)}`);

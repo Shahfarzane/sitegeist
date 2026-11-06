@@ -1,5 +1,6 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { Message } from "@mariozechner/pi-ai";
+import type { ImageContent, Message, TextContent } from "@mariozechner/pi-ai";
+import type { UserMessageWithAttachments } from "@mariozechner/pi-web-ui";
 import type { NavigationMessage } from "./NavigationMessage.js";
 
 // Helper: Check if a message has toolCall blocks
@@ -72,6 +73,21 @@ function reorderMessages(messages: Message[]): Message[] {
 	return result;
 }
 
+/** A message with attachments as the provider takes it: the words, then the files. */
+function attachmentsToUser(m: UserMessageWithAttachments): Message {
+	const content: Array<TextContent | ImageContent> = [];
+	const text = typeof m.content === "string" ? m.content : "";
+	if (text) content.push({ type: "text", text });
+	for (const attachment of m.attachments ?? []) {
+		if (attachment.type === "image") {
+			content.push({ type: "image", data: attachment.content, mimeType: attachment.mimeType });
+		} else if (attachment.extractedText) {
+			content.push({ type: "text", text: `\n\n[Document: ${attachment.fileName}]\n${attachment.extractedText}` });
+		}
+	}
+	return { role: "user", content, timestamp: m.timestamp };
+}
+
 // Custom message transformer for browser extension
 // Handles navigation messages and app-specific message types
 export async function browserMessageTransformer(messages: AgentMessage[]): Promise<Message[]> {
@@ -80,6 +96,11 @@ export async function browserMessageTransformer(messages: AgentMessage[]): Promi
 	for (const m of messages) {
 		// Filter out UI-only messages
 		if (m.role === "artifact" || m.role === "welcome") {
+			continue;
+		}
+
+		if (m.role === "user-with-attachments") {
+			transformed.push(attachmentsToUser(m));
 			continue;
 		}
 

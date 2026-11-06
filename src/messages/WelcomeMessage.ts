@@ -138,7 +138,9 @@ export function createWelcomeRenderer(
 	return {
 		render: (message) => {
 			// Only show if no conversation started yet
-			const hasConversation = agent.state.messages.some((m) => m.role === "user" || m.role === "assistant");
+			const hasConversation = agent.state.messages.some(
+				(m) => m.role === "user" || m.role === "user-with-attachments" || m.role === "assistant",
+			);
 
 			if (hasConversation) return html``;
 

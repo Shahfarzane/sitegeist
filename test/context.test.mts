@@ -6,7 +6,7 @@ import { test } from "node:test";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, Model } from "@mariozechner/pi-ai";
 import { ContextManager } from "../src/agent/context-manager.ts";
-import { applyCompaction, findCut, pruneContext, transcript } from "../src/agent/context.ts";
+import { applyCompaction, estimateTokens, findCut, pruneContext, transcript } from "../src/agent/context.ts";
 import { backoffMs, classifyFailure } from "../src/agent/recovery.ts";
 import { answerOpenToolCalls } from "../src/agent/run-tracker.ts";
 
@@ -192,4 +192,29 @@ test("open tool calls get a result so the chat can continue", () => {
 	const added = repaired[4];
 	assert.ok(added.role === "toolResult" && added.toolCallId === "c2" && added.isError);
 	assert.equal(answerOpenToolCalls(repaired), repaired);
+});
+
+test("a failed turn's tool calls stay unanswered: providers never see that turn", () => {
+	const aborted = { ...call(1), stopReason: "aborted" } as AgentMessage;
+	const errored = { ...call(2), stopReason: "error" } as AgentMessage;
+	const messages: AgentMessage[] = [{ role: "user", content: "go", timestamp: 0 }, aborted, errored];
+	assert.equal(answerOpenToolCalls(messages), messages);
+});
+
+test("a cut that drifted onto a tool result does not orphan it", () => {
+	const messages = chat(5);
+	assert.equal(messages[2].role, "toolResult");
+	const view = applyCompaction(messages, { cut: 2, summary: "s" });
+	assert.equal(view[1].role, "assistant");
+});
+
+test("messages with attachments count toward the context", () => {
+	const message = {
+		role: "user-with-attachments",
+		content: "look",
+		attachments: [{ id: "1", type: "image", fileName: "a.png", mimeType: "image/png", size: 1, content: "x" }],
+		timestamp: 0,
+	} as unknown as AgentMessage;
+	assert.ok(estimateTokens([message]) >= 1600);
+	assert.ok(transcript([message]).includes("USER: look"));
 });
