@@ -24,6 +24,24 @@ Cause: the subscriber in `src/sidepanel.ts` runs on every agent event, including
 token, and each run writes `lastUsedModel`, saves the whole session, and re-renders the app. All
 panels of the extension share one renderer main thread, so parallel tasks slow each other down.
 
+## Results
+
+| Measure | Before | After |
+| --- | --- | --- |
+| `sessions` writes per reply | 811 | 3 |
+| `settings` writes per reply | 1,510 | 1 |
+| Blocking time in IndexedDB `put` | 3,589 ms | 13 ms |
+| Main-thread task time per reply | 4,302 ms | about 850 ms |
+| JS heap after the reply | 157 MB | 57 MB |
+| Images sent per turn, 40-shot chat | 40 | at most 9 |
+| `sidepanel.js` | 14.2 MB | about 7 MB |
+| Rendering a 60 KB tool result | 32 s frozen | under 1 s |
+| Typing 2,000 characters | 1.5 s | 40 ms |
+| Form task with a real model over the bridge | 14 calls, 40.6 s | 2 calls, 18.6 s |
+
+The form numbers compare the httpbin task in `docs/benchmarks.md` with a similar seven-field
+fixture, not the same run.
+
 ## Phase 1: session handling and performance
 
 | Item | Files | Check |
