@@ -80,7 +80,7 @@ export class BridgeTab extends SettingsTab {
 
 	render(): TemplateResult {
 		return html`
-			<div class="flex flex-col gap-5">
+			<div class="flex flex-col gap-6">
 				<p class="text-sm text-muted-foreground">
 					Lets coding agents on this computer (Claude Code, Codex, omp, pi) drive the browser through
 					Sitegeist. Each agent gets its own tab group and works in the background. Connect a harness with

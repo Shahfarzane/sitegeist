@@ -1902,11 +1902,13 @@ index bcec466b7..7b4225ae0 100644
  	"keywords": [
  		"ai",
 diff --git a/packages/web-ui/src/components/AgentInterface.ts b/packages/web-ui/src/components/AgentInterface.ts
-index b8f6550ec..02e7ca033 100644
+index b8f6550ec..72fa90898 100644
 --- a/packages/web-ui/src/components/AgentInterface.ts
 +++ b/packages/web-ui/src/components/AgentInterface.ts
-@@ -2,7 +2,7 @@ import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/
- import { html, LitElement } from "lit";
+@@ -1,8 +1,8 @@
+ import { streamSimple, type ToolResultMessage, type Usage } from "@mariozechner/pi-ai";
+-import { html, LitElement } from "lit";
++import { html, LitElement, type TemplateResult } from "lit";
  import { customElement, property, query } from "lit/decorators.js";
  import { ModelSelector } from "../dialogs/ModelSelector.js";
 -import type { MessageEditor } from "./MessageEditor.js";
@@ -1914,7 +1916,7 @@ index b8f6550ec..02e7ca033 100644
  import "./MessageEditor.js";
  import "./MessageList.js";
  import "./Messages.js"; // Import for side effects to register the custom elements
-@@ -34,6 +34,10 @@ export class AgentInterface extends LitElement {
+@@ -34,6 +34,12 @@ export class AgentInterface extends LitElement {
  	@property({ attribute: false }) onCostClick?: () => void;
  	// Optional callback to override model selector behavior
  	@property({ attribute: false }) onModelSelect?: () => void;
@@ -1922,10 +1924,48 @@ index b8f6550ec..02e7ca033 100644
 +	@property({ attribute: false }) slashCommandProvider?: SlashCommandProvider;
 +	// Optional text recalled by ArrowUp in an empty message editor
 +	@property({ attribute: false }) historyProvider?: () => string | undefined;
++	// Optional row above the message editor, for context the chat is about
++	@property({ attribute: false }) composerHeader?: () => TemplateResult;
  
  	// References
  	@query("message-editor") private _messageEditor!: MessageEditor;
-@@ -368,6 +372,8 @@ export class AgentInterface extends LitElement {
+@@ -297,7 +303,7 @@ export class AgentInterface extends LitElement {
+ 	}
+ 
+ 	private renderStats() {
+-		if (!this.session) return html`<div class="text-xs h-5"></div>`;
++		if (!this.session) return html`<div class="text-xs h-6"></div>`;
+ 
+ 		const state = this.session.state;
+ 		const totals = state.messages
+@@ -328,7 +334,7 @@ export class AgentInterface extends LitElement {
+ 		const totalsText = hasTotals ? formatUsage(totals) : "";
+ 
+ 		return html`
+-			<div class="text-xs text-muted-foreground flex justify-between items-center h-5">
++			<div class="text-xs text-muted-foreground flex justify-between items-center h-6">
+ 				<div class="flex items-center gap-1">
+ 					${this.showThemeToggle ? html`<theme-toggle></theme-toggle>` : html``}
+ 				</div>
+@@ -354,13 +360,14 @@ export class AgentInterface extends LitElement {
+ 		return html`
+ 			<div class="flex flex-col h-full bg-background text-foreground">
+ 				<!-- Messages Area -->
+-				<div class="flex-1 overflow-y-auto">
+-					<div class="max-w-3xl mx-auto p-4 pb-0">${this.renderMessages()}</div>
++				<div class="relative flex-1 min-h-0 overflow-y-auto">
++					<div class="max-w-3xl mx-auto px-4 pt-4">${this.renderMessages()}</div>
+ 				</div>
+ 
+ 				<!-- Input Area -->
+ 				<div class="shrink-0">
+-					<div class="max-w-3xl mx-auto px-2">
++					<div class="max-w-3xl mx-auto px-4">
++						${this.composerHeader?.() ?? ""}
+ 						<message-editor
+ 							.isStreaming=${state.isStreaming}
+ 							.currentModel=${state.model}
+@@ -368,6 +375,8 @@ export class AgentInterface extends LitElement {
  							.showAttachmentButton=${this.enableAttachments}
  							.showModelSelector=${this.enableModelSelector}
  							.showThinkingSelector=${this.enableThinkingSelector}
@@ -1934,6 +1974,37 @@ index b8f6550ec..02e7ca033 100644
  							.onSend=${(input: string, attachments: Attachment[]) => {
  								this.sendMessage(input, attachments);
  							}}
+diff --git a/packages/web-ui/src/components/AttachmentTile.ts b/packages/web-ui/src/components/AttachmentTile.ts
+index 823001d3c..4a2ee8838 100644
+--- a/packages/web-ui/src/components/AttachmentTile.ts
++++ b/packages/web-ui/src/components/AttachmentTile.ts
+@@ -59,7 +59,7 @@ export class AttachmentTile extends LitElement {
+ 									isPdf
+ 										? html`
+ 											<!-- PDF badge overlay -->
+-											<div class="absolute bottom-0 left-0 right-0 bg-background/90 px-1 py-0.5 rounded-b-lg">
++											<div class="absolute bottom-0 left-0 right-0 bg-background/90 p-1 rounded-b-lg">
+ 												<div class="text-[10px] text-muted-foreground text-center font-medium">${i18n("PDF")}</div>
+ 											</div>
+ 										`
+diff --git a/packages/web-ui/src/components/ConsoleBlock.ts b/packages/web-ui/src/components/ConsoleBlock.ts
+index 66f38b0b3..35035f28c 100644
+--- a/packages/web-ui/src/components/ConsoleBlock.ts
++++ b/packages/web-ui/src/components/ConsoleBlock.ts
+@@ -45,11 +45,11 @@ export class ConsoleBlock extends LitElement {
+ 
+ 		return html`
+ 			<div class="border border-border rounded-lg overflow-hidden">
+-				<div class="flex items-center justify-between px-3 py-1.5 bg-muted border-b border-border">
++				<div class="flex items-center justify-between px-3 py-1 bg-muted border-b border-border">
+ 					<span class="text-xs text-muted-foreground font-mono">${i18n("console")}</span>
+ 					<button
+ 						@click=${() => this.copy()}
+-						class="flex items-center gap-1 px-2 py-0.5 text-xs rounded hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
++						class="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-accent text-muted-foreground hover:text-accent-foreground transition-colors"
+ 						title="${i18n("Copy output")}"
+ 					>
+ 						${this.copied ? icon(Check, "sm") : icon(Copy, "sm")}
 diff --git a/packages/web-ui/src/components/CustomProviderCard.ts b/packages/web-ui/src/components/CustomProviderCard.ts
 index 1050b8553..1744424df 100644
 --- a/packages/web-ui/src/components/CustomProviderCard.ts
@@ -1952,8 +2023,21 @@ index 1050b8553..1744424df 100644
  
  		const statusText =
  			this.status.status === "connected"
+diff --git a/packages/web-ui/src/components/Input.ts b/packages/web-ui/src/components/Input.ts
+index 112e08135..4319b622e 100644
+--- a/packages/web-ui/src/components/Input.ts
++++ b/packages/web-ui/src/components/Input.ts
+@@ -75,7 +75,7 @@ export const Input = fc<InputProps>(
+ 		};
+ 
+ 		return html`
+-			<div class="flex flex-col gap-1.5 ${className}">
++			<div class="flex flex-col gap-2 ${className}">
+ 				${
+ 					label
+ 						? html`
 diff --git a/packages/web-ui/src/components/MessageEditor.ts b/packages/web-ui/src/components/MessageEditor.ts
-index f0987c4d1..7a6b045d3 100644
+index f0987c4d1..9022ef93a 100644
 --- a/packages/web-ui/src/components/MessageEditor.ts
 +++ b/packages/web-ui/src/components/MessageEditor.ts
 @@ -5,12 +5,24 @@ import type { Model } from "@mariozechner/pi-ai";
@@ -1961,7 +2045,7 @@ index f0987c4d1..7a6b045d3 100644
  import { customElement, property, state } from "lit/decorators.js";
  import { createRef, ref } from "lit/directives/ref.js";
 -import { Brain, Loader2, Paperclip, Send, Sparkles, Square } from "lucide";
-+import { ArrowUp, Brain, Loader2, Paperclip, Square } from "lucide";
++import { ArrowUp, Brain, Loader2, Plus, Square } from "lucide";
  import { type Attachment, loadAttachment } from "../utils/attachment-utils.js";
  import { i18n } from "../utils/i18n.js";
  import "./AttachmentTile.js";
@@ -2147,7 +2231,24 @@ index f0987c4d1..7a6b045d3 100644
  	override render() {
  		// Check if current model supports thinking/reasoning
  		const model = this.currentModel;
-@@ -255,6 +400,8 @@ export class MessageEditor extends LitElement {
+@@ -239,7 +384,7 @@ export class MessageEditor extends LitElement {
+ 
+ 		return html`
+ 			<div
+-				class="bg-card rounded-xl border shadow-sm relative ${this.isDragging ? "border-primary border-2 bg-primary/5" : "border-border"}"
++				class="bg-card rounded-[20px] border relative ${this.isDragging ? "border-primary border-2 bg-primary/5" : "border-border"}"
+ 				@dragover=${this.handleDragOver}
+ 				@dragleave=${this.handleDragLeave}
+ 				@drop=${this.handleDrop}
+@@ -248,18 +393,20 @@ export class MessageEditor extends LitElement {
+ 				${
+ 					this.isDragging
+ 						? html`
+-					<div class="absolute inset-0 bg-primary/10 rounded-xl pointer-events-none z-10 flex items-center justify-center">
++					<div class="absolute inset-0 bg-primary/10 rounded-[20px] pointer-events-none z-10 flex items-center justify-center">
+ 						<div class="text-primary font-medium">${i18n("Drop files here")}</div>
+ 					</div>
+ 				`
  						: ""
  				}
  
@@ -2156,7 +2257,23 @@ index f0987c4d1..7a6b045d3 100644
  				<!-- Attachments -->
  				${
  					this.attachments.length > 0
-@@ -283,6 +430,7 @@ export class MessageEditor extends LitElement {
+ 						? html`
+-							<div class="px-4 pt-3 pb-2 flex flex-wrap gap-2">
++							<div class="px-3 pt-3 flex flex-wrap gap-2">
+ 								${this.attachments.map(
+ 									(attachment) => html`
+ 										<attachment-tile
+@@ -275,14 +422,15 @@ export class MessageEditor extends LitElement {
+ 				}
+ 
+ 				<textarea
+-					class="w-full bg-transparent p-4 text-foreground placeholder-muted-foreground outline-none resize-none overflow-y-auto"
+-					placeholder=${i18n("Type a message...")}
++					class="block w-full bg-transparent px-4 pt-4 pb-2 text-base text-foreground placeholder:text-foreground/50 outline-none resize-none overflow-y-auto"
++					placeholder=${i18n("Ask anything...")}
+ 					rows="1"
+ 					style="max-height: 200px; field-sizing: content; min-height: 1lh; height: auto;"
+ 					.value=${this.value}
  					@input=${this.handleTextareaInput}
  					@keydown=${this.handleKeyDown}
  					@paste=${this.handlePaste}
@@ -2164,7 +2281,47 @@ index f0987c4d1..7a6b045d3 100644
  					${ref(this.textareaRef)}
  				></textarea>
  
-@@ -363,10 +511,7 @@ export class MessageEditor extends LitElement {
+@@ -297,14 +445,14 @@ export class MessageEditor extends LitElement {
+ 				/>
+ 
+ 				<!-- Button Row -->
+-				<div class="px-2 pb-2 flex items-center justify-between">
++				<div class="h-8 mb-3 px-3 flex items-center justify-between gap-2">
+ 					<!-- Left side - attachment and thinking selector -->
+-					<div class="flex gap-2 items-center">
++					<div class="flex gap-1 items-center shrink-0">
+ 						${
+ 							this.showAttachmentButton
+ 								? this.processingFiles
+ 									? html`
+-										<div class="h-8 w-8 flex items-center justify-center">
++										<div class="size-8 flex items-center justify-center">
+ 											${icon(Loader2, "sm", "animate-spin text-muted-foreground")}
+ 										</div>
+ 									`
+@@ -312,9 +460,10 @@ export class MessageEditor extends LitElement {
+ 										${Button({
+ 											variant: "ghost",
+ 											size: "icon",
+-											className: "h-8 w-8",
++											className: "rounded-full! text-muted-foreground",
+ 											onClick: this.handleAttachmentClick,
+-											children: icon(Paperclip, "sm"),
++											children: icon(Plus, "sm"),
++											title: i18n("Attach files"),
+ 										})}
+ 									`
+ 								: ""
+@@ -348,7 +497,7 @@ export class MessageEditor extends LitElement {
+ 					</div>
+ 
+ 					<!-- Model selector and send on the right -->
+-					<div class="flex gap-2 items-center">
++					<div class="flex gap-2 items-center justify-end min-w-0">
+ 						${
+ 							this.showModelSelector && this.currentModel
+ 								? html`
+@@ -363,11 +512,8 @@ export class MessageEditor extends LitElement {
  												this.onModelSelect?.();
  											});
  										},
@@ -2172,11 +2329,13 @@ index f0987c4d1..7a6b045d3 100644
 -											${icon(Sparkles, "sm")}
 -											<span class="ml-1">${this.currentModel.id}</span>
 -										`,
-+										children: html`<span>${this.currentModel.id}</span>`,
- 										className: "h-8 text-xs truncate",
+-										className: "h-8 text-xs truncate",
++										children: html`<span class="truncate">${this.currentModel.id}</span>`,
++										className: "px-2! shrink! min-w-0 text-sm! font-normal text-muted-foreground",
  									})}
  								`
-@@ -376,21 +521,27 @@ export class MessageEditor extends LitElement {
+ 								: ""
+@@ -376,21 +522,23 @@ export class MessageEditor extends LitElement {
  							this.isStreaming
  								? html`
  									${Button({
@@ -2185,52 +2344,78 @@ index f0987c4d1..7a6b045d3 100644
  										size: "icon",
  										onClick: this.onAbort,
 -										children: icon(Square, "sm"),
+-										className: "h-8 w-8",
 +										children: icon(Square, "xs"),
- 										className: "h-8 w-8",
++										className: "rounded-full!",
 +										title: "Stop",
  									})}
  								`
  								: html`
  									${Button({
 -										variant: "ghost",
-+										// The one filled control in the composer, once there is something to send.
-+										variant:
-+											(this.value.trim() || this.attachments.length > 0) && !this.processingFiles
-+												? "default"
-+												: "ghost",
++										variant: "default",
  										size: "icon",
  										onClick: this.handleSend,
  										disabled: (!this.value.trim() && this.attachments.length === 0) || this.processingFiles,
 -										children: html`<div style="transform: rotate(-45deg)">${icon(Send, "sm")}</div>`,
+-										className: "h-8 w-8",
 +										children: icon(ArrowUp, "sm"),
- 										className: "h-8 w-8",
++										className: "rounded-full!",
 +										title: "Send",
  									})}
  								`
  						}
 diff --git a/packages/web-ui/src/components/Messages.ts b/packages/web-ui/src/components/Messages.ts
-index 485c51340..d1f8292b2 100644
+index 485c51340..c81069683 100644
 --- a/packages/web-ui/src/components/Messages.ts
 +++ b/packages/web-ui/src/components/Messages.ts
-@@ -138,14 +138,15 @@ export class AssistantMessage extends LitElement {
+@@ -59,8 +59,8 @@ export class UserMessage extends LitElement {
+ 				: this.message.content.find((c) => c.type === "text")?.text || "";
+ 
+ 		return html`
+-			<div class="flex justify-start mx-4">
+-				<div class="user-message-container py-2 px-4 rounded-xl">
++			<div class="flex justify-end">
++				<div class="user-message-container py-3 px-4 rounded-2xl">
+ 					<markdown-block .content=${content}></markdown-block>
+ 					${
+ 						this.message.role === "user-with-attachments" &&
+@@ -138,20 +138,21 @@ export class AssistantMessage extends LitElement {
  			}
  		}
  
 +		// Per-message usage shows on hover; the running total stays in the stats row below the composer.
  		return html`
 -			<div>
+-				${orderedParts.length ? html` <div class="px-4 flex flex-col gap-3">${orderedParts}</div> ` : ""}
 +			<div class="group">
- 				${orderedParts.length ? html` <div class="px-4 flex flex-col gap-3">${orderedParts}</div> ` : ""}
++				${orderedParts.length ? html` <div class="flex flex-col gap-3">${orderedParts}</div> ` : ""}
  				${
  					this.message.usage && !this.isStreaming
  						? this.onCostClick
 -							? html` <div class="px-4 mt-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
 -							: html` <div class="px-4 mt-2 text-xs text-muted-foreground">${formatUsage(this.message.usage)}</div> `
-+							? html` <div class="px-4 mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-foreground" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
-+							: html` <div class="px-4 mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">${formatUsage(this.message.usage)}</div> `
++							? html` <div class="mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-foreground" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
++							: html` <div class="mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">${formatUsage(this.message.usage)}</div> `
  						: ""
  				}
  				${
+ 					this.message.stopReason === "error" && this.message.errorMessage
+ 						? html`
+-							<div class="mx-4 mt-3 p-3 bg-destructive/10 text-destructive rounded-lg text-sm overflow-hidden">
++							<div class="mt-3 p-3 bg-destructive/10 text-destructive rounded-lg text-sm overflow-hidden">
+ 								<strong>${i18n("Error:")}</strong> ${this.message.errorMessage}
+ 							</div>
+ 						`
+@@ -269,7 +270,7 @@ export class ToolMessage extends LitElement {
+ 
+ 		// Default: wrap in card
+ 		return html`
+-			<div class="p-2.5 border border-border rounded-md bg-card text-card-foreground shadow-xs">
++			<div class="p-3 border border-border rounded-lg bg-card text-card-foreground">
+ 				${renderResult.content}
+ 			</div>
+ 		`;
 diff --git a/packages/web-ui/src/components/ProviderKeyInput.ts b/packages/web-ui/src/components/ProviderKeyInput.ts
 index 61dac6068..795f2f1ab 100644
 --- a/packages/web-ui/src/components/ProviderKeyInput.ts
@@ -2244,6 +2429,28 @@ index 61dac6068..795f2f1ab 100644
  								: ""
  					}
  					${this.failed ? Badge({ children: i18n("✗ Invalid"), variant: "destructive" }) : ""}
+diff --git a/packages/web-ui/src/components/StreamingMessageContainer.ts b/packages/web-ui/src/components/StreamingMessageContainer.ts
+index 3d2693150..6374215ef 100644
+--- a/packages/web-ui/src/components/StreamingMessageContainer.ts
++++ b/packages/web-ui/src/components/StreamingMessageContainer.ts
+@@ -65,7 +65,7 @@ export class StreamingMessageContainer extends LitElement {
+ 		if (!this._message) {
+ 			if (this.isStreaming)
+ 				return html`<div class="flex flex-col gap-3 mb-3">
+-					<span class="mx-4 inline-block w-2 h-4 bg-muted-foreground animate-pulse"></span>
++					<span class="inline-block w-2 h-4 bg-muted-foreground animate-pulse"></span>
+ 				</div>`;
+ 			return html``; // Empty until a message is set
+ 		}
+@@ -90,7 +90,7 @@ export class StreamingMessageContainer extends LitElement {
+ 						.hideToolCalls=${false}
+ 						.onCostClick=${this.onCostClick}
+ 					></assistant-message>
+-					${this.isStreaming ? html`<span class="mx-4 inline-block w-2 h-4 bg-muted-foreground animate-pulse"></span>` : ""}
++					${this.isStreaming ? html`<span class="inline-block w-2 h-4 bg-muted-foreground animate-pulse"></span>` : ""}
+ 				</div>
+ 			`;
+ 		}
 diff --git a/packages/web-ui/src/components/ThinkingBlock.ts b/packages/web-ui/src/components/ThinkingBlock.ts
 index 8dd7ce45e..5ecec004d 100644
 --- a/packages/web-ui/src/components/ThinkingBlock.ts
@@ -2406,6 +2613,19 @@ index 48284c742..c40d71a9e 100644
  export { PersistentStorageDialog } from "./dialogs/PersistentStorageDialog.js";
  export { ProvidersModelsTab } from "./dialogs/ProvidersModelsTab.js";
  export { SessionListDialog } from "./dialogs/SessionListDialog.js";
+diff --git a/packages/web-ui/src/tools/artifacts/ArtifactPill.ts b/packages/web-ui/src/tools/artifacts/ArtifactPill.ts
+index 13078fcdf..ffcdef190 100644
+--- a/packages/web-ui/src/tools/artifacts/ArtifactPill.ts
++++ b/packages/web-ui/src/tools/artifacts/ArtifactPill.ts
+@@ -14,7 +14,7 @@ export function ArtifactPill(filename: string, artifactsPanel?: ArtifactsPanel):
+ 
+ 	return html`
+ 		<span
+-			class="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-muted/50 border border-border rounded ${
++			class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-muted/50 border border-border rounded ${
+ 				artifactsPanel ? "cursor-pointer hover:bg-muted transition-colors" : ""
+ 			}"
+ 			@click=${artifactsPanel ? handleClick : null}
 diff --git a/packages/web-ui/src/tools/artifacts/PdfArtifact.ts b/packages/web-ui/src/tools/artifacts/PdfArtifact.ts
 index e139c2a45..2b2e91de5 100644
 --- a/packages/web-ui/src/tools/artifacts/PdfArtifact.ts
@@ -2507,10 +2727,20 @@ index afe98e443..2cf89d2e3 100644
  }
  
 diff --git a/packages/web-ui/src/utils/i18n.ts b/packages/web-ui/src/utils/i18n.ts
-index 1f50a7d08..8379569af 100644
+index 1f50a7d08..c0da21f07 100644
 --- a/packages/web-ui/src/utils/i18n.ts
 +++ b/packages/web-ui/src/utils/i18n.ts
-@@ -148,6 +148,7 @@ declare module "@mariozechner/mini-lit" {
+@@ -28,7 +28,8 @@ declare module "@mariozechner/mini-lit" {
+ 		Save: string;
+ 		"Update API key": string;
+ 		"Enter API key": string;
+-		"Type a message...": string;
++		"Ask anything...": string;
++		"Attach files": string;
+ 		"Failed to fetch file": string;
+ 		"Invalid source type": string;
+ 		PDF: string;
+@@ -148,6 +149,7 @@ declare module "@mariozechner/mini-lit" {
  		Low: string;
  		Medium: string;
  		High: string;
@@ -2518,7 +2748,17 @@ index 1f50a7d08..8379569af 100644
  		"Storage Permission Required": string;
  		"This app needs persistent storage to save your conversations": string;
  		"Why is this needed?": string;
-@@ -360,6 +361,7 @@ export const translations = {
+@@ -237,7 +239,8 @@ export const translations = {
+ 		Save: "Save",
+ 		"Update API key": "Update API key",
+ 		"Enter API key": "Enter API key",
+-		"Type a message...": "Type a message...",
++		"Ask anything...": "Ask anything…",
++		"Attach files": "Attach files",
+ 		"Failed to fetch file": "Failed to fetch file",
+ 		"Invalid source type": "Invalid source type",
+ 		PDF: "PDF",
+@@ -360,6 +363,7 @@ export const translations = {
  		Low: "Low",
  		Medium: "Medium",
  		High: "High",
@@ -2526,7 +2766,17 @@ index 1f50a7d08..8379569af 100644
  		"Storage Permission Required": "Storage Permission Required",
  		"This app needs persistent storage to save your conversations":
  			"This app needs persistent storage to save your conversations",
-@@ -579,6 +581,7 @@ export const translations = {
+@@ -456,7 +460,8 @@ export const translations = {
+ 		Save: "Speichern",
+ 		"Update API key": "API-Schlüssel aktualisieren",
+ 		"Enter API key": "API-Schlüssel eingeben",
+-		"Type a message...": "Nachricht eingeben...",
++		"Ask anything...": "Frag etwas…",
++		"Attach files": "Dateien anhängen",
+ 		"Failed to fetch file": "Datei konnte nicht abgerufen werden",
+ 		"Invalid source type": "Ungültiger Quellentyp",
+ 		PDF: "PDF",
+@@ -579,6 +584,7 @@ export const translations = {
  		Low: "Niedrig",
  		Medium: "Mittel",
  		High: "Hoch",

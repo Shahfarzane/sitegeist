@@ -62,9 +62,9 @@ export class NavigationMessageElement extends LitElement {
 		const faviconUrl = this.favicon || getFallbackFavicon(this.url);
 
 		return html`
-			<div class="mx-4 my-2 space-y-2">
+			<div class="my-2 space-y-2">
 				<button
-					class="inline-flex items-center gap-2 px-3 py-2 text-sm text-card-foreground bg-card border border-border rounded-lg hover:bg-accent/50 transition-colors max-w-full cursor-pointer shadow-lg"
+					class="inline-flex items-center gap-2 px-3 py-2 text-sm text-card-foreground bg-card border border-border rounded-lg hover:bg-accent/50 transition-colors max-w-full cursor-pointer"
 					@click=${() => {
 						chrome.tabs.create({ url: this.url });
 					}}

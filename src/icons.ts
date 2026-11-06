@@ -190,7 +190,7 @@ function renderIconsPage() {
 						<li>Preview the orb animation below</li>
 						<li>Click "Generate All Icons" or generate individual sizes</li>
 						<li>Download each icon using the download buttons</li>
-						<li>Replace the icon files in the <code class="px-1.5 py-0.5 bg-secondary rounded text-xs">static/</code> directory</li>
+						<li>Replace the icon files in the <code class="px-2 py-1 bg-secondary rounded text-xs">static/</code> directory</li>
 					</ol>
 				</div>
 

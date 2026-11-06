@@ -47,7 +47,7 @@ export class Toast extends LitElement {
 
 		return html`
 			<div class="fixed top-4 right-4 z-[9999] ${this.isExiting ? "animate-out slide-out-to-right duration-300" : "animate-in slide-in-from-right duration-300"}">
-				<div class="min-w-[240px] max-w-[360px] flex items-center gap-3 px-3 py-2.5 bg-popover text-popover-foreground rounded-lg shadow-lg border border-border">
+				<div class="min-w-[240px] max-w-[360px] flex items-center gap-3 px-3 py-3 bg-popover text-popover-foreground rounded-lg shadow-lg border border-border">
 					<span class=${tone}>${iconEl}</span>
 					<span class="flex-1 text-sm font-medium">${this.message}</span>
 					<button

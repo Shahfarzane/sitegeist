@@ -57,7 +57,7 @@ export class PromptsTab extends SettingsTab {
 
 	render(): TemplateResult {
 		return html`
-			<div class="flex flex-col gap-5">
+			<div class="flex flex-col gap-6">
 				<p class="text-sm text-muted-foreground">
 					Prompts you use often. Type <code class="text-xs">/</code> in the chat to insert one.
 				</p>

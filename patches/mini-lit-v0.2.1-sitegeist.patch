@@ -126,8 +126,34 @@ index d259e92..1991029 100644
 +      "vitest": "^5.0.5"
     }
  }
+diff --git a/src/Alert.ts b/src/Alert.ts
+index c0fa407..fcd3bf1 100644
+--- a/src/Alert.ts
++++ b/src/Alert.ts
+@@ -14,7 +14,7 @@ const _Alert = fc<AlertProps>(({ variant = "default", className = "", children }
+    };
+ 
+    const baseClasses =
+-      "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground";
++      "relative w-full rounded-lg border p-4 [&>svg~*]:pl-8 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground";
+ 
+    return html` <div class="${baseClasses} ${variantClasses[variant]} ${className}" role="alert">${children}</div> `;
+ });
+diff --git a/src/Badge.ts b/src/Badge.ts
+index 95c64c2..900ec10 100644
+--- a/src/Badge.ts
++++ b/src/Badge.ts
+@@ -16,7 +16,7 @@ const _Badge = fc<BadgeProps>(({ variant = "default", className = "", children }
+    };
+ 
+    const baseClasses =
+-      "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden";
++      "inline-flex items-center justify-center rounded-md border px-2 py-1 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden";
+ 
+    return html` <span class="${baseClasses} ${variantClasses[variant]} ${className}"> ${children} </span> `;
+ });
 diff --git a/src/Button.ts b/src/Button.ts
-index 4906044..302b24f 100644
+index 4906044..35ba926 100644
 --- a/src/Button.ts
 +++ b/src/Button.ts
 @@ -34,7 +34,8 @@ export const Button = fc<ButtonProps>(
@@ -140,6 +166,28 @@ index 4906044..302b24f 100644
           outline:
              "border border-input bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground",
           secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+@@ -46,7 +47,7 @@ export const Button = fc<ButtonProps>(
+          "inline-flex items-center justify-center whitespace-nowrap text-sm font-medium transition-all cursor-pointer disabled:cursor-not-allowed disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive";
+ 
+       const gapClass = size === "icon" ? "" : "gap-2";
+-      const paddingAdjustClass = size === "icon" ? "" : "has-[>svg]:px-2.5";
++      const paddingAdjustClass = size === "icon" ? "" : "has-[>svg]:px-3";
+       const variantClass = variantClasses[variant] || variantClasses.default;
+ 
+       const handleClick = (e: Event) => {
+diff --git a/src/Card.ts b/src/Card.ts
+index a8df9e5..b80ff58 100644
+--- a/src/Card.ts
++++ b/src/Card.ts
+@@ -15,7 +15,7 @@ const _Card = fc<CardProps>(({ hoverable = false, className = "", children }) =>
+ const _CardHeader = fc<BaseComponentProps>(({ className = "", children }) => {
+    return html`
+       <div
+-         class="grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6 has-[ui-card-action]:grid-cols-[1fr_auto] ${className}"
++         class="grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6 has-[ui-card-action]:grid-cols-[1fr_auto] ${className}"
+       >
+          ${children}
+       </div>
 diff --git a/src/CodeBlock.ts b/src/CodeBlock.ts
 index 3c82dd5..f4a0896 100644
 --- a/src/CodeBlock.ts
@@ -179,7 +227,7 @@ index 3c82dd5..f4a0896 100644
        // Format language name for display
        const displayLanguage = this.language || "plaintext";
 diff --git a/src/Dialog.ts b/src/Dialog.ts
-index 3905aec..0d09b4f 100644
+index 3905aec..38afffb 100644
 --- a/src/Dialog.ts
 +++ b/src/Dialog.ts
 @@ -59,13 +59,15 @@ export const Dialog = fc<DialogProps>(
@@ -205,7 +253,7 @@ index 3905aec..0d09b4f 100644
                    type="button"
                    @click=${() => onClose?.()}
 -                  class="absolute top-4 right-4 rounded-sm text-muted-foreground opacity-70 transition-all hover:opacity-100 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:pointer-events-none cursor-pointer"
-+                  class="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none cursor-pointer"
++                  class="absolute top-2 right-2 sm:top-3 sm:right-3 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none cursor-pointer"
                    aria-label="${i18n("Close")}"
                 >
                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -227,6 +275,107 @@ index 3905aec..0d09b4f 100644
  });
  
  // Dialog footer for action buttons
+diff --git a/src/Diff.ts b/src/Diff.ts
+index fb9cf03..3d1b24c 100644
+--- a/src/Diff.ts
++++ b/src/Diff.ts
+@@ -30,7 +30,7 @@ export const Diff = fc<DiffProps>(({ oldText, newText, title, className = "" }):
+ 
+          lines.push(
+             html`<div class="${rowClass}">
+-               <pre class="m-0 px-4 py-0.5 text-xs font-mono text-foreground">${prefix} ${line}</pre>
++               <pre class="m-0 px-4 py-0 text-xs font-mono text-foreground">${prefix} ${line}</pre>
+             </div>`,
+          );
+       }
+@@ -42,7 +42,7 @@ export const Diff = fc<DiffProps>(({ oldText, newText, title, className = "" }):
+    if (title) {
+       return html`
+          <div class="border border-border rounded-lg overflow-hidden ${className}">
+-            <div class="flex items-center justify-between px-3 py-1.5 bg-muted border-b border-border">
++            <div class="flex items-center justify-between px-3 py-1 bg-muted border-b border-border">
+                <span class="text-xs text-muted-foreground font-mono">${title}</span>
+                <span class="text-xs text-muted-foreground">
+                   <span class="text-emerald-600">+${addedCount}</span>
+diff --git a/src/Input.ts b/src/Input.ts
+index 1b47594..4f3addf 100644
+--- a/src/Input.ts
++++ b/src/Input.ts
+@@ -78,7 +78,7 @@ export const Input = fc<InputProps>(
+       };
+ 
+       return html`
+-         <div class="flex flex-col gap-1.5 ${className}">
++         <div class="flex flex-col gap-2 ${className}">
+             ${
+                label
+                   ? html`
+diff --git a/src/LanguageSelector.ts b/src/LanguageSelector.ts
+index 540b4c1..5a24fe8 100644
+--- a/src/LanguageSelector.ts
++++ b/src/LanguageSelector.ts
+@@ -53,7 +53,7 @@ export class LanguageSelector extends LitElement {
+                variant: "ghost",
+                size: "sm",
+                onClick: () => this.toggleDropdown(),
+-               className: "gap-1.5",
++               className: "gap-2",
+                children: html`
+                   ${icon(Globe, "sm")}
+                   <span class="text-xs font-medium">${this.currentLanguage.toUpperCase()}</span>
+@@ -68,7 +68,7 @@ export class LanguageSelector extends LitElement {
+                        ${this.languages.map(
+                           (lang) => html`
+                              <button
+-                                class="w-full px-3 py-1.5 text-sm text-left hover:bg-accent hover:text-accent-foreground transition-colors
++                                class="w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground transition-colors
+ 												${lang.code === this.currentLanguage ? "bg-accent/50 text-accent-foreground font-medium" : ""}"
+                                 @click=${() => this.selectLanguage(lang.code)}
+                              >
+diff --git a/src/Select.ts b/src/Select.ts
+index b56f1b3..35cba8f 100644
+--- a/src/Select.ts
++++ b/src/Select.ts
+@@ -257,7 +257,7 @@ export function Select(props: SelectProps): TemplateResult {
+                              ${
+                                 group.label
+                                    ? html`
+-                                     <div class="text-muted-foreground px-2 py-1.5 text-xs font-medium">
++                                     <div class="text-muted-foreground px-2 py-1 text-xs font-medium">
+                                         ${group.label}
+                                      </div>
+                                   `
+@@ -274,7 +274,7 @@ export function Select(props: SelectProps): TemplateResult {
+                                       aria-selected=${isSelected}
+                                       data-disabled=${option.disabled || false}
+                                       tabindex="-1"
+-                                      class="relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none select-none transition-colors
++                                      class="relative flex w-full cursor-default items-center gap-2 rounded-sm py-2 pr-8 pl-2 text-sm outline-none select-none transition-colors
+ 												${isFocused ? "bg-accent text-accent-foreground" : ""}
+ 												${option.disabled ? "pointer-events-none opacity-50" : "hover:bg-accent hover:text-accent-foreground"}
+ 												${isSelected ? "font-medium" : ""}"
+@@ -324,7 +324,7 @@ export function Select(props: SelectProps): TemplateResult {
+                              aria-selected=${isSelected}
+                              data-disabled=${option.disabled || false}
+                              tabindex="-1"
+-                             class="relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none select-none transition-colors
++                             class="relative flex w-full cursor-default items-center gap-2 rounded-sm py-2 pr-8 pl-2 text-sm outline-none select-none transition-colors
+ 										${isFocused ? "bg-accent text-accent-foreground" : ""}
+ 										${option.disabled ? "pointer-events-none opacity-50" : "hover:bg-accent hover:text-accent-foreground"}
+ 										${isSelected ? "font-medium" : ""}"
+diff --git a/src/Textarea.ts b/src/Textarea.ts
+index de34c13..156dc76 100644
+--- a/src/Textarea.ts
++++ b/src/Textarea.ts
+@@ -48,7 +48,7 @@ const _Textarea = fc<TextareaProps>(
+       const stateClasses = error ? "border-destructive" : "";
+ 
+       return html`
+-         <div class="flex flex-col gap-1.5 ${className}">
++         <div class="flex flex-col gap-2 ${className}">
+             ${
+                label
+                   ? html`
 diff --git a/src/component.ts b/src/component.ts
 index 3e3ac1a..f3ad902 100644
 --- a/src/component.ts
@@ -273,6 +422,19 @@ index 8abbdb3..a171d83 100644
 -export { createRef, html, nothing, ref };
  export type { Ref, TemplateResult };
 +export { createRef, html, nothing, ref };
+diff --git a/src/styles/utils/markdown.css b/src/styles/utils/markdown.css
+index 65d96fd..aafd322 100644
+--- a/src/styles/utils/markdown.css
++++ b/src/styles/utils/markdown.css
+@@ -72,7 +72,7 @@
+ }
+ 
+ .markdown-content code:not(.hljs) {
+-   @apply bg-muted text-foreground px-1.5 py-0.5 rounded text-sm;
++   @apply bg-muted text-foreground px-1 py-0 rounded text-sm;
+ }
+ 
+ .markdown-content table {
 diff --git a/tests/decorators.test.ts b/tests/decorators.test.ts
 new file mode 100644
 index 0000000..68ec3f0

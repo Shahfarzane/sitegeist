@@ -90,9 +90,9 @@ export class OverflowMenu extends LitElement {
 		if (entry === "separator") return html`<div class="my-1 h-px bg-border" role="separator"></div>`;
 		if (entry === "theme") {
 			return html`
-				<div class="flex items-center justify-between gap-2 px-2 py-1.5">
+				<div class="flex items-center justify-between gap-2 px-2 py-2">
 					<span class="text-sm text-foreground">Theme</span>
-					<div class="flex rounded-md border border-border p-0.5" role="group" aria-label="Theme">
+					<div class="flex rounded-md border border-border p-1" role="group" aria-label="Theme">
 						${THEMES.map(
 							(t) => html`
 								<button
@@ -117,7 +117,7 @@ export class OverflowMenu extends LitElement {
 		return html`
 			<button
 				role="menuitem"
-				class="flex w-full items-center gap-2 px-2 py-1.5 text-sm text-foreground rounded-md hover:bg-accent focus-visible:outline-none focus-visible:bg-accent"
+				class="flex w-full items-center gap-2 px-2 py-2 text-sm text-foreground rounded-md hover:bg-accent focus-visible:outline-none focus-visible:bg-accent"
 				@click=${() => {
 					this.hide();
 					entry.onSelect();

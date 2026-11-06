@@ -336,7 +336,7 @@ export class SessionCostDialog extends DialogBase {
 													</td>
 													<td class="px-3 py-2 text-muted-foreground">
 														<span
-															class="inline-block px-2 py-0.5 rounded text-[10px] font-medium border border-border ${
+															class="inline-block px-2 py-1 rounded text-[10px] font-medium border border-border ${
 																entry.stopReason === "stop" || entry.stopReason === "toolUse"
 																	? "text-muted-foreground"
 																	: "text-destructive"

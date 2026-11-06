@@ -79,11 +79,11 @@ export class SettingsSheet extends DialogBase {
 		const current = this.selected === undefined ? undefined : this.sections[this.selected];
 		return html`
 			<div class="flex flex-col h-full min-h-0">
-				<header class="flex items-center gap-1 h-12 pl-2 pr-12 border-b border-border shrink-0">
+				<header class="flex items-center gap-1 h-12 pl-2 pr-8 border-b border-border shrink-0">
 					${
 						current
 							? html`<button
-									class="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+									class="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
 									aria-label="Back to settings"
 									@click=${() => {
 										this.selected = undefined;
