@@ -176,9 +176,9 @@ export class Browser {
 	}
 
 	async close() {
-		await this.cdp.send("Browser.close").catch(() => undefined);
-		await sleep(200);
+		await Promise.race([this.cdp.send("Browser.close").catch(() => undefined), sleep(1000)]);
 		this.proc.kill("SIGKILL");
+		this.cdp.ws.close();
 		if (this.ownsProfile) rmSync(this.profile, { recursive: true, force: true });
 	}
 }

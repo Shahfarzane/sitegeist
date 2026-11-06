@@ -22,7 +22,7 @@ let turns;
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/page": page, "/page2": page, "/page3": page, "/page4": page },
+		routes: { "/page": page, "/page2": page, "/page3": page, "/page4": page, "/page5": page, "/page6": page },
 		script: (body, index) => turns(body, index),
 	});
 	browser = await Browser.launch();
@@ -129,6 +129,62 @@ test("a chat nearing the limit is summarized before it overflows", async () => {
 	await context.panel.waitFor(`document.body.innerText.includes("proactive reply")`);
 	assert.equal(summaries, 1);
 	assert.ok(JSON.stringify(server.requests.at(-1).messages).includes("PROACTIVE-SUMMARY"));
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a run that died with the panel can be resumed", async () => {
+	let release;
+	const hang = new Promise((r) => {
+		release = r;
+	});
+	turns = async (_body, index) => {
+		if (index === 0) return { text: "first reply" };
+		if (index === 1) {
+			await hang;
+			return { text: "too late" };
+		}
+		return { text: "picked up where it stopped" };
+	};
+	server.requests.length = 0;
+	const context = await openPanel(browser, server, { path: "/page5" });
+	await sendPrompt(context.panel, "start a task");
+	await context.panel.waitFor(`document.body.innerText.includes("first reply")`);
+	await context.panel.waitFor(
+		`document.body.innerText.includes("first reply") && location.search.includes("session=")`,
+	);
+	await sendPrompt(context.panel, "second step");
+	const url = await (async () => {
+		await new Promise((r) => setTimeout(r, 500));
+		return context.panel.evaluate(`location.href`);
+	})();
+	assert.equal(server.requests.length, 2);
+
+	await context.panel.send("Page.navigate", { url });
+	await context.panel.waitFor(`document.body.innerText.includes("This task stopped when the panel closed")`);
+	release();
+	await context.panel.evaluate(
+		`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Resume").click()`,
+	);
+	await context.panel.waitFor(`document.body.innerText.includes("picked up where it stopped")`);
+	assert.ok(!(await pageText(context.panel)).includes("This task stopped"));
+
+	await context.panel.send("Page.reload");
+	await context.panel.waitFor(`document.body.innerText.includes("picked up where it stopped")`);
+	assert.ok(!(await pageText(context.panel)).includes("This task stopped"), "a finished run must not ask again");
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a finished chat does not offer to resume", async () => {
+	turns = () => ({ text: "all done" });
+	const context = await openPanel(browser, server, { path: "/page6" });
+	await sendPrompt(context.panel, "quick one");
+	await context.panel.waitFor(`document.body.innerText.includes("all done") && location.search.includes("session=")`);
+	await new Promise((r) => setTimeout(r, 300));
+	await context.panel.send("Page.reload");
+	await context.panel.waitFor(`document.body.innerText.includes("all done")`);
+	assert.ok(!(await pageText(context.panel)).includes("This task stopped"));
 	await context.panel.close();
 	await context.tab.close();
 });

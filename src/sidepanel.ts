@@ -25,6 +25,7 @@ import type { Compaction } from "./agent/context.js";
 import { SUMMARY_SYSTEM_PROMPT } from "./agent/context.js";
 import { ContextManager } from "./agent/context-manager.js";
 import { backoffMs, classifyFailure, MAX_RETRIES } from "./agent/recovery.js";
+import { answerOpenToolCalls, clearInterrupted, RunTracker, wasInterrupted } from "./agent/run-tracker.js";
 import { isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
@@ -141,6 +142,11 @@ const recordedCostMessages = new Set<AgentMessage>();
 
 // Builds each turn's view of the chat; holds the summary of older turns once there is one.
 let contextManager: ContextManager | undefined;
+
+// Knows when a run in this panel is going, so the next panel can tell it died.
+const runTracker = new RunTracker();
+// This chat's last run ended with the panel; the user can resume it.
+let interruptedRun = false;
 
 // Automatic recovery of a failed turn: attempts so far in this run, and the pending retry.
 let retryAttempts = 0;
@@ -621,6 +627,24 @@ async function recoverFailedTurn(): Promise<void> {
 	}, delay);
 }
 
+function dismissInterruptedRun(): void {
+	interruptedRun = false;
+	if (currentSessionId) clearInterrupted(currentSessionId).catch(() => undefined);
+	renderApp();
+}
+
+/** Pick up a run that ended with the panel, from the last thing that was saved. */
+async function resumeInterruptedRun(): Promise<void> {
+	dismissInterruptedRun();
+	const messages = answerOpenToolCalls(agent.state.messages);
+	agent.replaceMessages(messages);
+	chatPanel.agentInterface?.requestUpdate();
+	if (messages.at(-1)?.role === "assistant") return;
+	retryAttempts = 0;
+	overflowRecovered = false;
+	await agent.continue();
+}
+
 let rememberedModel: string | undefined;
 
 /** Keep the model for the next new chat; written only when it changed. */
@@ -745,6 +769,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			if (event.type === "message_update" || event.type === "tool_execution_update") return;
 
 			rememberModel(agent.state.model);
+			if (currentSessionId && agent.state.isStreaming) runTracker.start(currentSessionId);
 
 			if (
 				event.type === "message_end" &&
@@ -781,6 +806,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			}
 
 			if (event.type === "agent_end") {
+				runTracker.stop();
 				recoverFailedTurn().catch((err) => console.error("Recovery failed:", err));
 			}
 
@@ -829,6 +855,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			cancelRetry();
 			retryAttempts = 0;
 			overflowRecovered = false;
+			if (interruptedRun) dismissInterruptedRun();
 
 			// The session's current tab (nothing if the session has no tab yet)
 			const tab = await browserSession?.currentTab();
@@ -1099,6 +1126,19 @@ const renderApp = () => {
 				></overflow-menu>
 			</div>
 
+			${
+				interruptedRun
+					? html`<div
+							class="flex items-center gap-2 px-3 py-2 border-b border-border text-sm text-foreground shrink-0"
+							role="status"
+						>
+							<span class="flex-1 min-w-0">This task stopped when the panel closed.</span>
+							${Button({ variant: "default", size: "sm", children: "Resume", onClick: () => void resumeInterruptedRun() })}
+							${Button({ variant: "ghost", size: "sm", children: "Dismiss", onClick: dismissInterruptedRun })}
+						</div>`
+					: ""
+			}
+
 			<!-- Chat Panel -->
 			${chatPanel}
 		</div>
@@ -1333,6 +1373,7 @@ async function initApp() {
 				compaction ?? undefined,
 			);
 
+			interruptedRun = await wasInterrupted(sessionIdFromUrl);
 			renderApp();
 			return;
 		} else {

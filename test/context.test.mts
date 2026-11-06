@@ -8,6 +8,7 @@ import type { AssistantMessage, Model } from "@mariozechner/pi-ai";
 import { ContextManager } from "../src/agent/context-manager.ts";
 import { applyCompaction, findCut, pruneContext, transcript } from "../src/agent/context.ts";
 import { backoffMs, classifyFailure } from "../src/agent/recovery.ts";
+import { answerOpenToolCalls } from "../src/agent/run-tracker.ts";
 
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
@@ -182,4 +183,13 @@ test("backoff grows and honours a retry hint", () => {
 	assert.equal(backoffMs(2, "", none), 4000);
 	assert.equal(backoffMs(3, "429 retry-after: 20", none), 20000);
 	assert.equal(backoffMs(10, "", none), 30000);
+});
+
+test("open tool calls get a result so the chat can continue", () => {
+	const messages: AgentMessage[] = [{ role: "user", content: "go", timestamp: 0 }, call(1), shot(1), call(2)];
+	const repaired = answerOpenToolCalls(messages);
+	assert.equal(repaired.length, 5);
+	const added = repaired[4];
+	assert.ok(added.role === "toolResult" && added.toolCallId === "c2" && added.isError);
+	assert.equal(answerOpenToolCalls(repaired), repaired);
 });
