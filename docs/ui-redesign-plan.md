@@ -31,8 +31,9 @@ This replaces the gray tokens and the system font below; the rest of the plan st
   the chat exists.
 - Composer: 94 px tall, `+` on the left, the model and a filled round send button on the right.
   A row above it names the tab the agent works on and keeps its height when empty.
-- Empty chat: the mark and caption stay alone in the center. Suggestions are one row on the
-  composer, left-aligned with it, sliding sideways, so nothing moves when they arrive.
+- Empty chat: the mark and caption stay alone in the center. A plain page shows no suggestions.
+  Site-specific ones are one row on the composer, left-aligned with it, sliding sideways, so
+  nothing moves when they arrive.
 
 `scripts/e2e/panel-layout.e2e.mjs` enforces the layout: first frame against final geometry, zero
 layout shift at 360, 400 and 516 px, chat-only scrolling, the bundled font, and the spacing scale

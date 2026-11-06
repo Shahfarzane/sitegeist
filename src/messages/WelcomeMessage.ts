@@ -93,7 +93,9 @@ export class WelcomeMessageElement extends LitElement {
 											</button>
 										</div>
 									`
-								: html`
+								: this.tutorials.length === 0
+									? ""
+									: html`
 										<div
 											class="welcome-suggestions flex gap-2 px-4 pb-2 overflow-x-auto"
 											@wheel=${(e: WheelEvent) => {

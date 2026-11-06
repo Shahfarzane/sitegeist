@@ -166,9 +166,18 @@ export class Browser {
 		];
 		// A profile used before still holds the last run's port.
 		rmSync(join(profile, "DevToolsActivePort"), { force: true });
+		// The native host inherits this: tests must never see the real CLI logins or settings.
+		const cliHome = join(profile, "cli-home");
+		mkdirSync(cliHome, { recursive: true });
 		const proc = spawn(findChrome(), args, {
 			stdio: "ignore",
-			env: { ...process.env, ...env, ...(socketDir ? { SITEGEIST_SOCKET_DIR: socketDir } : {}) },
+			env: {
+				...process.env,
+				CLAUDE_CONFIG_DIR: cliHome,
+				CODEX_HOME: cliHome,
+				...env,
+				...(socketDir ? { SITEGEIST_SOCKET_DIR: socketDir } : {}),
+			},
 		});
 		const portFile = join(profile, "DevToolsActivePort");
 		const deadline = Date.now() + 20000;

@@ -1,4 +1,4 @@
-/** What to offer on the welcome screen for the page the panel opened on. */
+/** What to offer on the welcome screen for the page the panel opened on: nothing on a plain page. */
 
 import type { TutorialPrompt } from "./WelcomeMessage.js";
 
@@ -83,9 +83,5 @@ export function suggestionsFor(url: string | undefined, skillNames: string[] = [
 		label: `Use ${name}`,
 		prompt: `Use the ${name} skill. What can you do for me on this page?`,
 	}));
-	return [
-		...(site?.suggestions ?? []),
-		...fromSkills,
-		{ label: "Summarize this page", prompt: "Summarize this page." },
-	].slice(0, 4);
+	return [...(site?.suggestions ?? []), ...fromSkills].slice(0, 4);
 }

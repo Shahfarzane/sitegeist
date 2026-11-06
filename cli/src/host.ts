@@ -18,6 +18,7 @@ import type {
 	ClientToHost,
 	ExtConnectorRequest,
 	ExtCredentialsRequest,
+	ExtHarnessModelsRequest,
 	ExtOnePasswordRequest,
 	ExtToHost,
 	HostCredentialsResponse,
@@ -26,6 +27,7 @@ import type {
 } from "../../src/bridge/protocol.ts";
 import {
 	CAPABILITY_CONNECTORS,
+	CAPABILITY_HARNESS_MODELS,
 	CAPABILITY_ONEPASSWORD,
 	HOST_CAPABILITIES_PROVIDER,
 	MAX_FRAME_FROM_EXTENSION,
@@ -33,6 +35,7 @@ import {
 } from "../../src/bridge/protocol.ts";
 import { readConnectors, type RunningConnector, runConnector } from "./connectors.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
+import { harnessModels } from "./harness-models.ts";
 import { readLogin, searchLogins } from "./onepassword.ts";
 import { socketDir, socketPath } from "./paths.ts";
 import { VERSION } from "./version.ts";
@@ -238,7 +241,16 @@ export function runNativeHost(): void {
 			return;
 		}
 		for (const m of messages) {
-			const message = m as ExtToHost | ExtCredentialsRequest | ExtConnectorRequest | ExtOnePasswordRequest;
+			const message = m as
+				| ExtToHost
+				| ExtCredentialsRequest
+				| ExtConnectorRequest
+				| ExtOnePasswordRequest
+				| ExtHarnessModelsRequest;
+			if (message.type === "harness_models") {
+				process.stdout.write(encodeFrame(harnessModels()));
+				continue;
+			}
 			if (message.type === "op_search" || message.type === "op_read") {
 				const answer =
 					message.type === "op_search" ? searchLogins(message.url) : readLogin(message.id, message.url);
@@ -264,7 +276,7 @@ export function runNativeHost(): void {
 				continue;
 			}
 			if (message.type === "credentials" && message.provider === HOST_CAPABILITIES_PROVIDER) {
-				const capabilities = [CAPABILITY_CONNECTORS, CAPABILITY_ONEPASSWORD];
+				const capabilities = [CAPABILITY_CONNECTORS, CAPABILITY_ONEPASSWORD, CAPABILITY_HARNESS_MODELS];
 				process.stdout.write(encodeFrame({ type: "credentials", capabilities } satisfies HostCredentialsResponse));
 				continue;
 			}

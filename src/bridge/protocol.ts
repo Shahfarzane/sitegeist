@@ -163,6 +163,15 @@ export interface HostCredentialsResponse {
 export const HOST_CAPABILITIES_PROVIDER = "host-capabilities";
 export const CAPABILITY_CONNECTORS = "connectors";
 export const CAPABILITY_ONEPASSWORD = "1password";
+export const CAPABILITY_HARNESS_MODELS = "harness-models";
+
+/** Asks the host what model each coding CLI is set to. */
+export interface ExtHarnessModelsRequest {
+	type: "harness_models";
+}
+
+/** By the provider each CLI logs in to; a CLI with no setting has no entry. */
+export type HarnessModels = Partial<Record<CliLoginProvider, string>>;
 
 /** 1Password through the host. */
 export interface LoginChoice {

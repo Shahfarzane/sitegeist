@@ -51,7 +51,8 @@
 - A row above the composer shows the tab the agent is working on, following it as the agent moves between tabs.
 - Padding and gaps follow a 4 px scale everywhere in the panel, and your messages sit on the right.
 - Spaces around hyphens and dashes keep their width in Public Sans, where kerning had closed " - " up to almost "-".
-- The empty chat keeps the mark alone in the center; suggestions are one row on the composer that slides sideways.
+- The empty chat keeps the mark and caption alone in the center. The canned suggestions are gone; only ones tied to the site, like "Review this PR" or a skill for it, appear, in one row on the composer.
+- New chats open on the model Claude Code or Codex is set to (`opus` means the newest Opus), until you pick one in the panel. This needs a CLI from this release; older ones keep the previous default.
 - Token and cost numbers no longer appear under each reply on hover. The running total stays under the composer and in Settings > Costs.
 - `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.

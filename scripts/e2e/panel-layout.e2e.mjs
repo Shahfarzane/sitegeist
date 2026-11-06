@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { Browser, composerReady, openPanel, seedChat, sendPrompt, startFakeServer } from "./lib.mjs";
+import { Browser, composerReady, idbPutSource, openPanel, seedChat, sendPrompt, startFakeServer } from "./lib.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -146,9 +146,18 @@ test("a long model name truncates instead of pushing the send button out", async
 	assert.equal(await panel.evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
 });
 
-test("suggestions sit in one row on the composer, away from the centered mark", async () => {
+test("a plain page shows no suggestions, a site with skills gets one row on the composer", async () => {
 	await load(400);
 	const { panel } = context;
+	assert.equal(await panel.evaluate(`document.querySelectorAll(".tutorial-pill").length`), 0);
+	await panel.evaluate(`${idbPutSource}
+		(async () => {
+			for (const name of ["layout-one", "layout-two"]) {
+				await window.__idbPut("skills", name, { name, domainPatterns: ["127.0.0.1"], shortDescription: "Fixture",
+					description: "Fixture", createdAt: "2026-01-01", lastUpdated: "2026-01-01", examples: "", library: "" });
+			}
+		})()`);
+	await load(400);
 	const layout = await panel.evaluate(`(() => {
 		const pills = [...document.querySelectorAll(".tutorial-pill")].map((p) => p.getBoundingClientRect());
 		const composer = document.querySelector("message-editor").firstElementChild.getBoundingClientRect();
@@ -163,7 +172,7 @@ test("suggestions sit in one row on the composer, away from the centered mark", 
 			count: pills.length,
 		};
 	})()`);
-	assert.ok(layout.count > 3);
+	assert.equal(layout.count, 2);
 	assert.equal(layout.tops, 1, "one row");
 	assert.equal(layout.left, 0, "left-aligned with the composer");
 	assert.equal(layout.gap, 8);

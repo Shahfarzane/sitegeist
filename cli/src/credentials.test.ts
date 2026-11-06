@@ -198,7 +198,13 @@ test("codex: missing login and API-key login are reported", async () => {
 	assert.match((await cliCredentials("openai-codex")).error ?? "", /API key/);
 });
 
+test("claude code: a custom config dir does not borrow the default keychain entry", async () => {
+	const keychain = async () => JSON.stringify({ claudeAiOauth: { accessToken: "sk-ant-oat01-other", expiresAt: Date.now() + HOUR * 1000 } });
+	assert.match((await cliCredentials("anthropic", { keychain })).error ?? "", /not logged in/);
+});
+
 test("claude code: the keychain entry is read and never refreshed", async () => {
+	delete process.env.CLAUDE_CONFIG_DIR;
 	const expiresAt = Date.now() + 4 * HOUR * 1000;
 	const keychain = async (service: string) =>
 		service === "Claude Code-credentials"

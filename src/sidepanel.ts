@@ -65,9 +65,10 @@ import {
 import { suggestionsFor } from "./messages/suggestions.js";
 import { registerUserMessageRenderer } from "./messages/UserMessageRenderer.js";
 import { createWelcomeMessage, registerWelcomeRenderer } from "./messages/WelcomeMessage.js";
+import { harnessModels, resolveHarnessModel } from "./models/harness-default.js";
 import { applyCachedModels, refreshDiscoveredModels } from "./models/registry.js";
 import { notifyFromPanel, notifySettings, setNotifyEnabled } from "./notify/notifications.js";
-import { borrowCliLogin, borrowCliLogins } from "./oauth/cli-login.js";
+import { borrowCliLogin, borrowCliLogins, isCliLoginOff, isCliLoginProvider } from "./oauth/cli-login.js";
 import { resolveApiKey } from "./oauth/index.js";
 import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
@@ -92,7 +93,6 @@ import * as port from "./utils/port.js";
 import { watchSystemTheme } from "./utils/theme.js";
 import "./utils/i18n-extension.js";
 import "./utils/live-reload.js";
-import { tutorials } from "./tutorials.js";
 
 // Register custom message renderers
 registerNavigationRenderer();
@@ -417,6 +417,32 @@ async function stillOffered(saved: Model<any>): Promise<Model<any>> {
 	if (!(await applyCachedModels(storage, saved.provider))) return saved;
 	if (getModels(saved.provider as any).some((m) => m.id === saved.id)) return saved;
 	return defaultModelFor([saved.provider]) ?? saved;
+}
+
+/**
+ * New chats open on the model the user's coding CLI is set to, until they pick one here. Runs
+ * after the first render, since the host can take seconds to answer. rememberModel means the
+ * next panel opens on it straight away.
+ */
+async function followHarnessModel(): Promise<void> {
+	if (await storage.settings.get<boolean>("modelPicked")) return;
+	// Another provider's model was someone's choice, made before picks were recorded.
+	const saved = await storage.settings.get<Model<any>>("lastUsedModel");
+	if (saved && !isCliLoginProvider(saved.provider)) return;
+	const settings = await harnessModels();
+	if (Object.values(settings).every((setting) => !setting)) return;
+	await refreshDiscoveredModels(storage, { wait: true, timeoutMs: 4000 }).catch(() => {});
+	for (const provider of await getProvidersWithKeys()) {
+		if (!isCliLoginProvider(provider) || (await isCliLoginOff(provider))) continue;
+		const setting = settings[provider];
+		const model = setting ? resolveHarnessModel(setting, getModels(provider as any)) : undefined;
+		if (!model) continue;
+		if (!agent || agent.state.isStreaming || agent.state.messages.some(isUserMessage)) return;
+		agent.setModel(model);
+		rememberModel(model);
+		chatPanel.agentInterface?.requestUpdate();
+		return;
+	}
 }
 
 async function selectDefaultModelForAvailableProvider() {
@@ -1013,6 +1039,8 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				agent.state.model,
 				(model) => {
 					agent.setModel(model);
+					rememberModel(model);
+					void storage.settings.set("modelPicked", true);
 					chatPanel.agentInterface?.requestUpdate();
 					renderApp();
 				},
@@ -1135,6 +1163,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				await openSettings("Providers");
 				await refreshDiscoveredModels(storage, { wait: true }).catch(() => {});
 				await selectDefaultModelForAvailableProvider();
+				await followHarnessModel().catch((err) => console.warn("Reading the CLI's model failed:", err));
 				renderApp();
 			},
 		});
@@ -1614,10 +1643,11 @@ async function initApp() {
 		const page = await browserSession?.currentTab().catch(() => undefined);
 		const pageSkills = page?.url ? await storage.skills.list(page.url) : [];
 		const siteSkills = pageSkills.filter((s) => !s.domainPatterns.includes(ANY_SITE)).map((s) => s.name);
-		const welcomeMessage = createWelcomeMessage([...suggestionsFor(page?.url, siteSkills), ...tutorials]);
+		const welcomeMessage = createWelcomeMessage(suggestionsFor(page?.url, siteSkills));
 		agent.appendMessage(welcomeMessage);
 		// appendMessage emits no agent event, so the message list would keep the old array.
 		chatPanel.agentInterface?.requestUpdate();
+		void followHarnessModel().catch((err) => console.warn("Reading the CLI's model failed:", err));
 	}
 
 	renderApp();
