@@ -223,7 +223,7 @@ test("claude code: falls back to .credentials.json without a keychain entry", as
 test("host: a credentials frame is answered without opening the bridge socket", async () => {
 	writeAuth(now() + 48 * HOUR);
 	const index = join(dirname(fileURLToPath(import.meta.url)), "index.ts");
-	const child = spawn(process.execPath, ["--experimental-transform-types", "--no-warnings", index, "host"], { env: { ...process.env, CODEX_HOME: home } });
+	const child = spawn(process.execPath, ["--import", "tsx", "--no-warnings", index, "host"], { env: { ...process.env, CODEX_HOME: home } });
 	const parser = new FrameParser(1024 * 1024);
 	const reply = new Promise<HostCredentialsResponse>((resolve) => {
 		child.stdout.on("data", (chunk: Buffer) => {
