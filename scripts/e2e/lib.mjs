@@ -311,7 +311,11 @@ export async function startFakeServer({ script, routes = {} } = {}) {
 		origin: `http://127.0.0.1:${port}`,
 		baseUrl: `http://127.0.0.1:${port}/v1`,
 		requests,
-		close: () => new Promise((r) => server.close(r)),
+		close: () =>
+			new Promise((r) => {
+				server.close(r);
+				server.closeAllConnections();
+			}),
 	};
 }
 
@@ -337,3 +341,86 @@ export async function sendPrompt(page, text) {
 	});
 	await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
 }
+
+/** A tab on the fake server with a side panel document bound to it, on a seeded profile. */
+export async function openPanel(browser, server, { path = "/page", model, init, query = "" } = {}) {
+	const worker = await browser.worker();
+	const tab = await browser.open(`${server.origin}${path}`);
+	await tab.waitFor(`document.readyState !== "loading"`);
+	const tabId = await worker.evaluate(
+		`chrome.tabs.query({}).then((ts) => ts.find((t) => (t.url || "").endsWith(${JSON.stringify(path)})).id)`,
+	);
+	const url = `chrome-extension://${EXTENSION_ID}/sidepanel.html?tabId=${tabId}`;
+	const panel = await browser.open(url, { init });
+	await composerReady(panel);
+	const seeded = await seedProvider(panel, server.baseUrl, model);
+	await panel.send("Page.navigate", { url: `${url}${query}` });
+	await composerReady(panel);
+	return { panel, tab, worker, tabId, url, model: seeded };
+}
+
+/** Store a chat directly, then open it in `panel`. */
+export async function seedChat(context, id, messages, title = "seeded") {
+	const { panel, url, model } = context;
+	const usage = {
+		input: 0,
+		output: 0,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 0,
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+	};
+	const now = new Date().toISOString();
+	await panel.evaluate(`${idbPutSource}
+		(async () => {
+			const id = ${JSON.stringify(id)};
+			await window.__idbPut("sessions", id, { id, title: ${JSON.stringify(title)}, model: ${JSON.stringify(model)},
+				thinkingLevel: "off", messages: ${JSON.stringify(messages)}, createdAt: ${JSON.stringify(now)}, lastModified: ${JSON.stringify(now)} });
+			await window.__idbPut("sessions-metadata", id, { id, title: ${JSON.stringify(title)}, createdAt: ${JSON.stringify(now)},
+				lastModified: ${JSON.stringify(now)}, messageCount: ${messages.length}, usage: ${JSON.stringify(usage)},
+				modelId: ${JSON.stringify(model.id)}, thinkingLevel: "off", preview: "" });
+		})()`);
+	await panel.send("Page.navigate", { url: `${url}&session=${id}` });
+	await composerReady(panel);
+}
+
+export const zeroUsage = {
+	input: 0,
+	output: 0,
+	cacheRead: 0,
+	cacheWrite: 0,
+	totalTokens: 0,
+	cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+export function assistantToolCall(i, name = "extract_image") {
+	return {
+		role: "assistant",
+		content: [{ type: "toolCall", id: `c${i}`, name, arguments: {} }],
+		api: "openai-completions",
+		provider: "fake",
+		model: "fake-model",
+		usage: zeroUsage,
+		stopReason: "toolUse",
+		timestamp: 2,
+	};
+}
+
+export function toolResult(i, content, name = "extract_image") {
+	return { role: "toolResult", toolCallId: `c${i}`, toolName: name, isError: false, content, timestamp: 3 };
+}
+
+export function assistantText(text) {
+	return {
+		role: "assistant",
+		content: [{ type: "text", text }],
+		api: "openai-completions",
+		provider: "fake",
+		model: "fake-model",
+		usage: zeroUsage,
+		stopReason: "stop",
+		timestamp: 4,
+	};
+}
+
+export const pageText = (page) => page.evaluate(`document.body.innerText`);

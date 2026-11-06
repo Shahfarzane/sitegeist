@@ -8,7 +8,7 @@ import {
 	type AgentState,
 	type AgentTool,
 } from "@mariozechner/pi-agent-core";
-import { getModel, getModels, type Model } from "@mariozechner/pi-ai";
+import { getModel, getModels, type Model, type TextContent } from "@mariozechner/pi-ai";
 import {
 	ChatPanel,
 	createExtractDocumentTool,
@@ -21,6 +21,10 @@ import {
 } from "@mariozechner/pi-web-ui";
 import { html, render } from "lit";
 import { Circle, Download, History, Link, Plus, Settings, Square } from "lucide";
+import type { Compaction } from "./agent/context.js";
+import { SUMMARY_SYSTEM_PROMPT } from "./agent/context.js";
+import { ContextManager } from "./agent/context-manager.js";
+import { backoffMs, classifyFailure, MAX_RETRIES } from "./agent/recovery.js";
 import { isRestrictedUrl } from "./browser/cdp.js";
 import { setCurrentBrowserSession } from "./browser/current.js";
 import { dispatchToSandbox, setCdpMessageHandler } from "./browser/inject.js";
@@ -134,6 +138,14 @@ const shownSkills = new Map<string, string>();
 // Track which messages we've already recorded costs for (avoid duplicates)
 // Use Set with message object identity (not cleared on session switch - persists in memory)
 const recordedCostMessages = new Set<AgentMessage>();
+
+// Builds each turn's view of the chat; holds the summary of older turns once there is one.
+let contextManager: ContextManager | undefined;
+
+// Automatic recovery of a failed turn: attempts so far in this run, and the pending retry.
+let retryAttempts = 0;
+let overflowRecovered = false;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
 // Interaction recorder (record → save as site-scoped skill)
 let recorder: Recorder | undefined;
@@ -557,6 +569,58 @@ function uncappedStreamFn<F extends (model: Model<any>, ...rest: any[]) => any>(
 	}) as F;
 }
 
+const compactionKey = (sessionId: string) => `compaction.${sessionId}`;
+
+function saveCompaction(compaction: Compaction | undefined): void {
+	if (!compaction || !currentSessionId) return;
+	storage.settings.set(compactionKey(currentSessionId), compaction).catch((err) => {
+		console.error("Failed to save the chat summary:", err);
+	});
+}
+
+/** Stop a retry that is waiting; the user took over. */
+function cancelRetry(): void {
+	if (retryTimer) clearTimeout(retryTimer);
+	retryTimer = undefined;
+}
+
+/**
+ * A failed turn that can pass on its own (rate limit, overloaded server, dropped connection) is
+ * retried with backoff, and a chat that outgrew the context window is summarized and continued.
+ * The failed message leaves the chat, so the model never sees it and `continue` is valid.
+ */
+async function recoverFailedTurn(): Promise<void> {
+	const last = agent.state.messages.at(-1);
+	if (last?.role !== "assistant") return;
+	const failure = classifyFailure(last, agent.state.model.contextWindow);
+	if (!failure) return;
+
+	const withoutFailed = agent.state.messages.slice(0, -1);
+	if (failure === "overflow") {
+		if (overflowRecovered) return;
+		overflowRecovered = true;
+		Toast.show("Summarizing older messages to stay within the context window");
+		const compacted = await contextManager?.compact(withoutFailed).catch((err) => {
+			console.warn("[Context] summary failed:", err);
+			return false;
+		});
+		if (!compacted) return;
+		agent.replaceMessages(withoutFailed);
+		await agent.continue();
+		return;
+	}
+
+	if (retryAttempts >= MAX_RETRIES) return;
+	retryAttempts++;
+	const delay = backoffMs(retryAttempts, last.errorMessage);
+	Toast.show(`Provider error, retrying in ${Math.round(delay / 1000)} s (${retryAttempts} of ${MAX_RETRIES})`);
+	retryTimer = setTimeout(() => {
+		retryTimer = undefined;
+		agent.replaceMessages(withoutFailed);
+		agent.continue().catch((err) => console.error("Retry failed:", err));
+	}, delay);
+}
+
 let rememberedModel: string | undefined;
 
 /** Keep the model for the next new chat; written only when it changed. */
@@ -567,10 +631,11 @@ function rememberModel(model: Model<any>): void {
 	storage.settings.set("lastUsedModel", model).catch((err) => console.error("Failed to save lastUsedModel:", err));
 }
 
-const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true) => {
+const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true, compaction?: Compaction) => {
 	if (agentUnsubscribe) {
 		agentUnsubscribe();
 	}
+	cancelRetry();
 
 	// Mark all loaded messages as already recorded (by object identity)
 	for (const msg of initialState?.messages || []) {
@@ -612,6 +677,49 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		defaultModel = getModel("anthropic", "claude-sonnet-4-6");
 	}
 
+	const streamFn = uncappedStreamFn(
+		createStreamFn(async () => {
+			const enabled = await storage.settings.get<boolean>("proxy.enabled");
+			if (!enabled) return undefined;
+			return (await storage.settings.get<string>("proxy.url")) || undefined;
+		}),
+	);
+	const getApiKey = async (provider: string) => {
+		const stored = await storage.providerKeys.get(provider);
+		if (!stored) return undefined;
+		const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
+		const proxyUrl = proxyEnabled ? (await storage.settings.get<string>("proxy.url")) || undefined : undefined;
+		return resolveApiKey(stored, provider, storage.providerKeys, proxyUrl);
+	};
+
+	contextManager = new ContextManager(
+		{
+			model: () => agent.state.model,
+			summarize: async (prompt, signal) => {
+				const model = agent.state.model;
+				const stream = await streamFn(
+					model,
+					{
+						systemPrompt: SUMMARY_SYSTEM_PROMPT,
+						messages: [{ role: "user", content: prompt, timestamp: Date.now() }],
+					},
+					{ apiKey: await getApiKey(model.provider), signal, maxTokens: 4000 },
+				);
+				const reply = await stream.result();
+				if (reply.stopReason === "error") throw new Error(reply.errorMessage ?? "Summary failed");
+				return reply.content
+					.filter((c): c is TextContent => c.type === "text")
+					.map((c) => c.text)
+					.join("\n");
+			},
+			onCompaction: (next) => {
+				saveCompaction(next);
+				Toast.show("Older messages summarized to stay within the context window");
+			},
+		},
+		compaction,
+	);
+
 	agent = new Agent({
 		initialState: initialState || {
 			systemPrompt: SYSTEM_PROMPT,
@@ -621,21 +729,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 			tools: [],
 		},
 		convertToLlm: browserMessageTransformer,
+		transformContext: (messages, signal) => contextManager?.prepare(messages, signal) ?? Promise.resolve(messages),
 		toolExecution: "sequential",
-		streamFn: uncappedStreamFn(
-			createStreamFn(async () => {
-				const enabled = await storage.settings.get<boolean>("proxy.enabled");
-				if (!enabled) return undefined;
-				return (await storage.settings.get<string>("proxy.url")) || undefined;
-			}),
-		),
-		getApiKey: async (provider: string) => {
-			const stored = await storage.providerKeys.get(provider);
-			if (!stored) return undefined;
-			const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
-			const proxyUrl = proxyEnabled ? (await storage.settings.get<string>("proxy.url")) || undefined : undefined;
-			return resolveApiKey(stored, provider, storage.providerKeys, proxyUrl);
-		},
+		streamFn,
+		getApiKey,
 	});
 
 	if (shouldSave) {
@@ -683,6 +780,10 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				saveSession();
 			}
 
+			if (event.type === "agent_end") {
+				recoverFailedTurn().catch((err) => console.error("Recovery failed:", err));
+			}
+
 			renderApp();
 		});
 	}
@@ -725,6 +826,9 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 		onBeforeSend: async () => {
 			if (!agent) return;
 			browserSession?.userAskedAgain();
+			cancelRetry();
+			retryAttempts = 0;
+			overflowRecovered = false;
 
 			// The session's current tab (nothing if the session has no tab yet)
 			const tab = await browserSession?.currentTab();
@@ -1032,6 +1136,7 @@ window.addEventListener(
 	(e) => {
 		// Escape key to abort streaming - works globally in sidepanel
 		// Use capturing phase to intercept before MessageEditor handles it
+		if (e.key === "Escape" && retryTimer) cancelRetry();
 		if (e.key === "Escape" && agent?.state.isStreaming && !document.querySelector("overflow-menu[open]")) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -1215,13 +1320,18 @@ async function initApp() {
 			const metadata = await storage.sessions.getMetadata(sessionIdFromUrl);
 			currentTitle = metadata?.title || "";
 
-			await createAgent({
-				systemPrompt: SYSTEM_PROMPT,
-				model: sessionData.model,
-				thinkingLevel: sessionData.thinkingLevel,
-				messages: sessionData.messages,
-				tools: [],
-			});
+			const compaction = await storage.settings.get<Compaction>(compactionKey(sessionIdFromUrl));
+			await createAgent(
+				{
+					systemPrompt: SYSTEM_PROMPT,
+					model: sessionData.model,
+					thinkingLevel: sessionData.thinkingLevel,
+					messages: sessionData.messages,
+					tools: [],
+				},
+				true,
+				compaction ?? undefined,
+			);
 
 			renderApp();
 			return;
