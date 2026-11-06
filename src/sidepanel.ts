@@ -46,6 +46,7 @@ import { BridgeTab } from "./dialogs/BridgeTab.js";
 import { CostsTab } from "./dialogs/CostsTab.js";
 import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
 import { NotificationsTab } from "./dialogs/NotificationsTab.js";
+import { PromptsTab } from "./dialogs/PromptsTab.js";
 import { RecordSkillDialog } from "./dialogs/RecordSkillDialog.js";
 import { SessionCostDialog } from "./dialogs/SessionCostDialog.js";
 import { SitegeistSessionListDialog } from "./dialogs/SessionListDialog.js";
@@ -67,6 +68,7 @@ import { SYSTEM_PROMPT } from "./prompts/prompts.js";
 import { Recorder } from "./recording/recorder.js";
 import { SitegeistAppStorage } from "./storage/app-storage.js";
 import { CoalescedTask } from "./storage/coalesced-task.js";
+import { ANY_SITE } from "./storage/skill-match.js";
 import { DebuggerTool } from "./tools/debugger.js";
 import { createConsoleTool, createNetworkTool } from "./tools/devtools.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
@@ -255,8 +257,8 @@ async function shareActiveTab(): Promise<void> {
 }
 
 /**
- * Slash-command provider for the chat input: lists skills (recordings included),
- * site-scoped first, and inserts an @skill:<id> reference the agent retrieves.
+ * Slash-command provider for the chat input: saved prompts, inserted as text, then skills
+ * (recordings included), site-scoped first, as an @skill:<id> reference the agent retrieves.
  */
 function buildSkillSlashProvider() {
 	return async (query: string) => {
@@ -276,13 +278,29 @@ function buildSkillSlashProvider() {
 					(s) => s.name.toLowerCase().includes(q) || (s.shortDescription || "").toLowerCase().includes(q),
 				)
 			: ordered;
-		return filtered.slice(0, 20).map((s) => ({
-			id: s.name,
-			title: s.name,
-			description: s.shortDescription,
-			hint: onSiteNames.has(s.name) ? "this site" : s.domainPatterns[0],
-			value: `@skill:${s.name}`,
-		}));
+		const prompts = (await storage.prompts.list()).filter(
+			(p) => !q || p.name.toLowerCase().includes(q) || p.text.toLowerCase().includes(q),
+		);
+		return [
+			...prompts.map((p) => ({
+				id: `prompt:${p.name}`,
+				title: p.name,
+				description: p.text,
+				hint: "prompt",
+				value: p.text,
+			})),
+			...filtered.slice(0, 20).map((s) => ({
+				id: s.name,
+				title: s.name,
+				description: s.shortDescription,
+				hint: onSiteNames.has(s.name)
+					? "this site"
+					: s.domainPatterns[0] === ANY_SITE
+						? "any site"
+						: s.domainPatterns[0],
+				value: `@skill:${s.name}`,
+			})),
+		];
 	};
 }
 
@@ -424,6 +442,7 @@ function settingsSections(): SettingsSection[] {
 		{ label: "Providers", hint: "Subscriptions and API keys", tab: new ApiKeysOAuthTab() },
 		{ label: "Custom providers", hint: "OpenAI- or Anthropic-compatible endpoints", tab: new CustomProvidersTab() },
 		{ label: "Skills", hint: "Site scripts the agent can reuse", tab: new SkillsTab() },
+		{ label: "Prompts", hint: "Reusable prompts for the / menu", tab: new PromptsTab() },
 		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
 		{ label: "Notifications", hint: "When a task finishes or needs you", tab: new NotificationsTab() },
 		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },

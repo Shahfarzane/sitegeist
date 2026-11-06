@@ -1,5 +1,5 @@
 import { Store, type StoreConfig } from "@mariozechner/pi-web-ui";
-import { minimatch } from "minimatch";
+import { matchesAnyPattern } from "../skill-match.js";
 
 export interface Skill {
 	name: string;
@@ -71,38 +71,7 @@ export class SkillsStore extends Store {
 		return this.list(currentUrl);
 	}
 
-	/**
-	 * Check if URL matches any of the domain patterns using glob matching.
-	 */
 	matchesAnyPattern(url: string, patterns: string[]): boolean {
-		try {
-			const urlObj = new URL(url);
-			const hostname = urlObj.hostname;
-			const path = urlObj.pathname;
-
-			for (const pattern of patterns) {
-				const parts = pattern.split("/");
-				const domainPattern = parts[0];
-				const pathPattern = parts.length > 1 ? `/${parts.slice(1).join("/")}` : "";
-
-				const normalizedHostname = hostname.replace(/^www\./, "");
-				const normalizedPattern = domainPattern.replace(/^www\./, "");
-
-				const domainMatches = minimatch(normalizedHostname, normalizedPattern, {
-					nocase: true,
-				});
-
-				if (!pathPattern || pathPattern === "/") {
-					if (domainMatches) return true;
-				} else {
-					const pathMatches = minimatch(path, pathPattern, { nocase: true });
-					if (domainMatches && pathMatches) return true;
-				}
-			}
-
-			return false;
-		} catch {
-			return false;
-		}
+		return matchesAnyPattern(url, patterns);
 	}
 }

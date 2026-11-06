@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { Browser, openPanel, sendPrompt, startFakeServer } from "./lib.mjs";
+import { Browser, idbPutSource, openPanel, sendPrompt, startFakeServer } from "./lib.mjs";
 
 const page = `<!doctype html><title>Tool page</title><h1 id="h">Hello tools</h1><input id="i"><button onclick="document.title='clicked'">Go</button>
 <input id="f" type="file" onchange="this.files[0].text().then((t) => { document.title = this.files[0].name + ':' + t; })">`;
@@ -132,6 +132,46 @@ test("read_console and read_network show what the page does", async () => {
 	await context.panel.waitFor(`document.body.innerText.includes("debugged")`, { timeoutMs: 20000 });
 	assert.ok(toolOutput(3).includes("broken thing"), toolOutput(3).slice(0, 200));
 	assert.match(toolOutput(4), /GET 200 .*devtools/);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a saved prompt shows in the / menu and goes in as text", async () => {
+	server.requests.length = 0;
+	turns = () => ({ text: "prompt answered" });
+	const context = await openPanel(browser, server, { path: "/prompts" });
+	await context.panel.evaluate(`${idbPutSource}
+		window.__idbPut("prompts", "summarize-page", { name: "summarize-page", text: "Summarize this page in five bullets.", createdAt: "2026-01-01" })`);
+	await context.panel.evaluate(`(() => {
+		const ta = document.querySelector("message-editor textarea");
+		ta.focus();
+		ta.value = "/summ";
+		ta.selectionStart = ta.selectionEnd = 5;
+		ta.dispatchEvent(new Event("input", { bubbles: true }));
+	})()`);
+	await context.panel.waitFor(`document.body.innerText.includes("summarize-page")`);
+	await context.panel.send("Input.dispatchKeyEvent", {
+		type: "keyDown",
+		key: "Enter",
+		code: "Enter",
+		windowsVirtualKeyCode: 13,
+		text: "\\r",
+	});
+	await context.panel.send("Input.dispatchKeyEvent", {
+		type: "keyUp",
+		key: "Enter",
+		code: "Enter",
+		windowsVirtualKeyCode: 13,
+	});
+	await context.panel.waitFor(
+		`document.querySelector("message-editor textarea").value.startsWith("Summarize this page")`,
+	);
+	await sendPrompt(
+		context.panel,
+		await context.panel.evaluate(`document.querySelector("message-editor textarea").value`),
+	);
+	await context.panel.waitFor(`document.body.innerText.includes("prompt answered")`);
+	assert.ok(JSON.stringify(server.requests[0].messages).includes("Summarize this page in five bullets."));
 	await context.panel.close();
 	await context.tab.close();
 });

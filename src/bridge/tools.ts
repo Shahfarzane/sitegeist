@@ -49,6 +49,10 @@ import type { BrowserSession } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
 import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
 import type { GifOptions } from "../recording/gif-types.js";
+import { readStore } from "../storage/raw-store.js";
+import { ANY_SITE, matchesAnyPattern } from "../storage/skill-match.js";
+import type { SavedPrompt } from "../storage/stores/prompts-store.js";
+import type { Skill } from "../storage/stores/skills-store.js";
 import { getPermissionMode } from "./permissions.js";
 import { ERR, type RpcError } from "./protocol.js";
 
@@ -240,6 +244,14 @@ async function deliverTo(params: Params, tabId: number, files: PageFile[]) {
 	return deliverFiles(tabId, target(params), files, point);
 }
 
+/** Skills made for this page, so a harness knows the site has ready-made helpers. */
+async function skillsFor(url: string): Promise<Array<{ name: string; description: string }>> {
+	const skills = await readStore<Skill>("skills").catch(() => [] as Skill[]);
+	return skills
+		.filter((s) => !s.domainPatterns.includes(ANY_SITE) && matchesAnyPattern(url, s.domainPatterns))
+		.map((s) => ({ name: s.name, description: s.shortDescription }));
+}
+
 export const handlers: Record<string, Handler> = {
 	"tabs.context": async (ctx) => {
 		const tabs = await ctx.session.tabs();
@@ -290,7 +302,12 @@ export const handlers: Record<string, Handler> = {
 		// The first navigate of a session opens its tab straight on the URL (no blank tab).
 		const withRead = async (tabId: number, timedOut: boolean) => {
 			const summary = await tabSummary(tabId, timedOut);
-			return params.read ? { ...summary, page: await readPage(tabId, params.read) } : summary;
+			const skills = await skillsFor(summary.url);
+			return {
+				...summary,
+				...(skills.length > 0 ? { skills } : {}),
+				...(params.read ? { page: await readPage(tabId, params.read) } : {}),
+			};
 		};
 		if (!history && num(params, "tabId") === undefined && !(await ctx.session.currentTab())) {
 			const tab = await ctx.session.createTab(url);
@@ -544,8 +561,34 @@ export const handlers: Record<string, Handler> = {
 		return { filled: t };
 	},
 
+	"skills.list": async (_ctx, params) => {
+		const url = str(params, "url");
+		const skills = await readStore<Skill>("skills");
+		return {
+			skills: skills
+				.filter((s) => !url || matchesAnyPattern(url, s.domainPatterns))
+				.map((s) => ({ name: s.name, sites: s.domainPatterns, description: s.shortDescription })),
+		};
+	},
+
+	"skills.get": async (_ctx, params) => {
+		const name = requireStr(params, "name");
+		const skill = (await readStore<Skill>("skills")).find((s) => s.name === name);
+		if (!skill) throw new BridgeError(ERR.NOT_FOUND, `No skill named ${name}`);
+		const { library, ...rest } = skill;
+		return params.includeLibrary === true ? skill : { ...rest, hasLibrary: library.trim().length > 0 };
+	},
+
+	"prompts.list": async () => ({ prompts: await readStore<SavedPrompt>("prompts") }),
+
 	evaluate: async (ctx, params) => {
-		const code = requireStr(params, "code");
+		let code = requireStr(params, "code");
+		const skillName = str(params, "skill");
+		if (skillName) {
+			const skill = (await readStore<Skill>("skills")).find((s) => s.name === skillName);
+			if (!skill) throw new BridgeError(ERR.NOT_FOUND, `No skill named ${skillName}`);
+			code = `(async () => { ${skill.library}\n; return (${code}); })()`;
+		}
 		const world = str(params, "world") === "main" ? "main" : "user";
 		if (world === "main") {
 			const tabId = await resolveTab(ctx, params, true);

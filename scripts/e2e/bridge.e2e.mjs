@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, Harness, startFakeServer } from "./lib.mjs";
+import { Browser, bridgeReady, composerReady, EXTENSION_ID, Harness, idbPutSource, startFakeServer } from "./lib.mjs";
 
 let browser;
 let server;
@@ -238,4 +238,29 @@ test("two browsers: the harness lists them and switches", async () => {
 	} finally {
 		await second.close();
 	}
+});
+
+test("skills and prompts reach a harness", async () => {
+	const panel = await browser.open(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
+	await composerReady(panel);
+	await panel.evaluate(`${idbPutSource}
+		(async () => {
+			await window.__idbPut("skills", "fixture-skill", {
+				name: "fixture-skill", domainPatterns: ["127.0.0.1"], shortDescription: "Reads the fixture", description: "How to use it",
+				createdAt: "2026-01-01", lastUpdated: "2026-01-01", examples: "", library: "window.fixture = { hello: () => 'from the skill' };",
+			});
+			await window.__idbPut("prompts", "greet", { name: "greet", text: "Say hello", createdAt: "2026-01-01" });
+		})()`);
+	await panel.close();
+	const nav = await harness.callText("navigate", { url: `${server.origin}/form` });
+	assert.deepEqual(nav.skills, [{ name: "fixture-skill", description: "Reads the fixture" }]);
+	const listed = await harness.callText("skills_list", { url: `${server.origin}/form` });
+	assert.ok(listed.skills.some((s) => s.name === "fixture-skill"));
+	const skill = await harness.callText("skill_get", { name: "fixture-skill" });
+	assert.equal(skill.hasLibrary, true);
+	assert.equal(skill.library, undefined);
+	const ran = await harness.callText("run_js", { code: "window.fixture.hello()", skill: "fixture-skill" });
+	assert.equal(ran.value, "from the skill");
+	const prompts = await harness.callText("prompts_list", {});
+	assert.ok(prompts.prompts.some((p) => p.name === "greet"));
 });

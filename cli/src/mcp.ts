@@ -522,8 +522,13 @@ export async function runMcpServer(): Promise<void> {
 		"run_js",
 		{
 			description:
-				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals.",
-			inputSchema: { code: z.string(), tabId, world: z.enum(["user", "main"]).optional() },
+				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals. skill loads a skill's library first, so its helpers are there for your code.",
+			inputSchema: {
+				code: z.string(),
+				tabId,
+				world: z.enum(["user", "main"]).optional(),
+				skill: z.string().optional().describe("Name of a skill whose library to load first"),
+			},
 		},
 		(args) => call("evaluate", args),
 	);
@@ -601,6 +606,28 @@ export async function runMcpServer(): Promise<void> {
 			inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
 		},
 		(args) => call("upload.image", args),
+	);
+	server.registerTool(
+		"skills_list",
+		{
+			description:
+				"List the skills saved in the browser: ready-made instructions and helper code for sites, recorded workflows included. navigate tells you when a page has one. Give url to see what applies there.",
+			inputSchema: { url: z.string().optional() },
+		},
+		(args) => call("skills.list", args),
+	);
+	server.registerTool(
+		"skill_get",
+		{
+			description: "Read a skill: what it does, how to use it, examples. Run its helpers with run_js and skill set to its name.",
+			inputSchema: { name: z.string(), includeLibrary: z.boolean().optional().describe("Include the helper code itself") },
+		},
+		(args) => call("skills.get", args),
+	);
+	server.registerTool(
+		"prompts_list",
+		{ description: "List the prompts the user saved in the browser, to run one when they refer to it by name.", inputSchema: {} },
+		() => call("prompts.list"),
 	);
 	server.registerTool(
 		"resize_window",
