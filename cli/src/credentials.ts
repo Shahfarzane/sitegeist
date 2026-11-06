@@ -64,8 +64,11 @@ function keychainSecret(service: string): Promise<string | undefined> {
 }
 
 async function readClaudeCode(keychain: (service: string) => Promise<string | undefined>): Promise<CliCredentials> {
-	const file = join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"), ".credentials.json");
-	const raw = (await keychain(KEYCHAIN_SERVICE)) ?? (existsSync(file) ? readFileSync(file, "utf8") : undefined);
+	const configDir = process.env.CLAUDE_CONFIG_DIR;
+	const file = join(configDir ?? join(homedir(), ".claude"), ".credentials.json");
+	// A custom config dir is a separate Claude Code; the default keychain entry is someone else's login.
+	const secret = configDir ? undefined : await keychain(KEYCHAIN_SERVICE);
+	const raw = secret ?? (existsSync(file) ? readFileSync(file, "utf8") : undefined);
 	if (!raw) throw new Error("Claude Code is not logged in on this computer");
 	const oauth = (JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string; expiresAt?: number } }).claudeAiOauth;
 	if (!oauth?.accessToken) throw new Error("Claude Code is not logged in with a Claude subscription");
