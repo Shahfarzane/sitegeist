@@ -84,12 +84,14 @@ export class Target {
 		return this.browser.cdp.send(method, params, this.sessionId);
 	}
 	async evaluate(expression, { timeoutMs = 30000 } = {}) {
+		// Cleared afterwards: a pending timer keeps the test process alive after the last test.
+		let timer;
 		const result = await Promise.race([
 			this.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, userGesture: true }),
-			sleep(timeoutMs).then(() => {
-				throw new Error(`evaluate timed out: ${expression.slice(0, 80)}`);
+			new Promise((_, reject) => {
+				timer = setTimeout(() => reject(new Error(`evaluate timed out: ${expression.slice(0, 80)}`)), timeoutMs);
 			}),
-		]);
+		]).finally(() => clearTimeout(timer));
 		if (result.exceptionDetails) {
 			throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text);
 		}
