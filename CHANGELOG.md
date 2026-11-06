@@ -50,6 +50,9 @@
 - Nothing moves while the panel loads: the header and composer are in place from the first frame, and suggestions arrive in space of their own. Replaces the "Loading..." screen.
 - A row above the composer shows the tab the agent is working on, following it as the agent moves between tabs.
 - Padding and gaps follow a 4 px scale everywhere in the panel, and your messages sit on the right.
+- Spaces around hyphens and dashes keep their width in Public Sans, where kerning had closed " - " up to almost "-".
+- The empty chat keeps the mark alone in the center; suggestions are one row on the composer that slides sideways.
+- Token and cost numbers no longer appear under each reply on hover. The running total stays under the composer and in Settings > Costs.
 - `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.

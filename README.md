@@ -59,7 +59,8 @@ and signed releases install under the same id.
    extensions. Restart Chrome and check `chrome://policy`.
 4. Open `chrome://extensions`, enable Developer mode, and drag
    `~/.local/share/sitegeist/extension/sitegeist-<version>.crx` onto the page.
-5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider.
+5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
+   panel's width, so drag its edge to size it; the layout is built for 360 to 520 px.
 
 Later releases are automatic: `scripts/install-auto-release.sh m3` installs a launchd agent
 that runs `scripts/auto-release.sh` every 10 minutes. When `origin/main` moves it builds

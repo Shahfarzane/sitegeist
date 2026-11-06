@@ -1902,7 +1902,7 @@ index bcec466b7..7b4225ae0 100644
  	"keywords": [
  		"ai",
 diff --git a/packages/web-ui/src/components/AgentInterface.ts b/packages/web-ui/src/components/AgentInterface.ts
-index b8f6550ec..72fa90898 100644
+index b8f6550ec..df5aa6639 100644
 --- a/packages/web-ui/src/components/AgentInterface.ts
 +++ b/packages/web-ui/src/components/AgentInterface.ts
 @@ -1,8 +1,8 @@
@@ -1929,7 +1929,22 @@ index b8f6550ec..72fa90898 100644
  
  	// References
  	@query("message-editor") private _messageEditor!: MessageEditor;
-@@ -297,7 +303,7 @@ export class AgentInterface extends LitElement {
+@@ -280,7 +286,6 @@ export class AgentInterface extends LitElement {
+ 					.tools=${state.tools}
+ 					.pendingToolCalls=${this.session ? this.session.state.pendingToolCalls : new Set<string>()}
+ 					.isStreaming=${state.isStreaming}
+-					.onCostClick=${this.onCostClick}
+ 				></message-list>
+ 
+ 				<!-- Streaming message container - manages its own updates -->
+@@ -290,14 +295,13 @@ export class AgentInterface extends LitElement {
+ 					.isStreaming=${state.isStreaming}
+ 					.pendingToolCalls=${state.pendingToolCalls}
+ 					.toolResultsById=${toolResultsById}
+-					.onCostClick=${this.onCostClick}
+ 				></streaming-message-container>
+ 			</div>
+ 		`;
  	}
  
  	private renderStats() {
@@ -1938,7 +1953,7 @@ index b8f6550ec..72fa90898 100644
  
  		const state = this.session.state;
  		const totals = state.messages
-@@ -328,7 +334,7 @@ export class AgentInterface extends LitElement {
+@@ -328,7 +332,7 @@ export class AgentInterface extends LitElement {
  		const totalsText = hasTotals ? formatUsage(totals) : "";
  
  		return html`
@@ -1947,7 +1962,7 @@ index b8f6550ec..72fa90898 100644
  				<div class="flex items-center gap-1">
  					${this.showThemeToggle ? html`<theme-toggle></theme-toggle>` : html``}
  				</div>
-@@ -354,13 +360,14 @@ export class AgentInterface extends LitElement {
+@@ -354,13 +358,14 @@ export class AgentInterface extends LitElement {
  		return html`
  			<div class="flex flex-col h-full bg-background text-foreground">
  				<!-- Messages Area -->
@@ -1965,7 +1980,7 @@ index b8f6550ec..72fa90898 100644
  						<message-editor
  							.isStreaming=${state.isStreaming}
  							.currentModel=${state.model}
-@@ -368,6 +375,8 @@ export class AgentInterface extends LitElement {
+@@ -368,6 +373,8 @@ export class AgentInterface extends LitElement {
  							.showAttachmentButton=${this.enableAttachments}
  							.showModelSelector=${this.enableModelSelector}
  							.showThinkingSelector=${this.enableThinkingSelector}
@@ -2365,11 +2380,39 @@ index f0987c4d1..9022ef93a 100644
  									})}
  								`
  						}
+diff --git a/packages/web-ui/src/components/MessageList.ts b/packages/web-ui/src/components/MessageList.ts
+index 75afda08c..f0fad5636 100644
+--- a/packages/web-ui/src/components/MessageList.ts
++++ b/packages/web-ui/src/components/MessageList.ts
+@@ -13,7 +13,6 @@ export class MessageList extends LitElement {
+ 	@property({ type: Array }) tools: AgentTool[] = [];
+ 	@property({ type: Object }) pendingToolCalls?: Set<string>;
+ 	@property({ type: Boolean }) isStreaming: boolean = false;
+-	@property({ attribute: false }) onCostClick?: () => void;
+ 
+ 	protected override createRenderRoot(): HTMLElement | DocumentFragment {
+ 		return this;
+@@ -68,7 +67,6 @@ export class MessageList extends LitElement {
+ 						.toolResultsById=${resultByCallId}
+ 						.hideToolCalls=${false}
+ 						.hidePendingToolCalls=${this.isStreaming}
+-						.onCostClick=${this.onCostClick}
+ 					></assistant-message>`,
+ 				});
+ 				index++;
 diff --git a/packages/web-ui/src/components/Messages.ts b/packages/web-ui/src/components/Messages.ts
-index 485c51340..c81069683 100644
+index 485c51340..5e76b16b7 100644
 --- a/packages/web-ui/src/components/Messages.ts
 +++ b/packages/web-ui/src/components/Messages.ts
-@@ -59,8 +59,8 @@ export class UserMessage extends LitElement {
+@@ -10,7 +10,6 @@ import { html, LitElement, type TemplateResult } from "lit";
+ import { customElement, property } from "lit/decorators.js";
+ import { renderTool } from "../tools/index.js";
+ import type { Attachment } from "../utils/attachment-utils.js";
+-import { formatUsage } from "../utils/format.js";
+ import { i18n } from "../utils/i18n.js";
+ import "./ThinkingBlock.js";
+ import type { AgentTool } from "@mariozechner/pi-agent-core";
+@@ -59,8 +58,8 @@ export class UserMessage extends LitElement {
  				: this.message.content.find((c) => c.type === "text")?.text || "";
  
  		return html`
@@ -2380,25 +2423,27 @@ index 485c51340..c81069683 100644
  					<markdown-block .content=${content}></markdown-block>
  					${
  						this.message.role === "user-with-attachments" &&
-@@ -138,20 +138,21 @@ export class AssistantMessage extends LitElement {
- 			}
- 		}
+@@ -90,7 +89,6 @@ export class AssistantMessage extends LitElement {
+ 	@property({ type: Object }) toolResultsById?: Map<string, ToolResultMessageType>;
+ 	@property({ type: Boolean }) isStreaming: boolean = false;
+ 	@property({ type: Boolean }) hidePendingToolCalls = false;
+-	@property({ attribute: false }) onCostClick?: () => void;
  
-+		// Per-message usage shows on hover; the running total stays in the stats row below the composer.
+ 	protected override createRenderRoot(): HTMLElement | DocumentFragment {
+ 		return this;
+@@ -140,18 +138,11 @@ export class AssistantMessage extends LitElement {
+ 
  		return html`
--			<div>
+ 			<div>
 -				${orderedParts.length ? html` <div class="px-4 flex flex-col gap-3">${orderedParts}</div> ` : ""}
-+			<div class="group">
-+				${orderedParts.length ? html` <div class="flex flex-col gap-3">${orderedParts}</div> ` : ""}
- 				${
- 					this.message.usage && !this.isStreaming
- 						? this.onCostClick
+-				${
+-					this.message.usage && !this.isStreaming
+-						? this.onCostClick
 -							? html` <div class="px-4 mt-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
 -							: html` <div class="px-4 mt-2 text-xs text-muted-foreground">${formatUsage(this.message.usage)}</div> `
-+							? html` <div class="mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-foreground" @click=${this.onCostClick}>${formatUsage(this.message.usage)}</div> `
-+							: html` <div class="mt-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">${formatUsage(this.message.usage)}</div> `
- 						: ""
- 				}
+-						: ""
+-				}
++				${orderedParts.length ? html` <div class="flex flex-col gap-3">${orderedParts}</div> ` : ""}
  				${
  					this.message.stopReason === "error" && this.message.errorMessage
  						? html`
@@ -2407,7 +2452,7 @@ index 485c51340..c81069683 100644
  								<strong>${i18n("Error:")}</strong> ${this.message.errorMessage}
  							</div>
  						`
-@@ -269,7 +270,7 @@ export class ToolMessage extends LitElement {
+@@ -269,7 +260,7 @@ export class ToolMessage extends LitElement {
  
  		// Default: wrap in card
  		return html`
