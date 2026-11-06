@@ -20,6 +20,7 @@ const entryPoints = {
 	icons: join(packageRoot, "src/icons.ts"),
 	background: join(packageRoot, "src/background.ts"),
 	offscreen: join(packageRoot, "src/offscreen.ts"),
+	"gif-worker": join(packageRoot, "src/recording/gif-worker.ts"),
 };
 
 rmSync(outDir, { recursive: true, force: true });

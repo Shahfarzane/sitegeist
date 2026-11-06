@@ -26,6 +26,7 @@
 		"chart.js": "^4.5.1",
 		"docx-preview": "^0.4.1",
 		"fuse.js": "^7.5.0",
+		"gifenc": "1.0.3",
 		"highlight.js": "^11.12.0",
 		"js-interpreter": "^6.0.2",
 		"jszip": "^3.10.2",

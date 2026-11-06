@@ -6,8 +6,8 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { readFileSync, statSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, extname, resolve } from "node:path";
 import { z } from "zod";
 import { BridgeClient, BridgeRpcError } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
@@ -554,6 +554,40 @@ export async function runMcpServer(): Promise<void> {
 			inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
 		},
 		(args) => call("upload.image", args),
+	);
+	server.registerTool(
+		"gif_creator",
+		{
+			description:
+				"Record your tab as an animated GIF with click markers, drag arrows, action labels and a progress bar, to show how something works. start_recording, do the steps, then export (it stops by itself). The recording shows everything on screen, logged-in details too, so review it before sharing.",
+			inputSchema: {
+				action: z.enum(["start_recording", "stop_recording", "export", "clear"]),
+				path: z.string().optional().describe("For export: where to write the file. Default: recording-<time>.gif in the working directory"),
+				options: z
+					.object({
+						maxWidth: z.number().int().optional().describe("Output width in pixels (default 800)"),
+						showClickIndicators: z.boolean().optional(),
+						showDragPaths: z.boolean().optional(),
+						showActionLabels: z.boolean().optional(),
+						showProgressBar: z.boolean().optional(),
+						quality: z.number().int().min(1).max(30).optional().describe("Lower is better and larger (default 10)"),
+					})
+					.optional(),
+				tabId,
+			},
+		},
+		async ({ path, ...args }) => {
+			try {
+				const result = (await client.call("gif", args, 300000)) as { data?: string; width?: number; height?: number; frames?: number; bytes?: number };
+				if (args.action !== "export" || !result.data) return { content: text(result) };
+				const file = resolve(path ?? `recording-${Date.now()}.gif`);
+				writeFileSync(file, Buffer.from(result.data, "base64"));
+				const { data: _data, ...summary } = result;
+				return { content: text({ path: file, ...summary }) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
 	);
 	server.registerTool(
 		"notify_user",

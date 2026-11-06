@@ -43,6 +43,8 @@ import {
 } from "../browser/page.js";
 import type { BrowserSession } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
+import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
+import type { GifOptions } from "../recording/gif-types.js";
 import { getPermissionMode } from "./permissions.js";
 import { ERR, type RpcError } from "./protocol.js";
 
@@ -218,6 +220,14 @@ export function forgetClient(clientId: string): void {
 	for (const key of uploads.keys()) if (key.startsWith(`${clientId}:`)) uploads.delete(key);
 }
 
+function describeTarget(params: Params): string {
+	return str(params, "text") ?? str(params, "ref") ?? str(params, "selector") ?? "";
+}
+
+function record(ctx: HandlerContext, action: GifAction): void {
+	noteGifAction(ctx.session, action);
+}
+
 /** Where files go: a named element or the page's file input, or a point of the latest screenshot. */
 async function deliverTo(params: Params, tabId: number, files: PageFile[]) {
 	const x = num(params, "x");
@@ -283,6 +293,7 @@ export const handlers: Record<string, Handler> = {
 			const ready = await waitForLoad(tab.id!, num(params, "timeoutMs") ?? 20000);
 			return withRead(tab.id!, !ready);
 		}
+		record(ctx, { kind: "label", label: url === "back" || url === "forward" ? `Go ${url}` : `Open ${url}` });
 		const tabId = await resolveTab(ctx, params, false);
 		let timedOut = false;
 		if (url === "back") timedOut = !(await goBack(tabId));
@@ -346,6 +357,26 @@ export const handlers: Record<string, Handler> = {
 		const name = str(params, "filename") ?? `screenshot.${extension}`;
 		const tabId = await resolveTab(ctx, params, true);
 		return deliverTo(params, tabId, [{ name, mimeType: shot.mimeType, data: shot.data }]);
+	},
+
+	/** Record the session's tab as a GIF; export hands the file back to the caller. */
+	gif: async (ctx, params) => {
+		const recorder = gifRecorderFor(ctx.session);
+		switch (requireStr(params, "action")) {
+			case "start_recording":
+				await recorder.start(await resolveTab(ctx, params, true));
+				return { recording: true };
+			case "stop_recording":
+				await recorder.stop();
+				return { recording: false, frames: recorder.frameCount };
+			case "export":
+				return recorder.export((params.options ?? {}) as GifOptions);
+			case "clear":
+				recorder.clear();
+				return { frames: 0 };
+			default:
+				throw new BridgeError(ERR.BAD_PARAMS, "action must be start_recording, stop_recording, export or clear");
+		}
 	},
 
 	"screencast.start": async (ctx, params) => {
@@ -417,6 +448,7 @@ export const handlers: Record<string, Handler> = {
 		const tabId = await resolveTab(ctx, params, true);
 		const p = await pointFor(ctx, params, tabId);
 		const button = str(params, "button");
+		record(ctx, { kind: "click", x: p.x, y: p.y, label: `Click ${describeTarget(params)}`.trim() });
 		await click(tabId, p.x, p.y, {
 			button: button === "right" || button === "middle" ? button : "left",
 			clickCount: num(params, "clickCount") ?? 1,
@@ -436,7 +468,10 @@ export const handlers: Record<string, Handler> = {
 		const from = params.from as { x: number; y: number } | undefined;
 		const to = params.to as { x: number; y: number } | undefined;
 		if (!from || !to) throw new BridgeError(ERR.BAD_PARAMS, "from and to are required");
-		await drag(tabId, screenshotToCss(tabId, from), screenshotToCss(tabId, to));
+		const start = screenshotToCss(tabId, from);
+		const end = screenshotToCss(tabId, to);
+		record(ctx, { kind: "drag", x: start.x, y: start.y, toX: end.x, toY: end.y, label: "Drag" });
+		await drag(tabId, start, end);
 		return { dragged: { from, to } };
 	},
 
@@ -448,6 +483,7 @@ export const handlers: Record<string, Handler> = {
 			const rect = await locate(tabId, t);
 			await click(tabId, rect.x, rect.y);
 		}
+		record(ctx, { kind: "label", label: `Type "${text.slice(0, 40)}"` });
 		await typeText(tabId, text);
 		if (params.submit === true) await pressKey(tabId, "Enter");
 		return { typed: text.length };
@@ -457,6 +493,7 @@ export const handlers: Record<string, Handler> = {
 		const key = requireStr(params, "key");
 		const tabId = await resolveTab(ctx, params, true);
 		const repeat = num(params, "repeat") ?? 1;
+		record(ctx, { kind: "label", label: `Press ${key}` });
 		for (let i = 0; i < repeat; i++) await pressKey(tabId, key);
 		return { pressed: key, repeat };
 	},
@@ -488,6 +525,7 @@ export const handlers: Record<string, Handler> = {
 		const tabId = await resolveTab(ctx, params, false);
 		const t = target(params);
 		if (!hasTarget(t)) throw new BridgeError(ERR.BAD_PARAMS, "ref, selector or text is required");
+		record(ctx, { kind: "label", label: `Fill ${describeTarget(params)}`.trim() });
 		await fillElement(tabId, t, value);
 		return { filled: t };
 	},

@@ -69,6 +69,7 @@ import { SitegeistAppStorage } from "./storage/app-storage.js";
 import { CoalescedTask } from "./storage/coalesced-task.js";
 import { DebuggerTool } from "./tools/debugger.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
+import { createGifTool } from "./tools/gif.js";
 import { AskUserWhichElementTool, skillTool } from "./tools/index.js";
 import { NativeInputEventsRuntimeProvider } from "./tools/NativeInputEventsRuntimeProvider.js";
 import { isToolNavigating, NavigateTool } from "./tools/navigate.js";
@@ -984,6 +985,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 					() => agent.state.messages,
 					() => artifactsPanel,
 				),
+				createGifTool(),
 			];
 
 			// Conditionally add debugger tool if enabled

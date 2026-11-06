@@ -179,6 +179,7 @@ export const BRIDGE_METHODS = [
 	"upload.chunk",
 	"upload.commit",
 	"upload.image",
+	"gif",
 	"screencast.start",
 	"screencast.stop",
 	"snapshot",

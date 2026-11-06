@@ -6,13 +6,17 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { Browser, openPanel, sendPrompt, startFakeServer } from "./lib.mjs";
 
-const page = `<!doctype html><title>Tool page</title><h1 id="h">Hello tools</h1><input id="i"><button onclick="document.title='clicked'">Go</button>`;
+const page = `<!doctype html><title>Tool page</title><h1 id="h">Hello tools</h1><input id="i"><button onclick="document.title='clicked'">Go</button>
+<input id="f" type="file" onchange="this.files[0].text().then((t) => { document.title = this.files[0].name + ':' + t; })">`;
 let browser;
 let server;
 let turns;
 
 before(async () => {
-	server = await startFakeServer({ routes: { "/tools": page }, script: (body, index) => turns(body, index) });
+	server = await startFakeServer({
+		routes: { "/tools": page, "/upload": page, "/gif": page },
+		script: (body, index) => turns(body, index),
+	});
 	browser = await Browser.launch();
 });
 
@@ -54,6 +58,44 @@ test("navigate, repl with browserjs, and a screenshot all work", async () => {
 	assert.ok(toolOutput(1).includes("Hello tools"), toolOutput(1).slice(0, 300));
 	const shot = JSON.stringify(server.requests[3].messages);
 	assert.ok(shot.includes("image_url") || shot.includes("data:image"), "the screenshot must reach the model");
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("upload_file hands an artifact to the page", async () => {
+	server.requests.length = 0;
+	turns = (_body, index) => {
+		if (index === 0)
+			return {
+				toolCalls: [
+					{ name: "artifacts", args: { command: "create", filename: "notes.txt", content: "from the chat" } },
+				],
+			};
+		if (index === 1) return { toolCalls: [{ name: "upload_file", args: { name: "notes.txt" } }] };
+		return { text: "uploaded it" };
+	};
+	const context = await openPanel(browser, server, { path: "/upload" });
+	await sendPrompt(context.panel, "upload the notes");
+	await context.panel.waitFor(`document.body.innerText.includes("uploaded it")`, { timeoutMs: 20000 });
+	assert.ok(toolOutput(1).includes("delivered"), toolOutput(1).slice(0, 200));
+	await context.tab.waitFor(`document.title === "notes.txt:from the chat"`);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("gif_creator works from the panel", async () => {
+	server.requests.length = 0;
+	turns = (_body, index) => {
+		if (index === 0) return { toolCalls: [{ name: "gif_creator", args: { action: "start_recording" } }] };
+		if (index === 1) return { toolCalls: [{ name: "gif_creator", args: { action: "stop_recording" } }] };
+		if (index === 2)
+			return { toolCalls: [{ name: "gif_creator", args: { action: "export", filename: "demo.gif" } }] };
+		return { text: "recorded it" };
+	};
+	const context = await openPanel(browser, server, { path: "/gif" });
+	await sendPrompt(context.panel, "record");
+	await context.panel.waitFor(`document.body.innerText.includes("recorded it")`, { timeoutMs: 30000 });
+	assert.match(toolOutput(2), /Saved demo\.gif to Downloads \(\d+ frames/);
 	await context.panel.close();
 	await context.tab.close();
 });

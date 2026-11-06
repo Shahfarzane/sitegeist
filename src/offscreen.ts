@@ -3,6 +3,8 @@
  * Worker constructor, and a side panel may not be open at all.
  */
 
+import { GIF_PORT, type GifJobMessage, type GifWorkerReply } from "./recording/gif-types.js";
+
 function chime(): void {
 	const audio = new AudioContext();
 	const gain = audio.createGain();
@@ -25,4 +27,14 @@ function chime(): void {
 chrome.runtime.onMessage.addListener((message: { target?: string; type?: string }) => {
 	if (message?.target !== "offscreen") return;
 	if (message.type === "chime") chime();
+});
+
+// A port, not sendMessage: that would copy every frame to every open panel as well.
+chrome.runtime.onConnect.addListener((port) => {
+	if (port.name !== GIF_PORT) return;
+	const worker = new Worker(chrome.runtime.getURL("gif-worker.js"), { type: "module" });
+	worker.onmessage = (event: MessageEvent<GifWorkerReply>) => port.postMessage(event.data);
+	worker.onerror = (event) => port.postMessage({ type: "error", message: event.message } satisfies GifWorkerReply);
+	port.onMessage.addListener((message: GifJobMessage) => worker.postMessage(message));
+	port.onDisconnect.addListener(() => worker.terminate());
 });

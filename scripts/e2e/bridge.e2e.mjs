@@ -2,7 +2,7 @@
 // Run: SITEGEIST_VERSION=9.9.9 node scripts/build.mjs && (cd cli && npm run build) && npm run test:e2e
 
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -22,6 +22,13 @@ const form = `<!doctype html><title>Form</title>
 	<button>Send</button>
 </form>`;
 
+const animated = `<!doctype html><title>Animated</title>
+<style>body { margin: 0; font: 20px system-ui } #box { position: absolute; left: 40px; top: 120px; width: 80px; height: 80px; background: #2b6cb0 }</style>
+<h1>Recording fixture</h1>
+<button id="go" style="font-size: 24px; margin: 20px" onclick="document.title = 'moved'; document.getElementById('box').style.left = '600px'">Move it</button>
+<div id="box"></div>
+<script>let n = 0; setInterval(() => { document.querySelector("h1").textContent = "Recording fixture " + ++n; }, 150);</script>`;
+
 const uploadPage = `<!doctype html><title>Upload</title>
 <input id="hidden" type="file" multiple style="display:none" onchange="document.title = 'input:' + [...this.files].map((f) => f.name + ':' + f.size + ':' + f.type).join(',')">
 <div id="zone" style="width:300px;height:200px;background:#eee"
@@ -30,7 +37,7 @@ const uploadPage = `<!doctype html><title>Upload</title>
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/form": form, "/upload": uploadPage },
+		routes: { "/form": form, "/upload": uploadPage, "/animated": animated },
 		script: () => ({ text: "unused" }),
 	});
 	browser = await Browser.launch({ bridge: true });
@@ -155,4 +162,29 @@ test("upload_image sends a screenshot to the page", async () => {
 
 test("a screenshot id that is gone says so", async () => {
 	await assert.rejects(harness.call("upload_image", { imageId: "nope" }), /take a new one/);
+});
+
+test("gif_creator records a hidden tab and writes a file with the actions on it", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "sitegeist-e2e-gif-"));
+	const path = process.env.SITEGEIST_E2E_GIF ?? join(dir, "flow.gif");
+	await harness.callText("navigate", { url: `${server.origin}/animated` });
+	await harness.callText("gif_creator", { action: "start_recording" });
+	await new Promise((r) => setTimeout(r, 900));
+	await harness.callText("click", { text: "Move it" });
+	await new Promise((r) => setTimeout(r, 900));
+	await harness.callText("actions", { steps: [{ press: "Tab" }, { wait: 300 }] });
+	const result = await harness.callText("gif_creator", { action: "export", path });
+	assert.equal(result.path, path);
+	assert.ok(result.frames >= 3, `${result.frames} frames`);
+	const file = readFileSync(path);
+	assert.equal(file.subarray(0, 6).toString("latin1"), "GIF89a");
+	assert.equal(file.length, result.bytes);
+	assert.equal(file.readUInt16LE(6), result.width);
+	assert.equal(result.width, 800);
+	rmSync(dir, { recursive: true, force: true });
+});
+
+test("exporting nothing says so", async () => {
+	await harness.callText("gif_creator", { action: "clear" });
+	await assert.rejects(harness.call("gif_creator", { action: "export" }), /Nothing recorded/);
 });
