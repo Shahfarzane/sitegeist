@@ -37,10 +37,6 @@ export class WelcomeMessageElement extends LitElement {
 	// Unknown until checked, so the connect prompt does not flash for configured users.
 	@state() private needsProvider: boolean | undefined;
 
-	private taglineWords = ["automate", "write", "transform", "research", "scrape", "create"];
-	private currentWordIndex = 0;
-	private intervalId?: number;
-
 	protected createRenderRoot() {
 		return this;
 	}
@@ -57,18 +53,6 @@ export class WelcomeMessageElement extends LitElement {
 	override connectedCallback() {
 		super.connectedCallback();
 		void this.checkProvider();
-		// Rotate tagline word every 2 seconds
-		this.intervalId = window.setInterval(() => {
-			this.currentWordIndex = (this.currentWordIndex + 1) % this.taglineWords.length;
-			this.requestUpdate();
-		}, 2000);
-	}
-
-	override disconnectedCallback() {
-		super.disconnectedCallback();
-		if (this.intervalId) {
-			clearInterval(this.intervalId);
-		}
 	}
 
 	private async selectTutorial(prompt: string) {
@@ -80,51 +64,49 @@ export class WelcomeMessageElement extends LitElement {
 		await this.agentInterface.sendMessage(prompt);
 	}
 
+	/** Fills the chat area, so the mark stays centered and nothing moves when the suggestions arrive below it. */
 	override render(): TemplateResult {
 		return html`
-			<div class="welcome-orb-container my-6 flex flex-col items-center justify-center text-center">
-				<h1 class="text-2xl font-semibold tracking-tight text-foreground">Sitegeist</h1>
-				<p class="mt-1 text-sm text-muted-foreground">
-					Your AI companion for the web to
-					<span class="rotating-word inline-block min-w-[72px] text-left font-medium text-foreground" key=${this.currentWordIndex}
-						>${this.taglineWords[this.currentWordIndex]}</span
-					>
-				</p>
-
-				<div class="flex items-center justify-center my-2">
+			<div class="absolute inset-0 grid grid-rows-[1fr_auto_1fr] overflow-y-auto px-4">
+				<div></div>
+				<div class="welcome-mark flex flex-col items-center gap-6 text-center">
 					<orb-animation></orb-animation>
+					<p class="max-w-xs text-xs text-muted-foreground">
+						Sitegeist works on the current page and any tab you share with it.
+					</p>
 				</div>
-
-				${
-					this.needsProvider === undefined
-						? ""
-						: this.needsProvider
-							? html`
-									<p class="text-sm text-muted-foreground max-w-xs">
-										Connect a model provider (a Claude, ChatGPT, Copilot or Gemini subscription, or an API key) to get started.
-									</p>
-									<button
-										class="mt-4 inline-flex items-center h-9 px-4 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-										@click=${() => this.connect()}
-									>
-										Connect a provider
-									</button>
-								`
-							: html`
-									<div class="flex flex-wrap gap-2 justify-center max-w-sm px-4">
-										${this.tutorials.map(
-											(tutorial) => html`
-												<button
-													class="tutorial-pill px-3 py-1.5 text-xs font-medium text-foreground rounded-full cursor-pointer"
-													@click=${() => this.selectTutorial(tutorial.prompt)}
-												>
-													${tutorial.label}
-												</button>
-											`,
-										)}
-									</div>
-								`
-				}
+				<div class="flex flex-col items-center justify-end gap-4 pb-4">
+					${
+						this.needsProvider === undefined
+							? ""
+							: this.needsProvider
+								? html`
+										<p class="max-w-xs text-center text-sm text-muted-foreground">
+											Connect a model provider (a Claude, ChatGPT, Copilot or Gemini subscription, or an API key) to get started.
+										</p>
+										<button
+											class="inline-flex items-center h-9 px-4 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+											@click=${() => this.connect()}
+										>
+											Connect a provider
+										</button>
+									`
+								: html`
+										<div class="flex flex-wrap justify-center gap-2 max-w-sm">
+											${this.tutorials.map(
+												(tutorial) => html`
+													<button
+														class="tutorial-pill h-8 px-3 text-sm text-foreground rounded-full cursor-pointer"
+														@click=${() => this.selectTutorial(tutorial.prompt)}
+													>
+														${tutorial.label}
+													</button>
+												`,
+											)}
+										</div>
+									`
+					}
+				</div>
 			</div>
 		`;
 	}

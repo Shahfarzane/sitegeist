@@ -112,7 +112,7 @@ const renderDebugPage = async () => {
 					${Button({
 						variant: "ghost",
 						size: "sm",
-						children: html`<span class="flex items-center gap-1.5">${icon(Sparkles, "xs")} <span class="text-xs">Icons</span></span>`,
+						children: html`<span class="flex items-center gap-2">${icon(Sparkles, "xs")} <span class="text-xs">Icons</span></span>`,
 						onClick: () => {
 							window.location.href = "./icons.html";
 						},
@@ -204,7 +204,7 @@ const renderDebugPage = async () => {
 															${Button({
 																variant: "outline",
 																size: "sm",
-																children: html`<span class="flex items-center gap-1.5"
+																children: html`<span class="flex items-center gap-2"
 																	>${icon(Play, "xs")} <span class="text-xs">${model.name}</span></span
 																>`,
 																onClick: () => {

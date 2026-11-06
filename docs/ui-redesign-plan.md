@@ -13,6 +13,30 @@ Decided with Shahin on 2026-10-07:
 
 The panel is about 400px wide. Every screen is verified at 400x860 in light and dark.
 
+## Update 2026-11-06: color, type and fixed geometry
+
+This replaces the gray tokens and the system font below; the rest of the plan stands.
+
+- Color: tokens in `src/app.css`, warm neutrals in light and cool in dark. Foreground is the one
+  filled control. Teal is the only accent, on the caret, focus ring and links.
+- Type: Public Sans (SIL OFL), bundled in `static/`, with its Latin subset preloaded. A
+  metrics-matched Arial covers the moment before it loads, so the swap moves nothing. Sizes are
+  12/16 for captions, 13 for the tab row, 14/20 for UI text, 16/24 in the composer and 16/26 in
+  the chat. Weights are 400, 500 and 550, with slight tracking at 12 and 14 px.
+- Spacing: padding and gaps come from 4, 8, 12, 16, 24 and 32 px. Radii are 4, 6, 8, 12 and 16,
+  and the composer is 20.
+- Layout: designed for 360 to 500 px. The header and composer are fixed and only the chat
+  scrolls. `static/sidepanel.html` paints a shell with their final geometry, and it stays until
+  the chat exists.
+- Composer: 94 px tall, `+` on the left, the model and a filled round send button on the right.
+  A row above it names the tab the agent works on and keeps its height when empty.
+- Empty chat: the mark stays centered, and suggestions sit above the composer in their own row,
+  so nothing moves when they arrive.
+
+`scripts/e2e/panel-layout.e2e.mjs` enforces the layout: first frame against final geometry, zero
+layout shift at 360, 400 and 500 px, chat-only scrolling, the bundled font, and the spacing scale
+on every panel and Settings screen.
+
 ## Where the styling lives
 
 - Tokens: mini-lit `styles/themes/default.css` (`:root` light, `.dark` dark), mapped to

@@ -59,7 +59,7 @@ export class RecordSkillDialog extends DialogBase {
 				</div>
 				<button
 					type="button"
-					class="shrink-0 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15"
+					class="shrink-0 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-xs font-medium text-white hover:bg-white/15"
 					aria-expanded=${expanded ? "true" : "false"}
 					@click=${onToggle}
 				>
@@ -89,7 +89,7 @@ export class RecordSkillDialog extends DialogBase {
 													class="block h-44 w-full object-cover"
 													alt=${`Recording screenshot ${index + 1}`}
 												/>
-												<figcaption class="border-t border-white/10 px-3 py-1.5 text-xs text-white/70">
+												<figcaption class="border-t border-white/10 px-3 py-2 text-xs text-white/70">
 													Screenshot ${index + 1}
 												</figcaption>
 											</figure>

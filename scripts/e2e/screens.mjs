@@ -1,19 +1,25 @@
 /**
  * Renders the panel's screens at side panel size, light and dark, for a look before a release.
  *
- *   node scripts/e2e/screens.mjs <output-dir>
+ *   node scripts/e2e/screens.mjs <output-dir> [width]
  */
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Browser, idbPutSource, openPanel, sendPrompt, startFakeServer } from "./lib.mjs";
+import { Browser, EXTENSION_ID, idbPutSource, openPanel, sendPrompt, startFakeServer } from "./lib.mjs";
 
 const out = process.argv[2];
-if (!out) throw new Error("usage: screens.mjs <output-dir>");
+const width = Number(process.argv[3] ?? 400);
+if (!out) throw new Error("usage: screens.mjs <output-dir> [width]");
 
 const server = await startFakeServer({
 	routes: { "/page": "<!doctype html><title>Fixture</title><h1>Fixture</h1>" },
-	script: () => ({ text: "Done. The page lists three products, the cheapest is the second one." }),
+	script: (_body, index) =>
+		index % 2 === 0
+			? { toolCalls: [{ name: "repl", args: { title: "Read the page", code: "return document.title;" } }] }
+			: {
+					text: "Done. The page lists three products, the cheapest is the [second one](https://example.com).\n\n```js\nconst cheapest = products.sort((a, b) => a.price - b.price)[0];\n```",
+				},
 });
 const browser = await Browser.launch();
 
@@ -28,15 +34,23 @@ const click = (panel, text, scope = "button,[role=menuitem]") =>
 		`[...document.querySelectorAll(${JSON.stringify(scope)})].find((b) => b.textContent.includes(${JSON.stringify(text)})).click()`,
 	);
 
+const viewport = { width, height: 860, deviceScaleFactor: 2, mobile: false };
+
 try {
+	// Before any provider exists: the first run.
+	const firstRun = await browser.open(`chrome-extension://${EXTENSION_ID}/sidepanel.html`);
+	await firstRun.send("Emulation.setDeviceMetricsOverride", viewport);
+	for (const theme of ["light", "dark"]) {
+		await firstRun.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: theme }] });
+		await firstRun.send("Page.reload");
+		await firstRun.waitFor(`document.body.innerText.includes("Connect a provider")`);
+		await shoot(firstRun, "first-run", theme);
+	}
+	await firstRun.send("Page.close");
+
 	const context = await openPanel(browser, server);
 	const { panel } = context;
-	await panel.send("Emulation.setDeviceMetricsOverride", {
-		width: 400,
-		height: 860,
-		deviceScaleFactor: 2,
-		mobile: false,
-	});
+	await panel.send("Emulation.setDeviceMetricsOverride", viewport);
 	await panel.evaluate(`${idbPutSource}
 		(async () => {
 			await window.__idbPut("prompts", "summarize-page", { name: "summarize-page", text: "Summarize this page in five bullet points.", createdAt: "2026-01-01" });
@@ -48,6 +62,21 @@ try {
 		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
 		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
 		await shoot(panel, "welcome", theme);
+
+		await click(panel, "fake-model");
+		await shoot(panel, "models", theme);
+		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
+		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
+
+		await panel.evaluate(`(() => {
+			const box = document.querySelector("message-editor textarea");
+			box.focus();
+			box.value = "/";
+			box.dispatchEvent(new InputEvent("input", { bubbles: true }));
+		})()`);
+		await shoot(panel, "slash", theme);
+		await panel.send("Page.navigate", { url: `${context.url}&new=true` });
+		await panel.waitFor(`document.body.innerText.includes("Summarize this page")`);
 
 		await panel.evaluate(`document.querySelector("overflow-menu button").click()`);
 		await shoot(panel, "menu", theme);
@@ -65,6 +94,7 @@ try {
 		await sendPrompt(panel, "What is on this page?");
 		await panel.waitFor(`document.body.innerText.includes("cheapest")`);
 		await panel.waitFor(`location.search.includes("session=")`);
+		await shoot(panel, "chat", theme);
 		const session = await panel.evaluate(`new URLSearchParams(location.search).get("session")`);
 		await context.worker.evaluate(`chrome.storage.local.set({ ${JSON.stringify(`run.${session}`)}: 1 })`);
 		await panel.send("Page.reload");
@@ -73,6 +103,8 @@ try {
 		await panel.evaluate(
 			`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Dismiss").click()`,
 		);
+		await panel.evaluate(`document.querySelector('button[title="Sessions"]').click()`);
+		await shoot(panel, "sessions", theme);
 	}
 } finally {
 	await browser.close();

@@ -10,48 +10,98 @@
 /* Tell Tailwind to scan local components */
 @source "../src/**/*.ts";
 
+/* The first-frame shell lives in the HTML */
+@source "../static/sidepanel.html";
+
 /* Import Tailwind */
 /* biome-ignore lint/correctness/noInvalidPositionAtImportRule: fuck you */
 @import "tailwindcss";
 
+/* Bundled so the panel looks the same everywhere. SIL OFL, see static/public-sans-OFL.txt. */
+@font-face {
+	font-family: "Public Sans";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("public-sans-latin-ext.woff2") format("woff2");
+	unicode-range:
+		U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+		U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+	font-family: "Public Sans";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("public-sans-latin.woff2") format("woff2");
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+		U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Arial scaled to the same advance widths and line box, so swapping the font in moves nothing. */
+@font-face {
+	font-family: "Public Sans Fallback";
+	src: local("Arial");
+	size-adjust: 102.07%;
+	ascent-override: 93.07%;
+	descent-override: 22.04%;
+	line-gap-override: 0%;
+}
+
 /*
- * Monochrome tokens. Neutral grays only; the one accent is the foreground color on the
- * primary action, and red is reserved for destructive text. Overrides mini-lit's theme
- * (whose accent-foreground is blue in light and amber in dark).
+ * Type scale: 12/16, 13, 14/20, 16/24, chat 16/26. Weights stop at 550, and small sizes get a
+ * little tracking, the job an optical size axis would do.
+ */
+@theme {
+	--font-weight-semibold: 500;
+	--font-weight-bold: 550;
+	--text-xs--letter-spacing: 0.024em;
+	--text-sm--letter-spacing: 0.012em;
+}
+
+/*
+ * Warm neutrals in light, cool in dark. The teal ring color is the only accent: caret, focus
+ * ring and links. Foreground is the one filled control; red is reserved for destructive text.
+ * Overrides mini-lit's theme.
  */
 :root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.17 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.17 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.17 0 0);
-	--primary: oklch(0.2 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.965 0 0);
-	--secondary-foreground: oklch(0.2 0 0);
-	--muted: oklch(0.965 0 0);
-	--muted-foreground: oklch(0.52 0 0);
-	--accent: oklch(0.95 0 0);
-	--accent-foreground: oklch(0.17 0 0);
-	--destructive: oklch(0.55 0.2 27);
-	--destructive-foreground: oklch(0.985 0 0);
-	--border: oklch(0.92 0 0);
-	--input: oklch(0.9 0 0);
-	--ring: oklch(0.6 0 0);
+	color-scheme: light;
+	--font-sans: "Public Sans", "Public Sans Fallback", ui-sans-serif, system-ui, sans-serif;
+	--ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+	--background: #faf8f5;
+	--foreground: #27251e;
+	--card: #fdfbfa;
+	--card-foreground: #27251e;
+	--popover: #fdfbfa;
+	--popover-foreground: #27251e;
+	--primary: #27251e;
+	--primary-foreground: #fdfbfa;
+	--secondary: #f3f0ec;
+	--secondary-foreground: #27251e;
+	--muted: #f3f0ec;
+	--muted-foreground: #716f6a;
+	--accent: #efebe6;
+	--accent-foreground: #27251e;
+	--destructive: #a23544;
+	--destructive-foreground: #fdfbfa;
+	--border: #ebe8e4;
+	--input: #dcd9d3;
+	--ring: #016a71;
 	--chart-1: oklch(0.3 0 0);
 	--chart-2: oklch(0.45 0 0);
 	--chart-3: oklch(0.6 0 0);
 	--chart-4: oklch(0.72 0 0);
 	--chart-5: oklch(0.82 0 0);
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.17 0 0);
-	--sidebar-primary: oklch(0.2 0 0);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.95 0 0);
-	--sidebar-accent-foreground: oklch(0.17 0 0);
-	--sidebar-border: oklch(0.92 0 0);
-	--sidebar-ring: oklch(0.6 0 0);
+	--sidebar: #fdfbfa;
+	--sidebar-foreground: #27251e;
+	--sidebar-primary: #27251e;
+	--sidebar-primary-foreground: #fdfbfa;
+	--sidebar-accent: #efebe6;
+	--sidebar-accent-foreground: #27251e;
+	--sidebar-border: #ebe8e4;
+	--sidebar-ring: #016a71;
 	--radius: 0.5rem;
 	--shadow-2xs: none;
 	--shadow-xs: none;
@@ -64,38 +114,39 @@
 }
 
 .dark {
-	--background: oklch(0.16 0 0);
-	--foreground: oklch(0.96 0 0);
-	--card: oklch(0.19 0 0);
-	--card-foreground: oklch(0.96 0 0);
-	--popover: oklch(0.21 0 0);
-	--popover-foreground: oklch(0.96 0 0);
-	--primary: oklch(0.95 0 0);
-	--primary-foreground: oklch(0.18 0 0);
-	--secondary: oklch(0.225 0 0);
-	--secondary-foreground: oklch(0.96 0 0);
-	--muted: oklch(0.225 0 0);
-	--muted-foreground: oklch(0.68 0 0);
-	--accent: oklch(0.26 0 0);
-	--accent-foreground: oklch(0.96 0 0);
-	--destructive: oklch(0.68 0.17 22);
-	--destructive-foreground: oklch(0.96 0 0);
-	--border: oklch(0.27 0 0);
-	--input: oklch(0.3 0 0);
-	--ring: oklch(0.5 0 0);
+	color-scheme: dark;
+	--background: #16171b;
+	--foreground: #dee0e4;
+	--card: #1f2125;
+	--card-foreground: #dee0e4;
+	--popover: #1f2125;
+	--popover-foreground: #dee0e4;
+	--primary: #dee0e4;
+	--primary-foreground: #16171b;
+	--secondary: #1f2125;
+	--secondary-foreground: #dee0e4;
+	--muted: #1d1e22;
+	--muted-foreground: #9a9ca0;
+	--accent: #2a2c30;
+	--accent-foreground: #dee0e4;
+	--destructive: #dc6973;
+	--destructive-foreground: #16171b;
+	--border: #26272b;
+	--input: #323337;
+	--ring: #4e99a3;
 	--chart-1: oklch(0.92 0 0);
 	--chart-2: oklch(0.78 0 0);
 	--chart-3: oklch(0.64 0 0);
 	--chart-4: oklch(0.5 0 0);
 	--chart-5: oklch(0.38 0 0);
-	--sidebar: oklch(0.19 0 0);
-	--sidebar-foreground: oklch(0.96 0 0);
-	--sidebar-primary: oklch(0.95 0 0);
-	--sidebar-primary-foreground: oklch(0.18 0 0);
-	--sidebar-accent: oklch(0.26 0 0);
-	--sidebar-accent-foreground: oklch(0.96 0 0);
-	--sidebar-border: oklch(0.27 0 0);
-	--sidebar-ring: oklch(0.5 0 0);
+	--sidebar: #1f2125;
+	--sidebar-foreground: #dee0e4;
+	--sidebar-primary: #dee0e4;
+	--sidebar-primary-foreground: #16171b;
+	--sidebar-accent: #2a2c30;
+	--sidebar-accent-foreground: #dee0e4;
+	--sidebar-border: #26272b;
+	--sidebar-ring: #4e99a3;
 	--shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.4);
 	--shadow-lg: 0 8px 24px -4px hsl(0 0% 0% / 0.5);
 	--shadow-xl: 0 8px 24px -4px hsl(0 0% 0% / 0.5);
@@ -106,8 +157,9 @@
 body {
 	color: var(--color-foreground);
 	background-color: var(--color-background);
+	font-family: var(--font-sans);
 	font-size: 14px;
-	line-height: 1.5;
+	line-height: 20px;
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -119,12 +171,36 @@ textarea,
 select,
 [role="menuitem"] {
 	transition:
-		background-color 120ms ease,
-		color 120ms ease,
-		border-color 120ms ease;
+		background-color 120ms var(--ease-out),
+		color 120ms var(--ease-out),
+		border-color 120ms var(--ease-out);
 }
 
-/* Native checkboxes, radios and ranges follow the monochrome accent instead of browser blue. */
+input,
+textarea {
+	caret-color: var(--color-ring);
+}
+
+::selection {
+	background: color-mix(in srgb, var(--color-ring) 30%, transparent);
+}
+
+/* Chat text is 16/26; thinking and tool output stay at UI size. */
+:where(assistant-message, .user-message-container) .markdown-content {
+	font-size: 16px;
+	line-height: 26px;
+}
+
+:where(tool-message, .thinking-block) .markdown-content {
+	font-size: 14px;
+	line-height: 20px;
+}
+
+.markdown-content a {
+	color: var(--color-ring);
+}
+
+/* Native checkboxes, radios and ranges follow the foreground instead of browser blue. */
 input[type="checkbox"],
 input[type="radio"],
 input[type="range"] {
@@ -150,43 +226,15 @@ input[type="range"] {
 	border-radius: 4px;
 }
 
-/* Welcome message animations */
-@keyframes fadeInUp {
+/* Empty chat: opacity only, so nothing moves on load. */
+@keyframes welcomeFadeIn {
 	from {
 		opacity: 0;
-		transform: translateY(30px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
 	}
 }
 
-@keyframes fadeInOut {
-	0% {
-		opacity: 0;
-	}
-	15%,
-	85% {
-		opacity: 1;
-	}
-	100% {
-		opacity: 0;
-	}
-}
-
-@keyframes shimmer {
-	0% {
-		background-position: -200% center;
-	}
-	100% {
-		background-position: 200% center;
-	}
-}
-
-.welcome-orb-container {
-	position: relative;
-	animation: fadeInUp 0.8s ease-out;
+.welcome-mark {
+	animation: welcomeFadeIn 200ms var(--ease-out);
 }
 
 .orb-container {
@@ -205,12 +253,15 @@ input[type="range"] {
 	height: 100%;
 }
 
-.rotating-word {
-	animation: fadeInOut 2s ease-in-out infinite;
+/* The orb fills half its canvas, so a 96px canvas shows a 48px orb. */
+.welcome-mark .orb-container {
+	width: 96px;
+	height: 96px;
+	margin: -24px;
 }
 
 .tutorial-pill {
-	background: var(--color-background);
+	background: var(--color-card);
 	border: 1px solid var(--color-border);
 }
 
@@ -221,5 +272,5 @@ input[type="range"] {
 /* User messages: a quiet filled block, no border. */
 .user-message-container {
 	background: var(--color-secondary);
-	max-width: 100%;
+	max-width: 85%;
 }

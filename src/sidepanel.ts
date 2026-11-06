@@ -39,6 +39,7 @@ import {
 } from "./browser/session.js";
 import { ConnectorManager } from "./connectors/manager.js";
 import "./components/OverflowMenu.js";
+import { ContextTab } from "./components/ContextTab.js";
 import type { MenuEntry } from "./components/OverflowMenu.js";
 import { Toast } from "./components/Toast.js";
 import { AboutTab } from "./dialogs/AboutTab.js";
@@ -203,6 +204,8 @@ window.addEventListener("pagehide", () => {
 
 // The tabs this chat session owns (its own tab group; never the user's tabs)
 let browserSession: BrowserSession | undefined;
+// The tab shown above the composer: the agent's current tab, not the one the user is looking at.
+let contextTab: chrome.tabs.Tab | undefined;
 // The tab this panel is bound to (Claude-style per-tab binding), from ?tabId= in the URL.
 let homeTabId: number | undefined;
 
@@ -219,6 +222,7 @@ function sessionLabel(): string {
 
 async function openBrowserSession(id: string): Promise<void> {
 	browserSession = await BrowserSession.open(id, sessionLabel(), currentWindowId);
+	browserSession.onCurrentTabChange = () => void refreshContextTab();
 	setCurrentBrowserSession(browserSession);
 	// Bind this panel's tab to the session (exclusive) and put it in the task's group so the
 	// group exists from the start and the agent has a page to work with. The tab keeps showing
@@ -265,7 +269,13 @@ async function pruneEmptyUnsavedSessions(): Promise<void> {
 /** User gesture: hand the tab they are looking at to the agent. */
 async function shareActiveTab(): Promise<void> {
 	await adoptActiveTab(true);
+	await refreshContextTab();
 	renderApp();
+}
+
+async function refreshContextTab(): Promise<void> {
+	contextTab = await browserSession?.currentTab().catch(() => undefined);
+	chatPanel.agentInterface?.requestUpdate();
 }
 
 /**
@@ -962,6 +972,8 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				saveSession();
 			}
 
+			if (event.type === "tool_execution_end" || event.type === "agent_end") void refreshContextTab();
+
 			if (event.type === "agent_end") {
 				recoverFailedTurn()
 					.catch((err) => {
@@ -1115,6 +1127,8 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 
 	// Register custom message renderers after agentInterface is available
 	if (chatPanel.agentInterface) {
+		chatPanel.agentInterface.composerHeader = () => ContextTab(contextTab);
+		void refreshContextTab();
 		registerWelcomeRenderer(agent, chatPanel.agentInterface, {
 			hasProvider: hasAnyApiKey,
 			connect: async () => {
@@ -1198,10 +1212,12 @@ function noticeBar(text: string, ...actions: TemplateResult[]): TemplateResult {
 }
 
 const renderApp = () => {
+	// The shell from sidepanel.html stays until the chat exists: swapping sooner drops the composer for a frame.
+	if (!chatPanel?.agentInterface) return;
 	const appHtml = html`
 		<div class="w-full h-full flex flex-col bg-background text-foreground overflow-hidden">
 			<!-- Header: sessions, title, new chat, and everything else behind the overflow menu -->
-			<div class="flex items-center gap-1 h-11 px-1.5 border-b border-border shrink-0">
+			<div class="flex items-center gap-1 h-11 px-2 border-b border-border shrink-0">
 				${Button({
 					variant: "ghost",
 					size: "icon",
@@ -1280,7 +1296,7 @@ const renderApp = () => {
 				${
 					isRecording
 						? html`<button
-								class="flex items-center gap-1.5 h-7 px-2 rounded-md text-xs font-medium text-destructive hover:bg-accent"
+								class="flex items-center gap-1 h-7 px-2 rounded-md text-xs font-medium text-destructive hover:bg-accent"
 								title="Stop recording and save as skill"
 								@click=${toggleRecording}
 							>
@@ -1350,6 +1366,8 @@ const renderApp = () => {
 		</div>
 	`;
 
+	// sidepanel.html paints this shell before the bundle loads, at the same geometry.
+	document.getElementById("boot-shell")?.remove();
 	render(appHtml, document.body);
 };
 
@@ -1360,6 +1378,9 @@ const renderApp = () => {
 // The agent only hears about URL changes on its own current tab (a page redirecting
 // or the user navigating a shared tab). The user's other tabs are never observed.
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+	if (browserSession?.currentTabId === tabId && (changeInfo.url || changeInfo.title || changeInfo.favIconUrl)) {
+		void refreshContextTab();
+	}
 	if (
 		changeInfo.url &&
 		tab.url &&
@@ -1476,16 +1497,6 @@ async function testSteps(): Promise<boolean> {
 // INIT
 // ============================================================================
 async function initApp() {
-	// Show loading
-	render(
-		html`
-			<div class="w-full h-full flex items-center justify-center bg-background text-foreground">
-				<div class="text-muted-foreground">Loading...</div>
-			</div>
-		`,
-		document.body,
-	);
-
 	// Load showJsonMode setting
 	const stored = await chrome.storage.local.get("showJsonMode");
 	const showJsonModeEnabled = (stored.showJsonMode as boolean) || false;
@@ -1616,4 +1627,17 @@ async function initApp() {
 // Register custom user message renderer early, before any session loads
 registerUserMessageRenderer();
 
-initApp();
+initApp().catch((err) => {
+	console.error("The panel failed to start:", err);
+	// Once the chat is up a later failure must not replace it.
+	if (!document.getElementById("boot-shell")) return;
+	document.getElementById("boot-shell")?.remove();
+	render(
+		html`<div class="w-full h-full flex flex-col items-center justify-center gap-4 p-4 text-center bg-background" role="alert">
+			<p class="max-w-xs text-sm text-foreground">Sitegeist could not start.</p>
+			<p class="max-w-xs text-xs text-muted-foreground">${err instanceof Error ? err.message : String(err)}</p>
+			${Button({ variant: "default", size: "sm", children: "Reload", onClick: () => location.reload() })}
+		</div>`,
+		document.body,
+	);
+});

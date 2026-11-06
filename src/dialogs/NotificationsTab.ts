@@ -54,7 +54,7 @@ export class NotificationsTab extends SettingsTab {
 
 	render(): TemplateResult {
 		return html`
-			<div class="flex flex-col gap-5">
+			<div class="flex flex-col gap-6">
 				<p class="text-sm text-muted-foreground">
 					Agents work in background tabs. Get a desktop notification when a task finishes, fails, or needs you.
 					Clicking it opens the tab.

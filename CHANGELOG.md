@@ -45,6 +45,11 @@
 
 ### Changed
 
+- New look for the panel: warm light and cool dark colors, a teal accent on the caret, focus ring and links, a rounded composer with a `+` and a round send button, and a calmer empty chat.
+- The panel now uses a bundled typeface, Public Sans, with larger text: 16 px in the chat and composer. The theme's font never reached the page before, so it was on the system font.
+- Nothing moves while the panel loads: the header and composer are in place from the first frame, and suggestions arrive in space of their own. Replaces the "Loading..." screen.
+- A row above the composer shows the tab the agent is working on, following it as the agent moves between tabs.
+- Padding and gaps follow a 4 px scale everywhere in the panel, and your messages sit on the right.
 - `find` works from what you would call an element ("search bar", "login button"): role words, common synonyms and phrases are understood instead of plain substring matches.
 - Full access: a browser that had picked "Ask before opening a new site" moves to "Allow any site" once (picking it again sticks), and under full access raw `cdp` refuses nothing. The list of refused commands only protected the per-site permissions.
 - Fewer model turns over the bridge: `navigate` and `actions` take `read` and return the page in the same call, `actions` learned `navigate` and `fill` steps, and `click`, `fill` and friends can name an element by what a person reads (`text`). A seven-field form went from 14 tool calls to 2.
@@ -59,11 +64,11 @@
 - Removed upstream working notes from the repository root (`db.md`, `gmail.md`, `plan.md`).
 - Manifest `key` is the private fork's CRX signing key (id `lnncppjiohlpejgcbdgoihplimdckddn`); the bridge's native messaging manifest allows that id.
 - `typescript@^5.9.3` is a devDependency, so `tsc` no longer resolves to a global TypeScript 7.
-- Side panel redesign (monochrome): neutral gray tokens, no hardcoded hues, grayscale charts; dialogs are full-height sheets below 640px (mini-lit patch `patches/mini-lit-v0.2.1-sitegeist.patch`, applied by `scripts/setup-siblings.sh`).
+- Side panel redesign: grayscale charts; dialogs are full-height sheets below 640px (mini-lit patch `patches/mini-lit-v0.2.1-sitegeist.patch`, applied by `scripts/setup-siblings.sh`).
 - Settings is a drill-in list of sections (Providers, Custom providers, Skills, Bridge, Costs, Proxy, About) instead of a seven-tab strip that overflowed the panel; Esc goes back, then closes.
 - Header: Sessions, chat title, New chat and an overflow menu (Share this tab, Record a skill, Download chat, Light/Dark/System theme, Settings); a Stop control stays visible while recording.
 - Chat: per-message usage on hover, a finished thinking block reads Thinking, send/stop is the one filled composer control; Sessions sheet has a one-line total and icon actions.
-- First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb and suggestion pills are grayscale.
+- First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb is grayscale.
 
 ### Fixed
 

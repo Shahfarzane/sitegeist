@@ -28,8 +28,8 @@ export class SitegeistUserMessage extends LitElement {
 						?.text || "";
 
 		return html`
-			<div class="flex justify-start ml-4">
-				<div class="user-message-container py-2 px-4 rounded-xl">
+			<div class="flex justify-end">
+				<div class="user-message-container py-3 px-4 rounded-2xl">
 					<markdown-block .content=${content}></markdown-block>
 					${
 						this.message.attachments && this.message.attachments.length > 0

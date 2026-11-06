@@ -79,13 +79,13 @@ export class ReplPanel extends LitElement {
 										? Button({
 												variant: "destructive",
 												size: "sm",
-												children: html`<span class="flex items-center gap-1.5">${icon(Square, "sm")} Abort</span>`,
+												children: html`<span class="flex items-center gap-2">${icon(Square, "sm")} Abort</span>`,
 												onClick: () => this.abortExecution(),
 											})
 										: Button({
 												variant: "default",
 												size: "sm",
-												children: html`<span class="flex items-center gap-1.5">${icon(Play, "sm")} Run</span>`,
+												children: html`<span class="flex items-center gap-2">${icon(Play, "sm")} Run</span>`,
 												onClick: () => this.executeCode(),
 												disabled: !this.code.trim(),
 											})

@@ -3,11 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>pi-ai</title>
+    <title>Sitegeist</title>
     <script src="theme-loader.js"></script>
+    <link rel="preload" href="public-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="app.css" />
   </head>
   <body class="h-full w-full m-0 overflow-hidden bg-background">
+    <!-- Painted before the bundle loads, with the final header and composer geometry. -->
+    <div id="boot-shell" class="w-full h-full flex flex-col bg-background overflow-hidden" aria-hidden="true">
+      <div class="h-11 border-b border-border shrink-0"></div>
+      <div class="flex-1 min-h-0"></div>
+      <div class="shrink-0 w-full max-w-3xl mx-auto px-4">
+        <div class="h-10"></div>
+        <div class="h-[94px] bg-card rounded-[20px] border border-border px-4 pt-4 text-base text-foreground/50">Ask anything…</div>
+        <div class="h-6"></div>
+      </div>
+    </div>
     <script type="module" src="sidepanel.js"></script>
   </body>
 </html>

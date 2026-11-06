@@ -178,7 +178,7 @@ export class ConnectorsTab extends SettingsTab {
 
 	render(): TemplateResult {
 		return html`
-			<div class="flex flex-col gap-5">
+			<div class="flex flex-col gap-6">
 				<p class="text-sm text-muted-foreground">
 					MCP servers the agent can use next to the browser. Add a remote server here. For a server that runs as a
 					local command, use <code class="text-xs">sitegeist connectors add &lt;name&gt; -- &lt;command&gt;</code> on this
