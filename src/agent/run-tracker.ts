@@ -52,7 +52,8 @@ export function answerOpenToolCalls(messages: AgentMessage[]): AgentMessage[] {
 	for (const m of messages) if (m.role === "toolResult") answered.add(m.toolCallId);
 	const open: AgentMessage[] = [];
 	for (const m of messages) {
-		if (m.role !== "assistant") continue;
+		// Providers never see a failed turn, so a result for one of its calls would be an orphan.
+		if (m.role !== "assistant" || m.stopReason === "error" || m.stopReason === "aborted") continue;
 		for (const block of m.content) {
 			if (block.type !== "toolCall" || answered.has(block.id)) continue;
 			open.push({

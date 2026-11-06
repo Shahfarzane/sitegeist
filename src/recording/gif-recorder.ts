@@ -26,6 +26,7 @@ const MAX_DELAY_MS = 1500;
 const LAST_FRAME_MS = 1800;
 /** A click marker stays this long, so it survives into a frame. */
 const OVERLAY_MS = 900;
+const EXPORT_TIMEOUT_MS = 240000;
 
 export interface GifAction {
 	kind: "click" | "drag" | "label";
@@ -47,7 +48,8 @@ export class GifRecorder {
 	private tabId?: number;
 	private viewportWidth = 0;
 
-	constructor(private readonly owner: string) {}
+	/** The client whose disconnect ends a running cast. */
+	private owner = "panel";
 
 	get recording(): boolean {
 		return this.tabId !== undefined;
@@ -70,10 +72,11 @@ export class GifRecorder {
 	}
 
 	/** Start or follow the agent to another tab; frames add to the same recording. */
-	async start(tabId: number): Promise<void> {
+	async start(tabId: number, owner = "panel"): Promise<void> {
 		if (this.tabId === tabId) return;
 		if (this.tabId !== undefined) await stopScreencast(this.tabId);
-		this.tabId = tabId;
+		this.tabId = undefined;
+		this.owner = owner;
 		await this.still(tabId);
 		await startScreencast(
 			tabId,
@@ -84,6 +87,7 @@ export class GifRecorder {
 				if (this.tabId === tabId) this.tabId = undefined;
 			},
 		);
+		this.tabId = tabId;
 	}
 
 	note(action: GifAction): void {
@@ -137,13 +141,15 @@ export class GifRecorder {
 		await ensureOffscreen();
 		const port = chrome.runtime.connect({ name: GIF_PORT });
 		try {
+			let timer: ReturnType<typeof setTimeout> | undefined;
 			const done = new Promise<GifResult>((resolve, reject) => {
+				timer = setTimeout(() => reject(new Error("GIF encoding timed out")), EXPORT_TIMEOUT_MS);
 				port.onMessage.addListener((message: GifWorkerReply) => {
 					if (message.type === "done") resolve(message.result);
 					else reject(new Error(`GIF encoding failed: ${message.message}`));
 				});
 				port.onDisconnect.addListener(() => reject(new Error("The GIF encoder went away")));
-			});
+			}).finally(() => clearTimeout(timer));
 			const send = (message: GifJobMessage) => port.postMessage(message);
 			send({ type: "start", options });
 			for (const frame of this.timeline()) send({ type: "frame", frame });
@@ -164,7 +170,7 @@ const recorders = new WeakMap<BrowserSession, GifRecorder>();
 export function gifRecorderFor(session: BrowserSession): GifRecorder {
 	let recorder = recorders.get(session);
 	if (!recorder) {
-		recorder = new GifRecorder(`gif:${crypto.randomUUID()}`);
+		recorder = new GifRecorder();
 		recorders.set(session, recorder);
 	}
 	return recorder;

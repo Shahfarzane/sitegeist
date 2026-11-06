@@ -21,8 +21,10 @@ interface ConnectorFile {
 	mcpServers: Record<string, LocalConnector>;
 }
 
-/** Native messaging frames top out at 1 MiB; the rest of the frame needs some room. */
-const MAX_PART_CHARS = 800_000;
+/** Native messaging frames top out at 1 MiB, in bytes, after JSON encoding. */
+const MAX_WHOLE_BYTES = 800_000;
+/** A character is at most 3 bytes once encoded, so a part stays under the limit. */
+const MAX_PART_CHARS = 250_000;
 
 export function configDir(): string {
 	return process.env.SITEGEIST_CONFIG_DIR ?? join(homedir(), ".config", "sitegeist");
@@ -97,7 +99,7 @@ export function runConnector(name: string, send: (frame: ConnectorFrame) => void
 	if (child.stdout) {
 		createInterface({ input: child.stdout }).on("line", (line) => {
 			if (!line.trim()) return;
-			if (line.length <= MAX_PART_CHARS) {
+			if (Buffer.byteLength(line) <= MAX_WHOLE_BYTES) {
 				try {
 					send({ type: "connector_message", message: JSON.parse(line) });
 				} catch {

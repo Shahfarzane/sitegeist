@@ -345,6 +345,12 @@ export const handlers: Record<string, Handler> = {
 		const key = `${ctx.clientId}:${requireStr(params, "uploadId")}`;
 		const data = requireStr(params, "data");
 		const upload = uploads.get(key) ?? { chunks: [], chars: 0 };
+		// A reconnect mid-upload lands on a new client or a fresh worker: the start is gone, and
+		// delivering the rest would hand the page a truncated file with no error.
+		if (num(params, "offset") !== upload.chars) {
+			uploads.delete(key);
+			throw new BridgeError(ERR.BAD_PARAMS, "The upload was interrupted. Call file_upload again.");
+		}
 		upload.chars += data.length;
 		if (upload.chars > MAX_UPLOAD_CHARS) {
 			uploads.delete(key);
@@ -386,7 +392,7 @@ export const handlers: Record<string, Handler> = {
 		const recorder = gifRecorderFor(ctx.session);
 		switch (requireStr(params, "action")) {
 			case "start_recording":
-				await recorder.start(await resolveTab(ctx, params, true));
+				await recorder.start(await resolveTab(ctx, params, true), ctx.clientId);
 				return { recording: true };
 			case "stop_recording":
 				await recorder.stop();

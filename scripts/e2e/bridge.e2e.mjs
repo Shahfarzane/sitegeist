@@ -264,3 +264,19 @@ test("skills and prompts reach a harness", async () => {
 	const prompts = await harness.callText("prompts_list", {});
 	assert.ok(prompts.prompts.some((p) => p.name === "greet"));
 });
+
+test("a harness that disconnects mid-recording leaves the recorder usable", async () => {
+	const first = await Harness.connect(browser, { session: "gif-handover" });
+	await first.callText("navigate", { url: `${server.origin}/animated` });
+	await first.callText("gif_creator", { action: "start_recording" });
+	await new Promise((r) => setTimeout(r, 400));
+	await first.close();
+	await new Promise((r) => setTimeout(r, 300));
+	const second = await Harness.connect(browser, { session: "gif-handover" });
+	await second.callText("gif_creator", { action: "start_recording" });
+	await new Promise((r) => setTimeout(r, 900));
+	const stopped = await second.callText("gif_creator", { action: "stop_recording" });
+	assert.ok(stopped.frames >= 3, `${stopped.frames} frames`);
+	await second.callText("gif_creator", { action: "clear" });
+	await second.close();
+});

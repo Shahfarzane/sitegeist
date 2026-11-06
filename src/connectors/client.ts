@@ -123,6 +123,8 @@ export interface ToolContent {
 
 export class ConnectorClient {
 	private client?: Client;
+	/** Kept apart from the client: a connect that times out has a transport but no client yet. */
+	private transport?: Transport;
 
 	constructor(
 		readonly connector: Connector,
@@ -137,6 +139,7 @@ export class ConnectorClient {
 	}
 
 	private async attach(transport: Transport): Promise<void> {
+		this.transport = transport;
 		const client = this.makeClient();
 		await client.connect(transport);
 		this.client = client;
@@ -219,6 +222,8 @@ export class ConnectorClient {
 
 	async close(): Promise<void> {
 		await this.client?.close().catch(() => undefined);
+		await this.transport?.close().catch(() => undefined);
 		this.client = undefined;
+		this.transport = undefined;
 	}
 }

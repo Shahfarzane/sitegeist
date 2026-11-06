@@ -7,6 +7,8 @@ import { applyPalette, GIFEncoder, type GifEncoderInstance, quantize } from "gif
 import type { GifFrame, GifJobMessage, GifOptions, GifOverlay, GifWorkerReply } from "./gif-types.js";
 
 const FORMAT = "rgb565";
+/** A message between extension contexts tops out at 64 MiB, and base64 adds a third. */
+const MAX_GIF_BYTES = 40 * 1024 * 1024;
 const ACCENT = "#e8590c";
 const ARROW = "#e03131";
 
@@ -128,6 +130,8 @@ self.onmessage = (event: MessageEvent<GifJobMessage>) => {
 				if (!encoder) throw new Error("No frames to encode");
 				encoder.finish();
 				const bytes = encoder.bytes();
+				if (bytes.length > MAX_GIF_BYTES)
+					throw new Error("The GIF is too large; use a smaller maxWidth or a higher quality number");
 				reply({
 					type: "done",
 					result: { data: toBase64(bytes), width, height, frames, bytes: bytes.length },

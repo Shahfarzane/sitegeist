@@ -27,11 +27,21 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 						inputSchema: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
 					},
 					{ name: "big", description: "A large result", inputSchema: { type: "object", properties: {} } },
+					{
+						name: "wide",
+						description: "A large result in three-byte characters",
+						inputSchema: { type: "object", properties: {} },
+					},
 				],
 			},
 		});
 	} else if (method === "tools/call") {
-		const text = params.name === "big" ? "z".repeat(2_000_000) : `local says ${params.arguments.text}`;
+		const text =
+			params.name === "big"
+				? "z".repeat(2_000_000)
+				: params.name === "wide"
+					? "語".repeat(700_000)
+					: `local says ${params.arguments.text}`;
 		write({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text }] } });
 	} else write({ jsonrpc: "2.0", id, error: { code: -32601, message: "no" } });
 });

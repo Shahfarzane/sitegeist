@@ -752,6 +752,8 @@ export async function stopScreencast(tabId: number): Promise<boolean> {
 /** Stop every cast a client started; its frames would have nowhere to go. */
 export async function stopScreencastsOwnedBy(owner: string | undefined): Promise<void> {
 	for (const [tabId, cast] of [...screencasts]) {
-		if (owner === undefined || cast.owner === owner) await stopScreencast(tabId);
+		if (owner !== undefined && cast.owner !== owner) continue;
+		await stopScreencast(tabId);
+		cast.ended?.("client disconnected");
 	}
 }

@@ -49,6 +49,16 @@ export function toToolContent(content: ToolContent[]): Array<TextContent | Image
 	return out.length > 0 ? out : [{ type: "text", text: "(no output)" }];
 }
 
+/** Two connectors can clean up to the same name, and providers refuse a duplicate tool. */
+export function uniqueToolNames(tools: AgentTool<any>[]): AgentTool<any>[] {
+	const seen = new Set<string>();
+	return tools.filter((tool) => {
+		if (seen.has(tool.name)) return false;
+		seen.add(tool.name);
+		return true;
+	});
+}
+
 function toAgentTool(client: ConnectorClient, tool: ConnectorTool): AgentTool<any> {
 	const label = client.connector.name;
 	return {
@@ -79,8 +89,18 @@ export class ConnectorManager {
 	private clients = new Map<string, ConnectorClient>();
 	private statuses = new Map<string, ConnectorStatus>();
 	private agentTools: AgentTool<any>[] = [];
+	/** Every tool this manager gave out, so a refresh can take them all back. */
+	private issued = new WeakSet<AgentTool<any>>();
 
 	constructor(private readonly storage: ConnectorStorage) {}
+
+	owns(tool: AgentTool<any>): boolean {
+		return this.issued.has(tool);
+	}
+
+	adopt(tool: AgentTool<any>): void {
+		this.issued.add(tool);
+	}
 
 	get tools(): AgentTool<any>[] {
 		return this.agentTools;
@@ -132,16 +152,16 @@ export class ConnectorManager {
 			if (!connector.enabled) this.statuses.set(connector.name, { connector, state: "off", tools: 0 });
 		}
 		const groups = await Promise.all(connectors.filter((c) => c.enabled).map((c) => this.connectOne(c)));
-		this.agentTools = groups.flat();
+		this.agentTools = uniqueToolNames(groups.flat());
+		for (const tool of this.agentTools) this.adopt(tool);
 		return this.agentTools;
 	}
 
-	/** Run a connector's OAuth login, then pick up its tools. */
+	/** Run a connector's OAuth login. Refresh afterwards to pick up its tools. */
 	async login(connector: Connector): Promise<void> {
 		const client = this.clientFor(connector);
 		await client.login();
 		await client.close();
-		await this.refresh();
 	}
 
 	private async closeAll(): Promise<void> {

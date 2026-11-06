@@ -456,8 +456,9 @@ export class BrowserSession {
 				}
 			}
 			table[this.state.id] = this.state;
+			// Taken here, not after the write: a change made during the write must not look saved.
+			this.persistedFingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 		});
-		this.persistedFingerprint = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 	}
 
 	/** Drop tabs that no longer exist and re-find the group if the id went stale. */
@@ -672,11 +673,13 @@ export class BrowserSession {
 				if (target.currentTabId === tabId) target.currentTabId = target.tabIds[target.tabIds.length - 1];
 				table[s.id] = target;
 			}
+			// In the same step: a stale write from another context then sees whose tab this is.
+			if (!this.state.tabIds.includes(tabId)) this.state.tabIds.push(tabId);
+			if (makeCurrent) this.state.currentTabId = tabId;
+			table[this.state.id] = this.state;
 		});
 		// Adopting is a deliberate hand-over, so it overrides an earlier "taken back".
 		await unmarkReleased(tabId);
-		if (!this.state.tabIds.includes(tabId)) this.state.tabIds.push(tabId);
-		if (makeCurrent) this.state.currentTabId = tabId;
 		await this.groupTab(tabId);
 		await this.persist();
 	}

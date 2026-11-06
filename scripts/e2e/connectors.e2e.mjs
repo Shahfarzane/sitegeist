@@ -186,6 +186,7 @@ test("a local command connector works through the native host, past the 1 MiB li
 	turns = (_body, index) => {
 		if (index === 0) return { toolCalls: [{ name: "fake-local__echo", args: { text: "ping" } }] };
 		if (index === 1) return { toolCalls: [{ name: "fake-local__big", args: {} }] };
+		if (index === 2) return { toolCalls: [{ name: "fake-local__wide", args: {} }] };
 		return { text: "local connector used" };
 	};
 	const context = await openPanel(browser, server, { path: "/c2" });
@@ -195,6 +196,7 @@ test("a local command connector works through the native host, past the 1 MiB li
 	assert.ok(lastToolText(1).includes("local says ping"), lastToolText(1).slice(0, 200));
 	assert.match(lastToolText(2), /Truncated: the result has 2000000 characters/);
 	assert.ok(lastToolText(2).length < 70000, `big result was ${lastToolText(2).length}`);
+	assert.match(lastToolText(3), /Truncated: the result has 700000 characters/);
 	await context.panel.close();
 	await context.tab.close();
 });

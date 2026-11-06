@@ -584,7 +584,8 @@ export async function runMcpServer(): Promise<void> {
 					const uploadId = `${process.pid}-${Date.now()}-${index}`;
 					const data = readFileSync(path).toString("base64");
 					for (let at = 0; at < data.length || at === 0; at += UPLOAD_CHUNK_CHARS) {
-						await client.call("upload.chunk", { uploadId, data: data.slice(at, at + UPLOAD_CHUNK_CHARS) || " " });
+						const chunk = data.slice(at, at + UPLOAD_CHUNK_CHARS) || " ";
+						await client.call("upload.chunk", { uploadId, offset: at, data: chunk });
 					}
 					files.push({
 						uploadId,

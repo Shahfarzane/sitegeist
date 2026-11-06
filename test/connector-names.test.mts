@@ -3,7 +3,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { connectorToolName, toToolContent } from "../src/connectors/manager.ts";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { ConnectorManager, connectorToolName, toToolContent, uniqueToolNames } from "../src/connectors/manager.ts";
 
 test("tool names stay valid", () => {
 	assert.equal(connectorToolName("My Notes!", "search.items"), "My_Notes__search_items");
@@ -26,4 +27,21 @@ test("MCP content maps to tool content", () => {
 	assert.deepEqual(toToolContent([]), [{ type: "text", text: "(no output)" }]);
 	const [huge] = toToolContent([{ type: "text", text: "x".repeat(500000) }]);
 	assert.ok(huge.type === "text" && huge.text.length < 70000 && huge.text.includes("500000 characters"));
+});
+
+test("a refresh replaces tools it issued earlier, whoever triggered it", async () => {
+	const manager = new ConnectorManager({ list: async () => [], save: async () => undefined });
+	const issued = { name: "a__b" } as AgentTool<any>;
+	const builtIn = { name: "navigate" } as AgentTool<any>;
+	assert.equal(manager.owns(builtIn), false);
+	manager.adopt(issued);
+	assert.equal(manager.owns(issued), true);
+});
+
+test("two connectors cannot give the agent the same tool name", () => {
+	const tools = [{ name: "a__b" }, { name: "a__b" }, { name: "a__c" }] as AgentTool<any>[];
+	assert.deepEqual(
+		uniqueToolNames(tools).map((t) => t.name),
+		["a__b", "a__c"],
+	);
 });
