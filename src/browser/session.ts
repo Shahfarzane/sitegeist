@@ -361,6 +361,10 @@ export class BrowserSession {
 		return this.state.currentTabId;
 	}
 
+	/** Runs after the tab tools act on changes, by any route. */
+	onCurrentTabChange?: () => void;
+	private reportedTabId: number | undefined;
+
 	get homeTabId(): number | undefined {
 		return this.state.homeTabId;
 	}
@@ -462,6 +466,10 @@ export class BrowserSession {
 			written = JSON.stringify({ ...this.state, lastUsedAt: 0 });
 		});
 		this.persistedFingerprint = written;
+		if (this.state.currentTabId !== this.reportedTabId) {
+			this.reportedTabId = this.state.currentTabId;
+			this.onCurrentTabChange?.();
+		}
 	}
 
 	/** Drop tabs that no longer exist and re-find the group if the id went stale. */

@@ -4,17 +4,20 @@ import { keyed } from "lit/directives/keyed.js";
 import { Globe } from "lucide";
 
 function favicon(url: string | undefined): TemplateResult {
-	if (!url) return icon(Globe, "md", "shrink-0");
+	const globe = icon(Globe, "md", "shrink-0");
+	if (!url) return globe;
 	return keyed(
 		url,
 		html`<img
-			src=${url}
-			alt=""
-			class="size-5 shrink-0 rounded-sm"
-			@error=${(e: Event) => {
-				(e.target as HTMLImageElement).style.visibility = "hidden";
-			}}
-		/>`,
+				src=${url}
+				alt=""
+				class="size-5 shrink-0 rounded-sm"
+				@error=${(e: Event) => {
+					const image = e.target as HTMLImageElement;
+					image.hidden = true;
+					(image.nextElementSibling as HTMLElement).hidden = false;
+				}}
+			/><span class="shrink-0" hidden>${globe}</span>`,
 	) as TemplateResult;
 }
 

@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { Browser, composerReady, openPanel, seedChat, startFakeServer } from "./lib.mjs";
+import { Browser, composerReady, openPanel, seedChat, sendPrompt, startFakeServer } from "./lib.mjs";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -19,10 +19,12 @@ const init = `
 	document.addEventListener("readystatechange", () => {
 		if (document.readyState !== "interactive") return;
 		requestAnimationFrame(() => {
-			const shell = document.getElementById("boot-shell");
-			if (!shell) return;
 			const box = (el) => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
-			window.__shell = { header: box(shell.children[0]), composer: box(shell.children[2].children[1]) };
+			const shell = document.getElementById("boot-shell");
+			// A fast start can replace the shell before this frame; then the app is what was painted.
+			window.__firstFrame = shell
+				? { header: box(shell.children[0]), composer: box(shell.children[2].children[1]) }
+				: { header: box(document.querySelector("div.h-11")), composer: box(document.querySelector("message-editor").firstElementChild) };
 		});
 	});
 `;
@@ -93,8 +95,21 @@ async function load(width, query = "&new=true") {
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/page": "<!doctype html><title>Layout fixture</title><h1>Layout fixture</h1>" },
-		script: () => ({ text: "ok" }),
+		routes: {
+			"/page": "<!doctype html><title>Layout fixture</title><h1>Layout fixture</h1>",
+			"/second": "<!doctype html><title>Second fixture</title><h1>Second fixture</h1>",
+		},
+		script: (_body, index) => {
+			if (index === 0)
+				return { toolCalls: [{ name: "navigate", args: { url: `${server.origin}/second`, newTab: true } }] };
+			if (index === 1) {
+				const code = `await navigate({ switchToTab: ${context.tabId} });
+					await new Promise((r) => setTimeout(r, 4000));
+					return "done";`;
+				return { toolCalls: [{ name: "repl", args: { title: "Switch back", code } }] };
+			}
+			return { text: "ok" };
+		},
 	});
 	browser = await Browser.launch();
 	context = await openPanel(browser, server, { init });
@@ -109,9 +124,9 @@ for (const width of [360, 400, 500]) {
 	test(`nothing moves on load at ${width} px`, async () => {
 		await load(width);
 		const { panel } = context;
-		const shell = await panel.evaluate("window.__shell");
-		assert.ok(shell, "the shell was on screen for the first frame");
-		assert.deepEqual(await panel.evaluate(finalGeometry), shell);
+		const firstFrame = await panel.evaluate("window.__firstFrame");
+		assert.ok(firstFrame, "the first frame was measured");
+		assert.deepEqual(await panel.evaluate(finalGeometry), firstFrame);
 		assert.equal(await panel.evaluate("window.__shifts"), 0);
 		assert.equal(await panel.evaluate("document.documentElement.scrollWidth <= innerWidth"), true);
 	});
@@ -159,7 +174,7 @@ test("a long chat scrolls and the header and composer stay put", async () => {
 	await seedChat(context, "layout-long-chat", longChat, "Long chat");
 	await panel.waitFor(`document.body.innerText.includes("Answer 23")`);
 	await sleep(800);
-	const shell = await panel.evaluate("window.__shell");
+	const firstFrame = await panel.evaluate("window.__firstFrame");
 	const scroll = `(() => {
 		const chat = document.querySelector("agent-interface .overflow-y-auto");
 		return { page: document.documentElement.scrollHeight - innerHeight, chat: chat.scrollHeight - chat.clientHeight };
@@ -167,10 +182,10 @@ test("a long chat scrolls and the header and composer stay put", async () => {
 	const { page, chat } = await panel.evaluate(scroll);
 	assert.equal(page, 0, "the page itself never scrolls");
 	assert.ok(chat > 0, "the chat does");
-	assert.deepEqual(await panel.evaluate(finalGeometry), shell);
+	assert.deepEqual(await panel.evaluate(finalGeometry), firstFrame);
 	await panel.evaluate(`document.querySelector("agent-interface .overflow-y-auto").scrollTop = 0`);
 	await sleep(100);
-	assert.deepEqual(await panel.evaluate(finalGeometry), shell);
+	assert.deepEqual(await panel.evaluate(finalGeometry), firstFrame);
 	assert.deepEqual(await panel.evaluate(offScale), []);
 	const type = (selector) =>
 		panel.evaluate(`(() => {
@@ -202,4 +217,39 @@ test("padding and gaps stay on the 4 px scale", async () => {
 		await panel.evaluate(`document.querySelector('[aria-label="Back to settings"]').click()`);
 		await sleep(50);
 	}
+});
+
+test("a favicon that fails to load falls back to the globe", async () => {
+	const broken = `{
+		const get = chrome.tabs.get.bind(chrome.tabs);
+		chrome.tabs.get = (id) => get(id).then((tab) => ({ ...tab, favIconUrl: "http://127.0.0.1:9/missing.png" }));
+	}`;
+	const panel = await browser.open(`${context.url}&new=true`, { init: broken });
+	await composerReady(panel);
+	await panel.waitFor(`document.querySelector("div.mb-2 img")?.hidden === true`);
+	assert.equal(await panel.evaluate(`!!document.querySelector("div.mb-2 span:not([hidden]) svg")`), true);
+	await panel.send("Page.close");
+});
+
+test("a panel that cannot start says so instead of showing a dead composer", async () => {
+	const failing = `chrome.windows.getCurrent = () => Promise.reject(new Error("No window"));`;
+	const panel = await browser.open(`${context.url}&new=true`, { init: failing });
+	await panel.waitFor(`document.body.innerText.includes("Sitegeist could not start")`);
+	assert.equal(await panel.evaluate(`document.getElementById("boot-shell")`), null);
+	assert.match(await panel.evaluate("document.body.innerText"), /No window/);
+	await panel.send("Page.close");
+});
+
+test("the tab row follows the agent while a script is still running", async () => {
+	await load(400);
+	const { panel } = context;
+	const row = `document.querySelector("div.mb-2")?.textContent ?? ""`;
+	await sendPrompt(panel, "Switch tabs");
+	await panel.waitFor(`(${row}).includes("Second fixture")`);
+	await panel.waitFor(`(${row}).includes("Layout fixture")`);
+	assert.equal(
+		await panel.evaluate(`!!document.querySelector('button[title="Stop"]')`),
+		true,
+		"the script is still running",
+	);
 });

@@ -222,6 +222,7 @@ function sessionLabel(): string {
 
 async function openBrowserSession(id: string): Promise<void> {
 	browserSession = await BrowserSession.open(id, sessionLabel(), currentWindowId);
+	browserSession.onCurrentTabChange = () => void refreshContextTab();
 	setCurrentBrowserSession(browserSession);
 	// Bind this panel's tab to the session (exclusive) and put it in the task's group so the
 	// group exists from the start and the agent has a page to work with. The tab keeps showing
@@ -1626,4 +1627,17 @@ async function initApp() {
 // Register custom user message renderer early, before any session loads
 registerUserMessageRenderer();
 
-initApp();
+initApp().catch((err) => {
+	console.error("The panel failed to start:", err);
+	// Once the chat is up a later failure must not replace it.
+	if (!document.getElementById("boot-shell")) return;
+	document.getElementById("boot-shell")?.remove();
+	render(
+		html`<div class="w-full h-full flex flex-col items-center justify-center gap-4 p-4 text-center bg-background" role="alert">
+			<p class="max-w-xs text-sm text-foreground">Sitegeist could not start.</p>
+			<p class="max-w-xs text-xs text-muted-foreground">${err instanceof Error ? err.message : String(err)}</p>
+			${Button({ variant: "default", size: "sm", children: "Reload", onClick: () => location.reload() })}
+		</div>`,
+		document.body,
+	);
+});
