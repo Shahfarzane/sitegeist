@@ -24,6 +24,7 @@ import {
 } from "../browser/cdp.js";
 import { injectScript } from "../browser/inject.js";
 import {
+	type ElementTarget,
 	fillElement,
 	goBack,
 	goForward,
@@ -32,6 +33,7 @@ import {
 	pageHtml,
 	pageText,
 	runInPage,
+	type Snapshot,
 	scrollPage,
 	snapshot,
 	waitFor,
@@ -137,8 +139,17 @@ async function tabSummary(tabId: number, stillLoading = false) {
 	};
 }
 
-function target(params: Params): { ref?: string; selector?: string } {
-	return { ref: str(params, "ref"), selector: str(params, "selector") };
+function target(params: Params): ElementTarget {
+	return { ref: str(params, "ref"), selector: str(params, "selector"), text: str(params, "text") };
+}
+
+function hasTarget(t: ElementTarget): boolean {
+	return !!(t.ref || t.selector || t.text);
+}
+
+/** The page after a step, for callers that asked for it instead of a separate read_page. */
+function readPage(tabId: number, read: unknown): Promise<Snapshot> {
+	return snapshot(tabId, { filter: read === "interactive" ? "interactive" : "all", maxTextChars: 3000 });
 }
 
 async function pointFor(_ctx: HandlerContext, params: Params, tabId: number): Promise<{ x: number; y: number }> {
@@ -146,7 +157,7 @@ async function pointFor(_ctx: HandlerContext, params: Params, tabId: number): Pr
 	const y = num(params, "y");
 	if (x !== undefined && y !== undefined) return screenshotToCss(tabId, { x, y });
 	const t = target(params);
-	if (!t.ref && !t.selector) throw new BridgeError(ERR.BAD_PARAMS, "Provide ref, selector, or x and y");
+	if (!hasTarget(t)) throw new BridgeError(ERR.BAD_PARAMS, "Provide ref, selector, text, or x and y");
 	const rect = await locate(tabId, t);
 	return { x: rect.x, y: rect.y };
 }
@@ -154,6 +165,9 @@ async function pointFor(_ctx: HandlerContext, params: Params, tabId: number): Pr
 /** One `actions` step as [handler, params]; accepts the spellings models reach for. */
 function normalizeStep(step: Params, i: number): [string, Params] {
 	const obj = (v: unknown): Params => (v && typeof v === "object" ? (v as Params) : {});
+	if ("navigate" in step)
+		return ["navigate", typeof step.navigate === "string" ? { url: step.navigate } : obj(step.navigate)];
+	if ("fill" in step) return ["fill", obj(step.fill)];
 	if ("press" in step) return ["press", typeof step.press === "string" ? { key: step.press } : obj(step.press)];
 	if ("key" in step) return ["press", { key: String(step.key), ...(step.repeat ? { repeat: step.repeat } : {}) }];
 	if ("type" in step) return ["type", typeof step.type === "string" ? { text: step.type } : obj(step.type)];
@@ -169,7 +183,7 @@ function normalizeStep(step: Params, i: number): [string, Params] {
 	if ("screenshot" in step) return ["screenshot", {}];
 	throw new BridgeError(
 		ERR.BAD_PARAMS,
-		`step ${i}: expected one of press, click, doubleClick, drag, type, hover, scroll, wait, screenshot`,
+		`step ${i}: expected one of navigate, fill, press, click, doubleClick, drag, type, hover, scroll, wait, screenshot`,
 	);
 }
 
@@ -221,10 +235,14 @@ export const handlers: Record<string, Handler> = {
 		const history = url === "back" || url === "forward";
 		if (!history) await ctx.checkUrl(url);
 		// The first navigate of a session opens its tab straight on the URL (no blank tab).
+		const withRead = async (tabId: number, timedOut: boolean) => {
+			const summary = await tabSummary(tabId, timedOut);
+			return params.read ? { ...summary, page: await readPage(tabId, params.read) } : summary;
+		};
 		if (!history && num(params, "tabId") === undefined && !(await ctx.session.currentTab())) {
 			const tab = await ctx.session.createTab(url);
 			const ready = await waitForLoad(tab.id!, num(params, "timeoutMs") ?? 20000);
-			return tabSummary(tab.id!, !ready);
+			return withRead(tab.id!, !ready);
 		}
 		const tabId = await resolveTab(ctx, params, false);
 		let timedOut = false;
@@ -235,7 +253,7 @@ export const handlers: Record<string, Handler> = {
 			timedOut = (await navigateTabDetailed(tabId, url, { waitUntil, timeoutMs: num(params, "timeoutMs") ?? 20000 }))
 				.timedOut;
 		}
-		return tabSummary(tabId, timedOut);
+		return withRead(tabId, timedOut);
 	},
 
 	screenshot: async (ctx, params) => {
@@ -346,8 +364,8 @@ export const handlers: Record<string, Handler> = {
 	type: async (ctx, params) => {
 		const text = requireStr(params, "text");
 		const tabId = await resolveTab(ctx, params, true);
-		const t = target(params);
-		if (t.ref || t.selector) {
+		const t = { ref: str(params, "ref"), selector: str(params, "selector"), text: str(params, "target") };
+		if (hasTarget(t)) {
 			const rect = await locate(tabId, t);
 			await click(tabId, rect.x, rect.y);
 		}
@@ -390,7 +408,7 @@ export const handlers: Record<string, Handler> = {
 		const value = str(params, "value") ?? "";
 		const tabId = await resolveTab(ctx, params, false);
 		const t = target(params);
-		if (!t.ref && !t.selector) throw new BridgeError(ERR.BAD_PARAMS, "ref or selector is required");
+		if (!hasTarget(t)) throw new BridgeError(ERR.BAD_PARAMS, "ref, selector or text is required");
 		await fillElement(tabId, t, value);
 		return { filled: t };
 	},
@@ -440,9 +458,10 @@ export const handlers: Record<string, Handler> = {
 	},
 
 	/**
-	 * Several input steps in one call (press / click / drag / type / hover / scroll / wait),
-	 * optionally ending with a screenshot. Canvas work (draw, label, connect) is otherwise one
-	 * model turn per keystroke. Stops at the first failing step and says which.
+	 * Several steps in one call (navigate / fill / press / click / drag / type / hover / scroll /
+	 * wait), optionally ending with a screenshot or a page read. Each model turn costs seconds
+	 * where a step costs milliseconds: a form is two calls this way instead of one per field.
+	 * Stops at the first failing step and says which.
 	 */
 	actions: async (ctx, params) => {
 		const steps = params.steps;
@@ -471,6 +490,9 @@ export const handlers: Record<string, Handler> = {
 		}
 		const out: Record<string, unknown> = { steps: done.length };
 		if (wantShot) out.screenshot = await handlers.screenshot(ctx, { tabId: params.tabId });
+		if (params.read) {
+			out.page = await readPage(await resolveTab(ctx, { tabId: params.tabId }, true), params.read);
+		}
 		return out;
 	},
 

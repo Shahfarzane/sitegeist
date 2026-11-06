@@ -59,15 +59,14 @@ export async function ensureAttached(tabId: number): Promise<void> {
 		throw new Error("The debugger was closed by the user on this tab. Navigate the tab to a new page to continue.");
 	}
 	if (!attachedTabs.has(tabId)) {
-		const targets = await chrome.debugger.getTargets();
-		const already = targets.some((t) => t.tabId === tabId && t.attached);
-		if (!already) {
-			try {
-				await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				if (!message.includes("already attached")) throw new Error(`Cannot attach to tab ${tabId}: ${message}`);
-			}
+		// Always try: getTargets' `attached` is true for any client, so DevTools open on the tab
+		// read as "we are attached" and every command then failed. Our own earlier attachment,
+		// from before a service worker restart, is the "already attached" error.
+		try {
+			await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			if (!message.includes("already attached")) throw new Error(`Cannot attach to tab ${tabId}: ${message}`);
 		}
 		attachedTabs.add(tabId);
 		// Hidden tabs freeze rAF; focus emulation unfreezes it and makes the page report
@@ -337,9 +336,33 @@ export async function scroll(tabId: number, x: number, y: number, deltaX: number
 	await cdpSend(tabId, "Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX, deltaY });
 }
 
-/** Type text as key events (works in inputs, contenteditable, and for shortcuts). */
+/** Longer text than this goes in as one insertion when the focus is a text field. */
+const INSERT_TEXT_FROM = 64;
+
+async function focusTakesText(tabId: number): Promise<boolean> {
+	const { result } = await send<{ result: { value?: boolean } }>(tabId, "Runtime.evaluate", {
+		expression:
+			"(() => { const e = document.activeElement; return !!e && (e.isContentEditable || e.tagName === 'TEXTAREA' || e.tagName === 'INPUT'); })()",
+		returnByValue: true,
+	});
+	return result.value === true;
+}
+
+/**
+ * Type text as key events (works in inputs, contenteditable, and for shortcuts). Each character
+ * is two debugger round trips, so long text in a real text field is inserted line by line;
+ * Enter stays a key press, which is what submits a form or starts a line in an editor.
+ */
 export async function typeText(tabId: number, text: string): Promise<void> {
 	await ensureAttached(tabId);
+	if (text.length >= INSERT_TEXT_FROM && (await focusTakesText(tabId))) {
+		const lines = text.split("\n");
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i]) await send(tabId, "Input.insertText", { text: lines[i] });
+			if (i < lines.length - 1) await pressKey(tabId, "Enter");
+		}
+		return;
+	}
 	for (const char of text) {
 		if (char === "\n") {
 			await pressKey(tabId, "Enter");

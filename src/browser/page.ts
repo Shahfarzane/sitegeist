@@ -367,20 +367,86 @@ export async function snapshot(
 	);
 }
 
-/** Resolve a ref (from a snapshot) or CSS selector to its viewport center. */
+/** An element named by a snapshot ref, a CSS selector, or its visible text or label. */
+export interface ElementTarget {
+	ref?: string;
+	selector?: string;
+	text?: string;
+}
+
+/**
+ * Page-side lookup, stringified into each script. `text` is what a person reads: a label, a
+ * placeholder, a button's words. It saves the model a whole read_page round trip for a form it
+ * can already describe. Exact matches win over partial ones, visible elements over hidden ones.
+ */
+function pageResolveTarget(target: ElementTarget): Element {
+	const w = window as unknown as { __sitegeistRefs?: Map<string, Element> };
+	if (target.ref) {
+		const el = w.__sitegeistRefs?.get(target.ref);
+		if (!el) throw new Error(`Ref ${target.ref} not found; take a new snapshot`);
+		if (!el.isConnected) throw new Error("Element is no longer in the page; take a new snapshot");
+		return el;
+	}
+	if (target.selector) {
+		const el = document.querySelector(target.selector);
+		if (!el) throw new Error(`Selector not found: ${target.selector}`);
+		return el;
+	}
+	const want = (target.text ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+	if (!want) throw new Error("Provide ref, selector or text");
+	const clean = (s: string | null | undefined) => (s ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+	const labelsOf = (el: Element): string[] => {
+		const names = [
+			el.getAttribute("aria-label"),
+			el.getAttribute("placeholder"),
+			el.getAttribute("title"),
+			el.getAttribute("name"),
+		];
+		if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+			for (const label of Array.from(el.labels ?? [])) names.push(label.textContent);
+		}
+		if (el instanceof HTMLInputElement && (el.type === "submit" || el.type === "button")) names.push(el.value);
+		const labelledBy = el.getAttribute("aria-labelledby");
+		if (labelledBy)
+			for (const id of labelledBy.split(/\s+/)) names.push(document.getElementById(id)?.textContent ?? "");
+		if (!(el instanceof HTMLSelectElement) && !(el instanceof HTMLTextAreaElement)) names.push(el.textContent);
+		return names.map(clean).filter(Boolean);
+	};
+	const candidates = document.querySelectorAll(
+		"input:not([type=hidden]),textarea,select,button,a[href],summary,[role=button],[role=link],[role=textbox],[role=combobox],[role=checkbox],[role=radio],[role=switch],[role=tab],[role=menuitem],[role=option],[contenteditable=true]",
+	);
+	let best: Element | undefined;
+	let bestScore = 0;
+	for (const el of Array.from(candidates)) {
+		const r = el.getBoundingClientRect();
+		const visible = r.width > 0 && r.height > 0;
+		for (const name of labelsOf(el)) {
+			const score =
+				(name === want ? 4 : name.startsWith(want) ? 3 : name.includes(want) ? 2 : 0) * (visible ? 2 : 1);
+			if (score > bestScore) {
+				bestScore = score;
+				best = el;
+			}
+		}
+	}
+	if (!best) throw new Error(`No element with the text "${target.text}"; try read_page`);
+	return best;
+}
+
+/** Stringified target lookup for page scripts: `resolve` in scope, `target` from the caller. */
+function resolverSource(target: ElementTarget): string {
+	return `const resolve = ${pageResolveTarget.toString()};
+		const target = ${JSON.stringify(target)};`;
+}
+
+/** Resolve a ref (from a snapshot), CSS selector or visible text to its viewport center. */
 export async function locate(
 	tabId: number,
-	target: { ref?: string; selector?: string },
+	target: ElementTarget,
 ): Promise<{ x: number; y: number; width: number; height: number }> {
 	const code = `(() => {
-		const refs = window.__sitegeistRefs;
-		let el = null;
-		const ref = ${JSON.stringify(target.ref ?? "")};
-		const sel = ${JSON.stringify(target.selector ?? "")};
-		if (ref) el = refs ? refs.get(ref) : null;
-		if (!el && sel) el = document.querySelector(sel);
-		if (!el) throw new Error(ref ? "Ref " + ref + " not found; take a new snapshot" : "Selector not found: " + sel);
-		if (!el.isConnected) throw new Error("Element is no longer in the page; take a new snapshot");
+		${resolverSource(target)}
+		const el = resolve(target);
 		el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
 		const r = el.getBoundingClientRect();
 		return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height };
@@ -389,19 +455,10 @@ export async function locate(
 }
 
 /** Set a form control's value the way frameworks expect (native setter + input/change). */
-export async function fillElement(
-	tabId: number,
-	target: { ref?: string; selector?: string },
-	value: string,
-): Promise<void> {
+export async function fillElement(tabId: number, target: ElementTarget, value: string): Promise<void> {
 	const code = `(() => {
-		const refs = window.__sitegeistRefs;
-		let el = null;
-		const ref = ${JSON.stringify(target.ref ?? "")};
-		const sel = ${JSON.stringify(target.selector ?? "")};
-		if (ref) el = refs ? refs.get(ref) : null;
-		if (!el && sel) el = document.querySelector(sel);
-		if (!el) throw new Error(ref ? "Ref " + ref + " not found; take a new snapshot" : "Selector not found: " + sel);
+		${resolverSource(target)}
+		const el = resolve(target);
 		const value = ${JSON.stringify(value)};
 		el.focus();
 		if (el instanceof HTMLSelectElement) {

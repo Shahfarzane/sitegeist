@@ -5,7 +5,16 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -109,8 +118,38 @@ export class Target {
 }
 
 export class Browser {
-	static async launch({ extensionDir = join(repoRoot, "dist-chrome"), userDataDir, headless = true, env } = {}) {
+	/** `bridge`: install the freshly built CLI as this profile's native host, on private sockets. */
+	static async launch({
+		extensionDir = process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, "dist-chrome"),
+		userDataDir,
+		headless = true,
+		env,
+		bridge = false,
+	} = {}) {
 		const profile = userDataDir ?? mkdtempSync(join(tmpdir(), "sitegeist-e2e-"));
+		let socketDir;
+		if (bridge) {
+			socketDir = mkdtempSync("/tmp/sg-e2e-");
+			chmodSync(socketDir, 0o700);
+			const launcher = join(profile, "host.sh");
+			writeFileSync(
+				launcher,
+				`#!/bin/sh\nexec "${process.execPath}" "${join(repoRoot, "cli/dist/index.js")}" host "$@"\n`,
+				{ mode: 0o755 },
+			);
+			const hosts = join(profile, "NativeMessagingHosts");
+			mkdirSync(hosts, { recursive: true });
+			writeFileSync(
+				join(hosts, "ai.sitegeist.bridge.json"),
+				JSON.stringify({
+					name: "ai.sitegeist.bridge",
+					description: "sitegeist e2e",
+					path: launcher,
+					type: "stdio",
+					allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+				}),
+			);
+		}
 		const args = [
 			`--user-data-dir=${profile}`,
 			"--remote-debugging-port=0",
@@ -125,7 +164,10 @@ export class Browser {
 			...(headless ? ["--headless=new"] : []),
 			"about:blank",
 		];
-		const proc = spawn(findChrome(), args, { stdio: "ignore", env: { ...process.env, ...env } });
+		const proc = spawn(findChrome(), args, {
+			stdio: "ignore",
+			env: { ...process.env, ...env, ...(socketDir ? { SITEGEIST_SOCKET_DIR: socketDir } : {}) },
+		});
 		const portFile = join(profile, "DevToolsActivePort");
 		const deadline = Date.now() + 20000;
 		while (!existsSync(portFile)) {
@@ -138,6 +180,7 @@ export class Browser {
 		browser.proc = proc;
 		browser.profile = profile;
 		browser.ownsProfile = !userDataDir;
+		browser.socketDir = socketDir;
 		browser.cdp = await Cdp.connect(`ws://127.0.0.1:${port}${path}`);
 		await browser.cdp.send("Target.setDiscoverTargets", { discover: true });
 		return browser;
@@ -180,6 +223,7 @@ export class Browser {
 		this.proc.kill("SIGKILL");
 		this.cdp.ws.close();
 		if (this.ownsProfile) rmSync(this.profile, { recursive: true, force: true });
+		if (this.socketDir) rmSync(this.socketDir, { recursive: true, force: true });
 	}
 }
 
@@ -424,3 +468,72 @@ export function assistantText(text) {
 }
 
 export const pageText = (page) => page.evaluate(`document.body.innerText`);
+
+/** A harness on the real path: MCP client -> `sitegeist mcp` -> socket -> native host -> extension. */
+export class Harness {
+	static async connect(browser, { name = "e2e", session = "e2e-session", env } = {}) {
+		const sdk = join(repoRoot, "cli/node_modules/@modelcontextprotocol/sdk/dist/esm/client");
+		const [{ Client }, { StdioClientTransport }] = await Promise.all([
+			import(`${sdk}/index.js`),
+			import(`${sdk}/stdio.js`),
+		]);
+		const home = mkdtempSync(join(tmpdir(), "sitegeist-e2e-home-"));
+		const transport = new StdioClientTransport({
+			command: process.execPath,
+			args: [join(repoRoot, "cli/dist/index.js"), "mcp"],
+			env: {
+				...process.env,
+				HOME: home,
+				SITEGEIST_SOCKET_DIR: browser.socketDir,
+				SITEGEIST_CLIENT_NAME: name,
+				SITEGEIST_SESSION: session,
+				...env,
+			},
+			stderr: "ignore",
+		});
+		const client = new Client({ name: "e2e", version: "1.0.0" });
+		await client.connect(transport);
+		const harness = new Harness();
+		harness.client = client;
+		harness.home = home;
+		return harness;
+	}
+
+	async call(name, args = {}) {
+		const result = await this.client.callTool({ name, arguments: args }, undefined, { timeout: 120000 });
+		if (result.isError) throw new Error(`${name}: ${result.content.map((c) => c.text).join(" ")}`);
+		return result;
+	}
+
+	/** The text of a tool result, parsed when it is JSON. */
+	async callText(name, args) {
+		const result = await this.call(name, args);
+		const text = result.content
+			.filter((c) => c.type === "text")
+			.map((c) => c.text)
+			.join("\n");
+		try {
+			return JSON.parse(text);
+		} catch {
+			return text;
+		}
+	}
+
+	async tools() {
+		return (await this.client.listTools()).tools.map((t) => t.name);
+	}
+
+	async close() {
+		await this.client.close();
+		rmSync(this.home, { recursive: true, force: true });
+	}
+}
+
+/** Wait for a bridge host socket to appear in `browser`. */
+export async function bridgeReady(browser, timeoutMs = 15000) {
+	const deadline = Date.now() + timeoutMs;
+	while (readdirSync(browser.socketDir).filter((n) => n.endsWith(".sock")).length === 0) {
+		if (Date.now() > deadline) throw new Error("native host did not start");
+		await sleep(100);
+	}
+}

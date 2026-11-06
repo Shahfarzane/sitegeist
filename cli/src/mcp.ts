@@ -107,7 +107,9 @@ export async function runMcpServer(): Promise<void> {
 			instructions: [
 				"sitegeist drives the user's real Chromium browser in the background.",
 				"You get your own tab group; your tabs never take focus and you cannot see the user's other tabs.",
-				"Workflow: navigate(url) -> read_page (refs) -> click/type/fill by ref -> read_page again to confirm.",
+				"Every tool call is a full model turn, so do as much as you can per call.",
+				"Workflow: navigate with read:true (the page comes back in the same call), then actions for everything you already know: fill fields, click, type, with read:true or screenshot:true to see the result in that same call.",
+				"Fields and buttons can be named by what a person reads (text), so a form you can describe needs no read_page first.",
 				"For canvas apps and multi-step input, batch steps with actions (one call, screenshot at the end) instead of one tool call per key or drag.",
 				"Canvas editors (Excalidraw, tldraw, Figma-like): use the app's keyboard shortcuts and mouse drags, check the result on the screenshot, and do not reverse-engineer the app's internals with run_js.",
 				"Reuse your current tab for step-by-step browsing; tabs_create only when two pages must stay open.",
@@ -177,6 +179,10 @@ export async function runMcpServer(): Promise<void> {
 	}
 
 	const tabId = z.number().int().optional().describe("Tab to act on; defaults to the session's current tab");
+	const readOption = z
+		.union([z.boolean(), z.literal("interactive")])
+		.optional()
+		.describe("Also return the page: true for elements and text, interactive for elements only");
 
 	server.registerTool(
 		"tabs_context",
@@ -218,14 +224,22 @@ export async function runMcpServer(): Promise<void> {
 		"navigate",
 		{
 			description:
-				"Load a URL in your current tab (the first call opens your tab), or 'back' / 'forward'. Waits for the page; the result has tabId, url, title, and loading:true if it is still loading.",
+				"Load a URL in your current tab (the first call opens your tab), or 'back' / 'forward'. Waits for the page; the result has tabId, url, title, and loading:true if it is still loading. read:true also returns the page (elements with refs and text), saving a read_page call.",
 			inputSchema: {
 				url: z.string(),
 				tabId,
 				waitUntil: z.enum(["domcontentloaded", "load"]).optional(),
+				read: readOption,
 			},
 		},
-		(args) => call("navigate", args),
+		async (args) => {
+			try {
+				const { page, ...summary } = (await client.call("navigate", args)) as { page?: Parameters<typeof formatSnapshot>[0] };
+				return { content: text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
 	);
 	server.registerTool(
 		"screenshot",
@@ -315,13 +329,14 @@ export async function runMcpServer(): Promise<void> {
 		tabId,
 		ref: z.string().optional().describe("Element ref from read_page or find"),
 		selector: z.string().optional().describe("CSS selector"),
+		text: z.string().optional().describe("What a person reads on it: a label, placeholder, or button text"),
 		x: z.number().optional().describe("Pixel x in the latest screenshot"),
 		y: z.number().optional().describe("Pixel y in the latest screenshot"),
 	};
 	server.registerTool(
 		"click",
 		{
-			description: "Click an element by ref or selector, or at x/y pixels of the latest screenshot, with real input events.",
+			description: "Click an element by ref, selector or text, or at x/y pixels of the latest screenshot, with real input events.",
 			inputSchema: { ...targetSchema, button: z.enum(["left", "right", "middle"]).optional(), clickCount: z.number().int().optional() },
 		},
 		(args) => call("click", args),
@@ -330,8 +345,16 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"type",
 		{
-			description: "Type text with real key events. Clicks the target first when ref/selector is given. submit presses Enter afterwards.",
-			inputSchema: { text: z.string(), tabId, ref: z.string().optional(), selector: z.string().optional(), submit: z.boolean().optional() },
+			description:
+				"Type text with real key events (long text goes into a text field in one insertion). Clicks the target first when ref, selector or target (visible text) is given. submit presses Enter afterwards.",
+			inputSchema: {
+				text: z.string(),
+				tabId,
+				ref: z.string().optional(),
+				selector: z.string().optional(),
+				target: z.string().optional().describe("Label, placeholder or visible text of the field to click first"),
+				submit: z.boolean().optional(),
+			},
 		},
 		(args) => call("type", args),
 	);
@@ -346,8 +369,14 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"fill",
 		{
-			description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable).",
-			inputSchema: { value: z.string(), tabId, ref: z.string().optional(), selector: z.string().optional() },
+			description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable). Name it by ref, selector or text (its label or placeholder).",
+			inputSchema: {
+				value: z.string(),
+				tabId,
+				ref: z.string().optional(),
+				selector: z.string().optional(),
+				text: z.string().optional().describe("Label or placeholder of the field"),
+			},
 		},
 		(args) => call("fill", args),
 	);
@@ -378,13 +407,15 @@ export async function runMcpServer(): Promise<void> {
 		"actions",
 		{
 			description:
-				"Run several input steps in one call, then optionally screenshot. Best for canvas apps and forms: " +
-				'e.g. steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"press":"Enter"},{"type":"Start"},{"press":"Escape"}], screenshot true. ' +
-				"Step kinds: press (key or chord), click ({x,y} | {ref} | {selector}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), hover ({x,y}|{ref}), scroll ({dx,dy}|{to}), wait (ms). " +
+				"Run several steps in one call, then optionally read the page or screenshot. Use it for anything you already know how to do: " +
+				'a form is one call, e.g. steps [{"fill":{"text":"Name","value":"Ada"}},{"fill":{"text":"Plan","value":"Pro"}},{"click":{"text":"Send"}}], read true. ' +
+				'A canvas: steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"press":"Enter"},{"type":"Start"},{"press":"Escape"}], screenshot true. ' +
+				"Step kinds: navigate (url), fill ({ref|selector|text, value}), press (key or chord), click ({x,y} | {ref} | {selector} | {text}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), hover ({x,y}|{ref}), scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
 				"x/y are pixels of the latest screenshot. Steps are spaced by settleMs (default 80) so the app can react. Stops at the first failing step.",
 			inputSchema: {
 				steps: z.array(z.record(z.string(), z.any())).min(1).max(40),
 				screenshot: z.boolean().optional().describe("Return a screenshot after the last step"),
+				read: readOption,
 				settleMs: z.number().int().optional().describe("Pause between steps in ms (default 80)"),
 				tabId,
 			},
@@ -394,8 +425,10 @@ export async function runMcpServer(): Promise<void> {
 				const res = (await client.call("actions", args)) as {
 					steps: number;
 					screenshot?: { data: string; mimeType: string; width: number; height: number };
+					page?: Parameters<typeof formatSnapshot>[0];
 				};
 				const content: Content[] = [{ type: "text", text: `${res.steps} steps done.` }];
+				if (res.page) content.push({ type: "text", text: formatSnapshot(res.page) });
 				if (res.screenshot) {
 					content.unshift({ type: "image", data: res.screenshot.data, mimeType: res.screenshot.mimeType });
 					content.push({
