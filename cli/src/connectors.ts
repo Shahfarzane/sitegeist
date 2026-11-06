@@ -92,12 +92,23 @@ export function runConnector(name: string, send: (frame: ConnectorFrame) => void
 	const child: ChildProcess = spawn(
 		viaShell ? process.env.SHELL || "/bin/sh" : config.command,
 		viaShell ? ["-lc", 'exec "$0" "$@"', config.command, ...(config.args ?? [])] : (config.args ?? []),
-		{ env: { ...process.env, ...config.env }, cwd: config.cwd, stdio: ["pipe", "pipe", "ignore"] },
+		// Its own process group: npx and friends start the real server as a child.
+		{ env: { ...process.env, ...config.env }, cwd: config.cwd, stdio: ["pipe", "pipe", "ignore"], detached: viaShell },
 	);
+	let exitCode: number | null = null;
+	child.on("exit", (code) => {
+		exitCode = code;
+	});
 	child.on("error", (err) => send({ type: "connector_closed", error: err.message }));
-	child.on("exit", (code) => send({ type: "connector_closed", error: code ? `${name} exited with ${code}` : undefined }));
+	// A server that closed its input must not take the host down with an unhandled EPIPE.
+	child.stdin?.on("error", (err) => send({ type: "connector_closed", error: err.message }));
 	if (child.stdout) {
-		createInterface({ input: child.stdout }).on("line", (line) => {
+		const lines = createInterface({ input: child.stdout });
+		// After the last line: announcing the end at process exit could overtake a final answer.
+		lines.on("close", () => {
+			send({ type: "connector_closed", error: exitCode ? `${name} exited with ${exitCode}` : undefined });
+		});
+		lines.on("line", (line) => {
 			if (!line.trim()) return;
 			if (Buffer.byteLength(line) <= MAX_WHOLE_BYTES) {
 				try {
@@ -115,7 +126,12 @@ export function runConnector(name: string, send: (frame: ConnectorFrame) => void
 	return {
 		write: (message) => child.stdin?.write(`${JSON.stringify(message)}\n`),
 		stop: () => {
-			child.kill();
+			try {
+				if (viaShell && child.pid) process.kill(-child.pid, "SIGTERM");
+				else child.kill();
+			} catch {
+				/* already gone */
+			}
 		},
 	};
 }

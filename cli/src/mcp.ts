@@ -251,6 +251,7 @@ export async function runMcpServer(): Promise<void> {
 				if (!match) throw new Error(`No connected browser matches ${browser}`);
 				client.close();
 				client.preferred = match.path;
+				client.preferredName = match.name;
 				await client.connect(match.path);
 				return { content: text({ selected: match.id, name: match.name }) };
 			} catch (err) {
@@ -422,7 +423,7 @@ export async function runMcpServer(): Promise<void> {
 		"type",
 		{
 			description:
-				"Type text with real key events (long text goes into a text field in one insertion). Clicks the target first when ref, selector or target (visible text) is given. submit presses Enter afterwards.",
+				"Type text with real key events. Long text goes into a text field in one insertion; set keys:true for an editor that needs a key event per character. Clicks the target first when ref, selector or target (visible text) is given. submit presses Enter afterwards.",
 			inputSchema: {
 				text: z.string(),
 				tabId,
@@ -430,6 +431,7 @@ export async function runMcpServer(): Promise<void> {
 				selector: z.string().optional(),
 				target: z.string().optional().describe("Label, placeholder or visible text of the field to click first"),
 				submit: z.boolean().optional(),
+				keys: z.boolean().optional().describe("Send every character as key events, however long the text is"),
 			},
 		},
 		(args) => call("type", args),

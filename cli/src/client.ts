@@ -62,6 +62,8 @@ function isConnectionError(err: unknown): boolean {
 	);
 }
 
+const HANDSHAKE_MS = 5000;
+
 export interface ConnectedBrowser {
 	/** Pass to select_browser. */
 	id: string;
@@ -109,17 +111,21 @@ export class BridgeClient {
 
 	/** The browser this client is connected to. */
 	browser?: string;
-	/** Which browser to prefer: a socket path or a name, set by select_browser or SITEGEIST_BROWSER. */
+	/** Which browser to use: a socket path or a name, set by select_browser or SITEGEIST_BROWSER. */
 	preferred = process.env.SITEGEIST_BROWSER;
+	/** The chosen browser's name, to find it again when a restart gave it a new socket. */
+	preferredName?: string;
 
 	private async pickSocket(): Promise<string | undefined> {
 		const sockets = listSockets();
 		const preferred = this.preferred;
-		if (!preferred || sockets.length < 2) return sockets[0];
+		if (!preferred || sockets.length === 0) return sockets[0];
 		if (sockets.includes(preferred)) return preferred;
-		const browsers = await listBrowsers();
-		const match = browsers.find((b) => b.name?.toLowerCase().includes(preferred.toLowerCase()));
-		return match?.path ?? sockets[0];
+		const wanted = (this.preferredName ?? preferred).toLowerCase();
+		const match = (await listBrowsers()).find((b) => b.name?.toLowerCase().includes(wanted));
+		// Falling back to another browser would act on the wrong profile without a word.
+		if (!match) throw new Error(`The browser ${this.preferredName ?? preferred} is not running`);
+		return match.path;
 	}
 
 	async connect(path?: string): Promise<void> {
@@ -134,7 +140,13 @@ export class BridgeClient {
 			const socket = connect(target);
 			const parser = new FrameParser(MAX_FRAME_FROM_EXTENSION);
 			let welcomed = false;
+			// A host that accepts but never answers must not hang discovery of the healthy ones.
+			const handshake = setTimeout(() => {
+				socket.destroy();
+				reject(new Error(`${target} did not answer`));
+			}, HANDSHAKE_MS);
 			socket.once("error", (err) => {
+				clearTimeout(handshake);
 				if (!welcomed) reject(err);
 			});
 			socket.on("data", (chunk) => {
@@ -150,6 +162,7 @@ export class BridgeClient {
 					const msg = m as HostToClient;
 					if (msg.type === "welcome") {
 						welcomed = true;
+						clearTimeout(handshake);
 						this.clientId = msg.clientId;
 						this.extensionConnected = msg.extensionConnected;
 						this.connectedPath = target;

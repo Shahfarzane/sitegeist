@@ -145,18 +145,19 @@ class Bridge {
 const bridge = new Bridge();
 
 function toResult(value: unknown): { content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>; details: unknown } {
-	// actions: { steps, screenshot? } -> the screenshot as an image plus the step count
-	if (value && typeof value === "object" && "steps" in value && "screenshot" in value) {
-		const v = value as { steps: number; screenshot: unknown };
-		const shot = toResult(v.screenshot);
-		return { content: [...shot.content, { type: "text" as const, text: \`\${v.steps} steps done\` }], details: { steps: v.steps } };
+	// actions: { steps, screenshot?, page? } -> what was asked for, plus the step count
+	if (value && typeof value === "object" && "steps" in value && ("screenshot" in value || "page" in value)) {
+		const v = value as { steps: number; screenshot?: unknown; page?: unknown };
+		const shot = v.screenshot ? toResult(v.screenshot).content : [];
+		const page = v.page ? [{ type: "text" as const, text: JSON.stringify(v.page) }] : [];
+		return { content: [...shot, ...page, { type: "text" as const, text: \`\${v.steps} steps done\` }], details: { steps: v.steps } };
 	}
 	if (value && typeof value === "object" && "data" in value && "mimeType" in value) {
-		const shot = value as { data: string; mimeType: string; width: number; height: number };
+		const shot = value as { data: string; mimeType: string; width: number; height: number; imageId?: string };
 		return {
 			content: [
 				{ type: "image" as const, data: shot.data, mimeType: shot.mimeType },
-				{ type: "text" as const, text: \`\${shot.width}x\${shot.height} screenshot; give x/y in this image's pixels\` },
+				{ type: "text" as const, text: \`\${shot.width}x\${shot.height} screenshot\${shot.imageId ? \`, imageId \${shot.imageId}\` : ""}; give x/y in this image's pixels\` },
 			],
 			details: { width: shot.width, height: shot.height },
 		};
