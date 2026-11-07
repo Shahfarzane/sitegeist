@@ -17,7 +17,9 @@
 //
 // Google Chrome on macOS and Windows disables off-store extensions unless enterprise policy
 // allows their id. ExtensionInstallAllowlist is honored from a profile the user installs
-// (no MDM needed); ExtensionInstallForcelist with an off-store URL is not.
+// (no MDM needed); ExtensionInstallForcelist with an off-store URL is not. Helium (an unbranded
+// build) needs no allowlist and reads policy from its own domain, net.imput.helium; the profile
+// carries a payload for it with the same per-id ExtensionSettings.
 //
 // CRX3 layout (components/crx_file/crx3.proto in Chromium):
 //   "Cr24" | u32le 3 | u32le header size | CrxFileHeader | zip
@@ -115,6 +117,24 @@ const uuidFor = (seed) => {
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 
+// Per-id settings (no "*" entry: one with runtime_blocked_hosts would disable chrome.debugger.attach
+// for sitegeist on 155+). toolbar_pin keeps the icon on the toolbar; file_url_navigation_allowed lets
+// chrome.tabs open file:// URLs (local reports). "allowed" with no update_url is not filtered from a
+// user-installed profile, unlike a force install of an off-store extension.
+const extensionSettings = (id) => `
+			<key>ExtensionSettings</key>
+			<dict>
+				<key>${id}</key>
+				<dict>
+					<key>installation_mode</key>
+					<string>allowed</string>
+					<key>toolbar_pin</key>
+					<string>force_pinned</string>
+					<key>file_url_navigation_allowed</key>
+					<true/>
+				</dict>
+			</dict>`;
+
 const policyProfile = (id, codebase) => {
 	const sources = codebase
 		? `
@@ -143,11 +163,23 @@ const policyProfile = (id, codebase) => {
 			<key>ExtensionInstallAllowlist</key>
 			<array>
 				<string>${id}</string>
-			</array>${sources}
+			</array>${sources}${extensionSettings(id)}
+		</dict>
+		<dict>
+			<key>PayloadDisplayName</key>
+			<string>Helium</string>
+			<key>PayloadIdentifier</key>
+			<string>sitegeist.chrome-extension.${id}.helium</string>
+			<key>PayloadType</key>
+			<string>net.imput.helium</string>
+			<key>PayloadUUID</key>
+			<string>${uuidFor(`${id}/helium`)}</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>${extensionSettings(id)}
 		</dict>
 	</array>
 	<key>PayloadDescription</key>
-	<string>Lets Google Chrome keep the self-signed sitegeist extension (${id}) enabled. Installs and blocks nothing else.</string>
+	<string>Lets Google Chrome keep the self-signed sitegeist extension (${id}) enabled, and pins it to the toolbar in Chrome and Helium. Installs and blocks nothing else.</string>
 	<key>PayloadDisplayName</key>
 	<string>sitegeist Chrome extension</string>
 	<key>PayloadIdentifier</key>
@@ -179,6 +211,12 @@ const run = async () => {
 	const key = args["no-crx"] ? undefined : loadKey();
 	if (!args["no-crx"] && !key) throw new Error("Pass --key <pem> or set CRX_PRIVATE_KEY (or --no-crx for a zip only)");
 	const codebase = args.codebase?.replace(/\/$/, "");
+	// The id the policy profile names: from the signing key, or the manifest's public key.
+	const profileId =
+		key?.id ??
+		(manifest.key
+			? extensionIdFor(createHash("sha256").update(Buffer.from(manifest.key, "base64")).digest().subarray(0, 16))
+			: undefined);
 	if (key) {
 		const publicKey = key.publicKeyDer.toString("base64");
 		if (manifest.key && manifest.key !== publicKey) {
@@ -196,7 +234,10 @@ const run = async () => {
 	const zipPath = join(args.out, `sitegeist-${version}.zip`);
 	writeFileSync(zipPath, zip);
 	console.log(`zip:     ${relative(packageRoot, zipPath)}`);
-	if (!key) return;
+	if (!key) {
+		if (profileId) writeProfile(profileId, codebase);
+		return;
+	}
 
 	const crxName = `sitegeist-${version}.crx`;
 	const crxPath = join(args.out, crxName);
@@ -211,10 +252,14 @@ const run = async () => {
 		console.log(`update:  ${relative(packageRoot, xmlPath)} -> ${codebase}/${crxName}`);
 	}
 
-	const profilePath = join(args.out, "sitegeist-chrome-policy.mobileconfig");
-	writeFileSync(profilePath, policyProfile(key.id, codebase));
-	console.log(`policy:  ${relative(packageRoot, profilePath)}`);
+	writeProfile(key.id, codebase);
 };
+
+function writeProfile(id, codebase) {
+	const profilePath = join(args.out, "sitegeist-chrome-policy.mobileconfig");
+	writeFileSync(profilePath, policyProfile(id, codebase));
+	console.log(`policy:  ${relative(packageRoot, profilePath)}`);
+}
 
 run().catch((error) => {
 	console.error(error.message ?? error);

@@ -4,6 +4,7 @@
 
 ### Added
 
+- The policy profile pins sitegeist to the toolbar and allows `file://` pages (`ExtensionSettings`) in Google Chrome, and carries a `net.imput.helium` payload so Helium gets the same. `pack-crx.mjs --no-crx` writes the profile from the manifest key, without the signing key.
 - Settings > Downloads and `list_downloads` (panel and bridge): agents see the files pages saved (path, source, type, size, state). `downloads` is an optional permission, off until the user turns it on.
 - Right-click a tab (or several selected tabs) in the tab strip: "Ask Sitegeist about these tabs" opens a task with the tabs listed in the composer.
 - Cmd+Shift+S closes an open panel (`sidePanel.close`), so the shortcut toggles.
