@@ -53,21 +53,30 @@ and signed releases install under the same id.
    publish there too). It writes the `.crx` and `updates.xml` to
    `~/.local/share/sitegeist/extension/`, the `file://` update URL baked into the release.
    The version is `<major>.<minor>.<commits on HEAD>`, so nothing needs committing.
-3. First time on a Mac: open `release/sitegeist-chrome-policy.mobileconfig` and install it
-   in System Settings > General > Device Management. It puts the id on Chrome's
-   `ExtensionInstallAllowlist`; without it, Google Chrome on macOS disables off-store
-   extensions. Restart Chrome and check `chrome://policy`.
-4. Open `chrome://extensions`, enable Developer mode, and drag
-   `~/.local/share/sitegeist/extension/sitegeist-<version>.crx` onto the page.
-5. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
+3. Install the CLI (`cd cli && npm ci && npm run build && npm link`) and run
+   `sitegeist install`. It writes the native host manifest for every Chromium browser it
+   finds and, once a release is published on this Mac, Helium's external-install file.
+4. Helium: restart it and turn sitegeist on once in `chrome://extensions` (Helium adds an
+   externally installed extension switched off).
+5. Google Chrome: install `release/sitegeist-chrome-policy.mobileconfig` once in System
+   Settings > General > Device Management (it puts the id on `ExtensionInstallAllowlist`;
+   without it, Chrome on macOS disables off-store extensions), restart Chrome, then run
+   `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" file://$HOME/.local/share/sitegeist/extension/sitegeist-<version>.crx`
+   and confirm Add extension. Chrome force-installs off-store extensions only on Macs
+   enrolled in MDM, so this one click stays.
+6. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
    panel's width, so drag its edge to size it; the layout is built for 360 to 520 px.
 
 Later releases are automatic: `scripts/install-auto-release.sh m3` installs a launchd agent
 that runs `scripts/auto-release.sh` every 10 minutes. When `origin/main` moves it builds
 the new commit (only from a clean `main` checkout), signs, publishes here and to each ssh
 host (retrying hosts that are asleep), and ends with `sitegeist update`, which makes every
-running browser with the extension connected reload into the new version. Browsers that are
-closed pick it up on Chrome's own schedule. Log: `~/Library/Logs/sitegeist-auto-release.log`.
+running browser with the extension connected reload into the new version. A browser that
+was closed updates when it next connects to the native host, which reports the version in
+`updates.xml`. The extension asks Chrome for an update only when that version is newer:
+Chrome throttles `runtime.requestUpdateCheck` for 5 hours after any check that finds
+nothing, which is why speculative checks made the push answer `throttled`.
+Log: `~/Library/Logs/sitegeist-auto-release.log`.
 To start a new minor line, change the first two numbers of the version in
 `static/manifest.chrome.json`.
 

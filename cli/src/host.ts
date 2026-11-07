@@ -38,6 +38,7 @@ import { encodeFrame, FrameParser } from "./framing.ts";
 import { harnessModels } from "./harness-models.ts";
 import { readLogin, searchLogins } from "./onepassword.ts";
 import { socketDir, socketPath } from "./paths.ts";
+import { publishedVersion } from "./release.ts";
 import { VERSION } from "./version.ts";
 
 interface Client {
@@ -87,14 +88,18 @@ function toClient(clientId: string, message: HostToClient): void {
 
 function onExtensionMessage(message: ExtToHost): void {
 	switch (message.type) {
-		case "hello":
+		case "hello": {
 			extensionReady = true;
+			// Lets a browser that was closed during a release update as soon as it connects.
+			const version = publishedVersion();
+			if (version) toExtension({ type: "published", version });
 			for (const id of clients.keys()) toClient(id, { type: "extension_status", connected: true });
 			// The extension restarted; re-announce every live client so it recreates sessions.
 			for (const client of clients.values()) {
 				if (client.hello) toExtension({ type: "client_connected", clientId: client.id, client: client.hello.client });
 			}
 			return;
+		}
 		case "response":
 			toClient(message.clientId, { type: "response", id: message.id, result: message.result, error: message.error });
 			return;

@@ -76,6 +76,8 @@
 
 ### Fixed
 
+- `sitegeist update` usually answered `throttled`, so a release reached a running browser only after a restart. Chrome throttles `runtime.requestUpdateCheck` for 5 hours after any check that finds nothing, and the extension checked on its own at startup and every 30 minutes. It now asks Chrome only when the native host reports a newer version in `updates.xml` (on connect, and from `sitegeist update`), so a browser that was closed during a release also updates when it opens.
+- `sitegeist install` writes Helium's external-install file when a release is published on the Mac, so a new Mac needs no `.crx` drag for Helium.
 - A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.
 - A large tool result froze the side panel: output marked as plain text went through language auto-detection, which runs every grammar over it. 60 KB took 30 s of main thread that every open panel shares. Plain text is no longer highlighted, and large code blocks are shown as they are.
 - `browserjs()` code containing `$&` or `$1` (a regex replacement string, say) was corrupted on its way into the page: the code was passed as a replacement pattern.
