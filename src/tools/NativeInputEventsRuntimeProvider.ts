@@ -1,4 +1,5 @@
 import type { SandboxRuntimeProvider } from "@mariozechner/pi-web-ui";
+import { editingCommands } from "../browser/cdp.js";
 import { getCurrentBrowserSession } from "../browser/current.js";
 import { NATIVE_INPUT_EVENTS_DESCRIPTION } from "../prompts/prompts.js";
 
@@ -273,14 +274,17 @@ export class NativeInputEventsRuntimeProvider implements SandboxRuntimeProvider 
 				console.log("[NativeInput] Pressing key:", message.key);
 
 				const keyInfo = this.getKeyInfo(message.key);
+				const commands = editingCommands(this.modifiers, keyInfo.key);
 
-				// Press single key with proper CDP parameters
+				// Keys held with nativeKeyDown apply to the press; on macOS a Cmd chord also needs its editing command.
 				const keyDownResult = await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
 					type: "keyDown",
 					key: keyInfo.key,
 					code: keyInfo.code,
 					windowsVirtualKeyCode: keyInfo.keyCode,
 					nativeVirtualKeyCode: keyInfo.keyCode,
+					modifiers: this.modifiers,
+					...(commands.length ? { commands } : {}),
 				});
 				console.log("[NativeInput] Key down result:", keyDownResult);
 
@@ -290,6 +294,7 @@ export class NativeInputEventsRuntimeProvider implements SandboxRuntimeProvider 
 					code: keyInfo.code,
 					windowsVirtualKeyCode: keyInfo.keyCode,
 					nativeVirtualKeyCode: keyInfo.keyCode,
+					modifiers: this.modifiers,
 				});
 				console.log("[NativeInput] Key up result:", keyUpResult);
 
@@ -306,6 +311,7 @@ export class NativeInputEventsRuntimeProvider implements SandboxRuntimeProvider 
 				if (message.key === "Meta") this.modifiers |= this.MODIFIER_META;
 				if (message.key === "Shift") this.modifiers |= this.MODIFIER_SHIFT;
 
+				const held = editingCommands(this.modifiers, keyInfo.key);
 				const keyDownResult = await chrome.debugger.sendCommand({ tabId: tabId }, "Input.dispatchKeyEvent", {
 					type: "keyDown",
 					key: keyInfo.key,
@@ -313,6 +319,7 @@ export class NativeInputEventsRuntimeProvider implements SandboxRuntimeProvider 
 					windowsVirtualKeyCode: keyInfo.keyCode,
 					nativeVirtualKeyCode: keyInfo.keyCode,
 					modifiers: this.modifiers,
+					...(held.length ? { commands: held } : {}),
 				});
 				console.log("[NativeInput] Key down result:", keyDownResult, "modifiers:", this.modifiers);
 

@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { attachError, shownTabIds } from "../src/browser/cdp.ts";
+import { attachError, editingCommands, shownTabIds } from "../src/browser/cdp.ts";
 import { CANCELLED_MESSAGE, injectScript, usableUserScripts } from "../src/browser/inject.ts";
 import { navigationError } from "../src/browser/page.ts";
 
@@ -99,4 +99,17 @@ test("a cancelled script that let go of the page leaves the tab alone", async ()
 	await assert.rejects(run, new RegExp(CANCELLED_MESSAGE));
 	await new Promise((r) => setTimeout(r, 50));
 	assert.deepEqual(calls, []);
+});
+
+test("Cmd and Option chords map to their macOS editing commands", () => {
+	const META = 4;
+	const ALT = 1;
+	const SHIFT = 8;
+	assert.deepEqual(editingCommands(META, "a", true), ["selectAll"]);
+	assert.deepEqual(editingCommands(META, "A", true), ["selectAll"]);
+	assert.deepEqual(editingCommands(META | SHIFT, "z", true), ["redo"]);
+	assert.deepEqual(editingCommands(ALT | SHIFT, "ArrowLeft", true), ["moveWordLeftAndModifySelection"]);
+	assert.deepEqual(editingCommands(META, "a", false), [], "other platforms handle Ctrl chords in the renderer");
+	assert.deepEqual(editingCommands(META | 2, "a", true), [], "Control chords are not editing shortcuts");
+	assert.deepEqual(editingCommands(0, "a", true), []);
 });

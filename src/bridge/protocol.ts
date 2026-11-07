@@ -244,6 +244,8 @@ export const BRIDGE_METHODS = [
 	"drag",
 	"type",
 	"press",
+	"dialog.next",
+	"video",
 	"scroll",
 	"fill",
 	"evaluate",

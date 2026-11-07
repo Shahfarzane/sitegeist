@@ -57,9 +57,83 @@ async function releaseShown(windowId: number): Promise<void> {
 	for (const id of shownTabIds(inWindow)) await releaseAgentViewport(id);
 }
 
+// ---- Page dialogs ---------------------------------------------------------------
+//
+// A JavaScript dialog (alert, confirm, prompt, beforeunload) stops the page until it is
+// answered, so every later Runtime.evaluate on the tab hangs. Dialogs in tabs the debugger
+// holds are answered at once: accepted, or as preset with setNextDialogAnswer, and logged
+// so the agent learns what the page asked.
+
+export interface DialogRecord {
+	type: string;
+	message: string;
+	accepted: boolean;
+	promptText?: string;
+	url: string;
+}
+
+const nextDialogAnswer = new Map<number, { accept: boolean; promptText?: string }>();
+const dialogLog = new Map<number, DialogRecord[]>();
+let dialogObserver: ((tabId: number, dialog: DialogRecord) => void) | undefined;
+
+/** How to answer the next confirm or prompt on this tab (alerts and beforeunload are always accepted). */
+export function setNextDialogAnswer(tabId: number, answer: { accept: boolean; promptText?: string }): void {
+	nextDialogAnswer.set(tabId, answer);
+}
+
+/** Dialogs answered on these tabs since the last call; clears them. */
+export function takeDialogs(tabIds: number[]): DialogRecord[] {
+	const out: DialogRecord[] = [];
+	for (const id of tabIds) {
+		const log = dialogLog.get(id);
+		if (log?.length) out.push(...log.splice(0));
+	}
+	return out;
+}
+
+export function onDialog(observer: (tabId: number, dialog: DialogRecord) => void): void {
+	dialogObserver = observer;
+}
+
+function answerDialog(
+	tabId: number,
+	p: { type?: string; message?: string; defaultPrompt?: string; url?: string },
+): void {
+	const type = String(p.type ?? "alert");
+	const preset = nextDialogAnswer.get(tabId);
+	nextDialogAnswer.delete(tabId);
+	const asks = type === "confirm" || type === "prompt";
+	const accept = asks ? (preset?.accept ?? true) : true;
+	const promptText = type === "prompt" && accept ? (preset?.promptText ?? p.defaultPrompt ?? "") : undefined;
+	send(tabId, "Page.handleJavaScriptDialog", { accept, ...(promptText !== undefined ? { promptText } : {}) }).catch(
+		() => undefined,
+	);
+	const record: DialogRecord = {
+		type,
+		message: String(p.message ?? ""),
+		accepted: accept,
+		promptText,
+		url: String(p.url ?? ""),
+	};
+	const log = dialogLog.get(tabId) ?? [];
+	log.push(record);
+	if (log.length > 20) log.splice(0, log.length - 20);
+	dialogLog.set(tabId, log);
+	consoleBuffers.get(tabId)?.push({
+		level: "dialog",
+		text: `${type}(${JSON.stringify(record.message)}) ${accept ? "accepted" : "dismissed"}`,
+		timestamp: Date.now(),
+	});
+	dialogObserver?.(tabId, record);
+}
+
 function installListeners(): void {
 	if (listenersInstalled) return;
 	listenersInstalled = true;
+	chrome.debugger.onEvent.addListener((source, method, params) => {
+		if (method === "Page.javascriptDialogOpening" && source.tabId !== undefined)
+			answerDialog(source.tabId, (params ?? {}) as Record<string, string>);
+	});
 	chrome.tabs.onActivated.addListener(({ windowId }) => void releaseShown(windowId));
 	chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
 		if (change.splitViewId !== undefined) void releaseShown(tab.windowId);
@@ -78,6 +152,8 @@ function installListeners(): void {
 		viewportTabs.delete(tabId);
 		requestedViewports.delete(tabId);
 		bannedTabs.delete(tabId);
+		nextDialogAnswer.delete(tabId);
+		dialogLog.delete(tabId);
 	});
 }
 
@@ -117,6 +193,8 @@ export async function ensureAttached(tabId: number): Promise<void> {
 		// Hidden tabs freeze rAF; focus emulation unfreezes it and makes the page report
 		// itself visible, so lazy loading and infinite scroll keep working off-screen.
 		await send(tabId, "Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => undefined);
+		// Page events carry javascriptDialogOpening: an unanswered alert() blocks every script on the tab.
+		await send(tabId, "Page.enable").catch(() => undefined);
 	}
 	await ensureAgentViewport(tabId);
 }
@@ -151,6 +229,8 @@ async function applyViewport(tabId: number): Promise<void> {
 		height: size.height,
 		deviceScaleFactor: mobile ? 2 : 0,
 		mobile,
+		// No scrollbar gutter (Chrome 147+): the whole 1280 px is page, so screenshot and page coordinates match.
+		scrollbarType: "overlay",
 	});
 	await send(tabId, "Emulation.setTouchEmulationEnabled", { enabled: mobile }).catch(() => undefined);
 }
@@ -493,6 +573,50 @@ const KEY_MAP: Record<string, KeyInfo> = {
 
 const MODIFIER_BITS: Record<string, number> = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
+/**
+ * macOS runs Cmd and Option editing shortcuts through Cocoa key bindings, outside the
+ * renderer, so a synthetic Meta+a selects nothing. Input.dispatchKeyEvent takes the editing
+ * commands to run instead.
+ */
+const MAC_EDITING_COMMANDS: Record<string, string> = {
+	"Meta+a": "selectAll",
+	"Meta+c": "copy",
+	"Meta+x": "cut",
+	"Meta+v": "paste",
+	"Meta+z": "undo",
+	"Meta+Shift+z": "redo",
+	"Meta+ArrowLeft": "moveToBeginningOfLine",
+	"Meta+ArrowRight": "moveToEndOfLine",
+	"Meta+ArrowUp": "moveToBeginningOfDocument",
+	"Meta+ArrowDown": "moveToEndOfDocument",
+	"Meta+Shift+ArrowLeft": "moveToBeginningOfLineAndModifySelection",
+	"Meta+Shift+ArrowRight": "moveToEndOfLineAndModifySelection",
+	"Meta+Shift+ArrowUp": "moveToBeginningOfDocumentAndModifySelection",
+	"Meta+Shift+ArrowDown": "moveToEndOfDocumentAndModifySelection",
+	"Meta+Backspace": "deleteToBeginningOfLine",
+	"Alt+ArrowLeft": "moveWordLeft",
+	"Alt+ArrowRight": "moveWordRight",
+	"Alt+Shift+ArrowLeft": "moveWordLeftAndModifySelection",
+	"Alt+Shift+ArrowRight": "moveWordRightAndModifySelection",
+	"Alt+Backspace": "deleteWordBackward",
+	"Alt+Delete": "deleteWordForward",
+};
+
+export const IS_MAC = typeof navigator !== "undefined" && /Mac OS X|Macintosh/.test(navigator.userAgent);
+
+/** The editing commands a chord runs on macOS; empty elsewhere or for other chords. */
+export function editingCommands(modifiers: number, key: string, mac = IS_MAC): string[] {
+	if (!mac || modifiers & MODIFIER_BITS.Control) return [];
+	const parts: string[] = [];
+	if (modifiers & MODIFIER_BITS.Meta) parts.push("Meta");
+	if (modifiers & MODIFIER_BITS.Alt) parts.push("Alt");
+	if (modifiers & MODIFIER_BITS.Shift) parts.push("Shift");
+	if (parts.length === 0) return [];
+	const name = key.length === 1 ? key.toLowerCase() : key;
+	const command = MAC_EDITING_COMMANDS[[...parts, name].join("+")];
+	return command ? [command] : [];
+}
+
 export function keyInfo(name: string): KeyInfo {
 	if (KEY_MAP[name]) return KEY_MAP[name];
 	if (name.length === 1) {
@@ -539,10 +663,12 @@ export async function pressKey(tabId: number, chord: string): Promise<void> {
 		nativeVirtualKeyCode: info.keyCode,
 		modifiers,
 	};
+	const commands = editingCommands(modifiers, info.key);
 	await send(tabId, "Input.dispatchKeyEvent", {
 		type: info.text && modifiers === 0 ? "keyDown" : "rawKeyDown",
 		...base,
 		...(info.text && modifiers === 0 ? { text: info.text } : {}),
+		...(commands.length ? { commands } : {}),
 	});
 	await send(tabId, "Input.dispatchKeyEvent", { type: "keyUp", ...base });
 	for (const m of mods.reverse()) {
@@ -701,6 +827,8 @@ export interface ScreencastOptions {
 	maxFps?: number;
 	/** Main-world script run in every new document for as long as the cast lasts. */
 	initScript?: string;
+	/** Chrome draws click feedback into the page (157+), so a live view shows where the agent clicked. */
+	showClicks?: boolean;
 }
 
 export interface ScreencastFrame {
@@ -718,6 +846,7 @@ interface Screencast {
 	scriptId?: string;
 	/** The init script, guarded to run once per document. */
 	initScript?: string;
+	showClicks?: boolean;
 }
 
 /**
@@ -748,7 +877,7 @@ function installScreencastListener(): void {
 		const cast = screencasts.get(tabId);
 		const p = params as { data: string; metadata: Record<string, unknown>; sessionId: number };
 		if (cast) cast.sink({ data: p.data, metadata: p.metadata });
-		// Chrome sends the next frame only after this ack, so holding it is the frame-rate cap.
+		// With maxFramesInFlight 1, Chrome sends the next frame only after this ack, so holding it is the frame-rate cap.
 		const wait = cast ? Math.max(0, cast.lastAckAt + cast.minGapMs - Date.now()) : 0;
 		setTimeout(() => {
 			if (cast) cast.lastAckAt = Date.now();
@@ -803,7 +932,15 @@ export async function startScreencast(
 		...(options.maxWidth ? { maxWidth: options.maxWidth } : {}),
 		...(options.maxHeight ? { maxHeight: options.maxHeight } : {}),
 		everyNthFrame: 1,
+		// Chrome otherwise keeps three frames in flight and an animating page arrives at three times maxFps.
+		// sendLastFrame delivers the newest frame when the held ack goes out (both 154+).
+		maxFramesInFlight: 1,
+		sendLastFrame: true,
 	});
+	if (options.showClicks) {
+		cast.showClicks = true;
+		await send(tabId, "Page.setInputVisualization", { clicks: true }).catch(() => undefined);
+	}
 }
 
 export async function stopScreencast(tabId: number): Promise<boolean> {
@@ -811,6 +948,7 @@ export async function stopScreencast(tabId: number): Promise<boolean> {
 	if (!cast) return false;
 	screencasts.delete(tabId);
 	await send(tabId, "Page.stopScreencast").catch(() => undefined);
+	if (cast.showClicks) await send(tabId, "Page.setInputVisualization", { clicks: false }).catch(() => undefined);
 	if (cast.scriptId)
 		await send(tabId, "Page.removeScriptToEvaluateOnNewDocument", { identifier: cast.scriptId }).catch(
 			() => undefined,

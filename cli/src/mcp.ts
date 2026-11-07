@@ -445,6 +445,19 @@ export async function runMcpServer(): Promise<void> {
 		(args) => call("press", args),
 	);
 	server.registerTool(
+		"handle_dialog",
+		{
+			description:
+				"Set how the next confirm() or prompt() on the tab is answered. Page dialogs are answered at once (accepted by default, so they never block the page) and every tool result lists the dialogs answered during the call. Call this before the action that opens a dialog you want to dismiss or answer with text.",
+			inputSchema: {
+				accept: z.boolean().describe("false dismisses (Cancel)"),
+				promptText: z.string().optional().describe("Text to enter in a prompt()"),
+				tabId,
+			},
+		},
+		(args) => call("dialog.next", args),
+	);
+	server.registerTool(
 		"fill",
 		{
 			description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable). Name it by ref, selector or text (its label or placeholder).",
@@ -645,6 +658,31 @@ export async function runMcpServer(): Promise<void> {
 			},
 		},
 		(args) => call("window.resize", args),
+	);
+	server.registerTool(
+		"record_video",
+		{
+			description:
+				"Record the tab as an MP4 video, encoded by Chrome (153+). start, do the steps, then stop: stop writes the file and returns its path. Works on hidden tabs. Use gif_creator for an annotated GIF instead.",
+			inputSchema: {
+				action: z.enum(["start", "stop"]),
+				path: z.string().optional().describe("For stop: where to write the file. Default: recording-<time>.mp4 in the working directory"),
+				frameRate: z.number().int().min(1).max(60).optional(),
+				maxWidth: z.number().int().min(100).max(4096).optional(),
+				tabId,
+			},
+		},
+		async ({ path, ...args }) => {
+			try {
+				const result = (await client.call("video", args, 120000)) as { data?: string; bytes?: number };
+				if (args.action !== "stop" || !result.data) return { content: text(result) };
+				const file = resolve(path ?? `recording-${Date.now()}.mp4`);
+				writeFileSync(file, Buffer.from(result.data, "base64"));
+				return { content: text({ path: file, bytes: result.bytes, mimeType: "video/mp4" }) };
+			} catch (err) {
+				return errorResult(err);
+			}
+		},
 	);
 	server.registerTool(
 		"gif_creator",
