@@ -109,6 +109,8 @@ function requireStr(params: Params, key: string): string {
  * bypass the per-site permissions. Full access has none to bypass, so nothing is refused there.
  */
 const CDP_DENIED_PREFIXES = ["Target.", "Browser.", "Storage.", "SystemInfo."];
+// Deprecated names stay listed because Chrome still serves them; their replacements
+// (Storage.getCookies, Browser.setDownloadBehavior) are refused by the prefixes above.
 const CDP_DENIED_METHODS = new Set([
 	"Network.getAllCookies",
 	"Network.clearBrowserCookies",

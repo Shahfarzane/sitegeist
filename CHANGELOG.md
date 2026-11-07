@@ -76,6 +76,14 @@
 
 ### Fixed
 
+- Stopping a REPL script did nothing: Chrome never shipped `userScripts.terminate`, and it refuses `Runtime.terminateExecution` from extensions. A cancel now returns at once, and a tab the script still blocks is discarded and reloaded.
+- Turning "Allow User Scripts" off while the browser runs broke every page script: `chrome.userScripts.execute` stays defined and throws. sitegeist now checks with `getScripts()` and falls back to the debugger path.
+- An agent tab shown in a split view (Chrome 155) was rendered at the 1280x800 agent viewport and letterboxed; it now counts as on screen.
+- Chrome's "Not secure" warning before plain http pages (HTTPS by default, Chrome 154) surfaced as `net::ERR_BLOCKED_BY_CLIENT`; navigate now says what happened.
+- A debugger attach refused by enterprise policy (Chrome 155 to 157) names the policy instead of "Cannot attach".
+- The agent viewport is cleared before the debugger detaches, and `minimum_chrome_version` is 154, where Chrome also drops it on detach.
+- `sitegeist install` writes the native host manifest for Chrome for Testing, which reads its own folder since 146.
+- A live view's init script runs again when a page is restored from the back/forward cache.
 - `sitegeist update` usually answered `throttled`, so a release reached a running browser only after a restart. Chrome throttles `runtime.requestUpdateCheck` for 5 hours after any check that finds nothing, and the extension checked on its own at startup and every 30 minutes. It now asks Chrome only when the native host reports a newer version in `updates.xml` (on connect, and from `sitegeist update`), so a browser that was closed during a release also updates when it opens.
 - `sitegeist install` writes Helium's external-install file when a release is published on the Mac, so a new Mac needs no `.crx` drag for Helium.
 - A message with attachments never reached the model, words included: the message transformer dropped its role. It also counts as a user message now, so a chat that opens with an image gets saved.

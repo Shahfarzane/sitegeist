@@ -16,7 +16,7 @@
  * agent's next attempt to open a tab is refused instead of starting a new group.
  */
 
-import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport } from "./cdp.js";
+import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport, shownTabIds } from "./cdp.js";
 
 const STORAGE_KEY = "browser_sessions";
 const RELEASED_KEY = "browser_released_tabs";
@@ -218,9 +218,11 @@ export async function pruneSessions(
 	closedTabs: number;
 }> {
 	const liveTabs = new Map<number, chrome.tabs.Tab>();
-	for (const t of await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[])) {
+	const allTabs = await chrome.tabs.query({}).catch(() => [] as chrome.tabs.Tab[]);
+	for (const t of allTabs) {
 		if (t.id !== undefined) liveTabs.set(t.id, t);
 	}
+	const shownTabs = shownTabIds(allTabs);
 	let dropped = 0;
 	let closedTabs = 0;
 	const now = Date.now();
@@ -250,7 +252,7 @@ export async function pruneSessions(
 					dropped++;
 					continue;
 				}
-				const userLooking = state.tabIds.some((id) => liveTabs.get(id)?.active);
+				const userLooking = state.tabIds.some((id) => shownTabs.has(id));
 				if (state.groupId !== undefined && !userLooking && now - (state.lastUsedAt ?? 0) > idleMs) {
 					await chrome.tabGroups.update(state.groupId, { collapsed: true }).catch(() => undefined);
 				}

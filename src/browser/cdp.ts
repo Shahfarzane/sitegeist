@@ -28,10 +28,42 @@ export function isRestrictedUrl(url: string): boolean {
 	);
 }
 
+/**
+ * Tabs on screen: the active tab of each window, and since Chrome 155 the other half of a
+ * split view with it, which is visible without being `active`.
+ */
+export function shownTabIds(tabs: Array<Pick<chrome.tabs.Tab, "id" | "active" | "splitViewId">>): Set<number> {
+	const activeSplits = new Set<number>();
+	for (const t of tabs)
+		if (t.active && t.splitViewId !== undefined && t.splitViewId !== -1) activeSplits.add(t.splitViewId);
+	const shown = new Set<number>();
+	for (const t of tabs) {
+		if (t.id === undefined) continue;
+		if (t.active || (t.splitViewId !== undefined && activeSplits.has(t.splitViewId))) shown.add(t.id);
+	}
+	return shown;
+}
+
+export async function isTabShown(tab: chrome.tabs.Tab): Promise<boolean> {
+	if (tab.active) return true;
+	if (tab.splitViewId === undefined || tab.splitViewId === -1 || tab.id === undefined) return false;
+	const inWindow = await chrome.tabs.query({ windowId: tab.windowId }).catch(() => [] as chrome.tabs.Tab[]);
+	return shownTabIds(inWindow).has(tab.id);
+}
+
+/** The user can see these tabs now: give them their real size. */
+async function releaseShown(windowId: number): Promise<void> {
+	const inWindow = await chrome.tabs.query({ windowId }).catch(() => [] as chrome.tabs.Tab[]);
+	for (const id of shownTabIds(inWindow)) await releaseAgentViewport(id);
+}
+
 function installListeners(): void {
 	if (listenersInstalled) return;
 	listenersInstalled = true;
-	chrome.tabs.onActivated.addListener(({ tabId }) => void releaseAgentViewport(tabId));
+	chrome.tabs.onActivated.addListener(({ windowId }) => void releaseShown(windowId));
+	chrome.tabs.onUpdated.addListener((_tabId, change, tab) => {
+		if (change.splitViewId !== undefined) void releaseShown(tab.windowId);
+	});
 	chrome.debugger.onDetach.addListener((source, reason) => {
 		if (source.tabId === undefined) return;
 		attachedTabs.delete(source.tabId);
@@ -53,6 +85,18 @@ async function send<T = unknown>(tabId: number, method: string, params?: Record<
 	return (await chrome.debugger.sendCommand({ tabId }, method, params)) as T;
 }
 
+/**
+ * Chrome 155 to 157 refuse chrome.debugger.attach when enterprise policy blocks the site for
+ * extensions (runtime_blocked_hosts) or blocks screenshots (DisableScreenshots, DLP rules).
+ */
+export function attachError(tabId: number, message: string): string {
+	if (/Host access is restricted by policy/i.test(message))
+		return `Cannot attach to tab ${tabId}: a browser policy (ExtensionSettings runtime_blocked_hosts) blocks extensions on this site.`;
+	if (/Screenshot capture is restricted by policy/i.test(message))
+		return `Cannot attach to tab ${tabId}: a browser policy (DisableScreenshots or a data-protection screenshot rule) blocks the debugger on this page.`;
+	return `Cannot attach to tab ${tabId}: ${message}`;
+}
+
 /** Attach if needed. Idempotent; tolerates attachments made before a service worker restart. */
 export async function ensureAttached(tabId: number): Promise<void> {
 	installListeners();
@@ -67,7 +111,7 @@ export async function ensureAttached(tabId: number): Promise<void> {
 			await chrome.debugger.attach({ tabId }, PROTOCOL_VERSION);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			if (!message.includes("already attached")) throw new Error(`Cannot attach to tab ${tabId}: ${message}`);
+			if (!message.includes("already attached")) throw new Error(attachError(tabId, message));
 		}
 		attachedTabs.add(tabId);
 		// Hidden tabs freeze rAF; focus emulation unfreezes it and makes the page report
@@ -114,7 +158,7 @@ async function applyViewport(tabId: number): Promise<void> {
 async function ensureAgentViewport(tabId: number): Promise<void> {
 	if (viewportTabs.has(tabId)) return;
 	const tab = await chrome.tabs.get(tabId).catch(() => undefined);
-	if (!tab || tab.active) return;
+	if (!tab || (await isTabShown(tab))) return;
 	try {
 		await applyViewport(tabId);
 		viewportTabs.add(tabId);
@@ -130,7 +174,7 @@ export async function setAgentViewport(tabId: number, size: ViewportSize | undef
 	else requestedViewports.delete(tabId);
 	// The default is for tabs nobody sees; on a tab in front it would letterbox the page.
 	const tab = await chrome.tabs.get(tabId);
-	if (!size && tab.active) {
+	if (!size && (await isTabShown(tab))) {
 		await releaseAgentViewport(tabId);
 		return;
 	}
@@ -149,8 +193,9 @@ export async function releaseAgentViewport(tabId: number): Promise<void> {
 export async function detachTab(tabId: number, force = false): Promise<void> {
 	if (!force && screencasts.has(tabId)) return;
 	if (force) await stopScreencast(tabId).catch(() => undefined);
+	// Chrome before 154 kept an emulated size after detach and left the tab at 1280x800.
+	await releaseAgentViewport(tabId);
 	attachedTabs.delete(tabId);
-	viewportTabs.delete(tabId);
 	try {
 		await chrome.debugger.detach({ tabId });
 	} catch {
@@ -671,6 +716,16 @@ interface Screencast {
 	minGapMs: number;
 	lastAckAt: number;
 	scriptId?: string;
+	/** The init script, guarded to run once per document. */
+	initScript?: string;
+}
+
+/**
+ * Run once per document: a page restored from the back/forward cache keeps its old state
+ * and gets no new-document scripts, so the cast evaluates this again on restore.
+ */
+function oncePerDocument(script: string): string {
+	return `if (!window.__sitegeistCastInit) {\nwindow.__sitegeistCastInit = true;\n${script}\n}`;
 }
 
 /** Live casts by tab. A cast belongs to the client that started it; one per tab. */
@@ -681,6 +736,13 @@ function installScreencastListener(): void {
 	if (screencastListenerInstalled) return;
 	screencastListenerInstalled = true;
 	chrome.debugger.onEvent.addListener((source, method, params) => {
+		if (method === "Page.frameNavigated" && source.tabId !== undefined) {
+			const p = params as { frame?: { parentId?: string }; type?: string };
+			const cast = screencasts.get(source.tabId);
+			if (cast?.initScript && !p.frame?.parentId && p.type === "BackForwardCacheRestore")
+				send(source.tabId, "Runtime.evaluate", { expression: cast.initScript }).catch(() => undefined);
+			return;
+		}
 		if (method !== "Page.screencastFrame" || source.tabId === undefined) return;
 		const tabId = source.tabId;
 		const cast = screencasts.get(tabId);
@@ -727,11 +789,12 @@ export async function startScreencast(
 	screencasts.set(tabId, cast);
 	await send(tabId, "Page.enable");
 	if (options.initScript) {
+		cast.initScript = oncePerDocument(options.initScript);
 		const { identifier } = await send<{ identifier: string }>(tabId, "Page.addScriptToEvaluateOnNewDocument", {
-			source: options.initScript,
+			source: cast.initScript,
 		});
 		cast.scriptId = identifier;
-		await send(tabId, "Runtime.evaluate", { expression: options.initScript }).catch(() => undefined);
+		await send(tabId, "Runtime.evaluate", { expression: cast.initScript }).catch(() => undefined);
 	}
 	const format = options.format ?? "jpeg";
 	await send(tabId, "Page.startScreencast", {

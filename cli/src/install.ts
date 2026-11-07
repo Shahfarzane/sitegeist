@@ -27,6 +27,8 @@ function browserDirs(): string[] {
 			join(base, "Google", "Chrome"),
 			join(base, "Google", "Chrome Beta"),
 			join(base, "Google", "Chrome Canary"),
+			// Chrome for Testing reads hosts from its own folder since 146.
+			join(base, "Google", "ChromeForTesting"),
 			join(base, "Chromium"),
 			join(base, "BraveSoftware", "Brave-Browser"),
 			join(base, "Microsoft Edge"),
