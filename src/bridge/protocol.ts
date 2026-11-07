@@ -245,6 +245,7 @@ export const BRIDGE_METHODS = [
 	"type",
 	"press",
 	"dialog.next",
+	"upload.paths",
 	"video",
 	"scroll",
 	"fill",

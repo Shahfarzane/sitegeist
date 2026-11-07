@@ -537,11 +537,12 @@ export async function runMcpServer(): Promise<void> {
 		"run_js",
 		{
 			description:
-				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals. skill loads a skill's library first, so its helpers are there for your code.",
+				"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals. frame runs the code inside a cross-origin iframe (embedded checkouts, editors, consent dialogs) whose URL contains that text; the error lists the frames when none matches. skill loads a skill's library first, so its helpers are there for your code.",
 			inputSchema: {
 				code: z.string(),
 				tabId,
 				world: z.enum(["user", "main"]).optional(),
+				frame: z.string().optional().describe("Part of a cross-origin iframe's URL"),
 				skill: z.string().optional().describe("Name of a skill whose library to load first"),
 			},
 		},
@@ -586,11 +587,18 @@ export async function runMcpServer(): Promise<void> {
 		"file_upload",
 		{
 			description:
-				"Attach local files to the page. Do not click upload buttons: that opens a native picker you cannot use. Without a target this fills the page's file input, hidden ones included. Name a file input, its label, or a drop zone with ref, selector or text; or give x/y for a drop target. 25 MB per call.",
+				"Attach local files to the page. Without a target this fills the page's file input, hidden ones included. Name a file input, its label, an upload button, or a drop zone with ref, selector or text; or give x/y for a drop target. Do not click upload buttons yourself: name them here. With sitegeist's \"Allow access to file URLs\" on, Chrome takes the files directly (any size, and an upload button's picker is answered); otherwise 25 MB per call and upload buttons cannot be used.",
 			inputSchema: { paths: z.array(z.string()).min(1).describe("Absolute paths of local files"), ...targetSchema },
 		},
 		async ({ paths, ...where }) => {
 			try {
+				const absolute = paths.map((p) => resolve(p));
+				// An extension from before upload.paths answers "Unknown method": use the chunked path.
+				const direct = (await client.call("upload.paths", { paths: absolute, ...where }).catch((err: unknown) => {
+					if (/Unknown method/.test(err instanceof Error ? err.message : String(err))) return { fallback: true };
+					throw err;
+				})) as { fallback?: boolean };
+				if (!direct.fallback) return { content: text(direct) };
 				let total = 0;
 				for (const path of paths) total += statSync(path).size;
 				if (total > MAX_UPLOAD_BYTES) throw new Error(`The files are ${Math.round(total / 1048576)} MB; at most 25 MB per call`);
@@ -747,8 +755,16 @@ export async function runMcpServer(): Promise<void> {
 	server.registerTool(
 		"read_network",
 		{
-			description: "Network requests captured on the tab since capture started (first call starts capture).",
-			inputSchema: { tabId, urlPattern: z.string().optional(), clear: z.boolean().optional(), limit: z.number().int().optional() },
+			description:
+				"Network requests captured on the tab since capture started (first call starts capture). body:true adds each text response body (JSON, HTML, scripts), so you can read an API response instead of the rendered page; narrow with urlPattern.",
+			inputSchema: {
+				tabId,
+				urlPattern: z.string().optional(),
+				clear: z.boolean().optional(),
+				limit: z.number().int().optional(),
+				body: z.boolean().optional().describe("Include text response bodies"),
+				bodyChars: z.number().int().optional().describe("Characters per body (default 20000)"),
+			},
 		},
 		(args) => call("network.read", args),
 	);

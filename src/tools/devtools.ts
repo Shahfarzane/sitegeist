@@ -2,7 +2,14 @@
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { type Static, Type } from "@sinclair/typebox";
-import { consoleEntries, enableConsoleCapture, enableNetworkCapture, networkEntries } from "../browser/cdp.js";
+import {
+	consoleEntries,
+	enableConsoleCapture,
+	enableNetworkCapture,
+	type NetworkEntry,
+	networkEntries,
+	withResponseBodies,
+} from "../browser/cdp.js";
 import { getCurrentBrowserSession } from "../browser/current.js";
 
 const consoleSchema = Type.Object({
@@ -16,6 +23,9 @@ const networkSchema = Type.Object({
 	urlPattern: Type.Optional(Type.String({ description: "Regex the URL must match" })),
 	clear: Type.Optional(Type.Boolean({ description: "Clear after reading" })),
 	limit: Type.Optional(Type.Number({ description: "Newest requests to return (default 100)" })),
+	body: Type.Optional(
+		Type.Boolean({ description: "Include text response bodies (JSON, HTML, scripts); narrow with urlPattern" }),
+	),
 });
 
 async function currentTabId(): Promise<number> {
@@ -54,11 +64,14 @@ export function createNetworkTool(): AgentTool<typeof networkSchema, { count: nu
 		execute: async (_toolCallId, args: Static<typeof networkSchema>) => {
 			const tabId = await currentTabId();
 			await enableNetworkCapture(tabId);
-			const entries = networkEntries(tabId, args);
+			const listed = networkEntries(tabId, args);
+			const entries: Array<NetworkEntry & { body?: string }> = args.body
+				? await withResponseBodies(tabId, listed, 8000)
+				: listed;
 			const lines = entries
 				.map(
 					(e) =>
-						`${e.method} ${e.status ?? e.failed ?? "pending"} ${e.url}${e.mimeType ? ` (${e.mimeType})` : ""}`,
+						`${e.method} ${e.status ?? e.failed ?? "pending"} ${e.url}${e.mimeType ? ` (${e.mimeType})` : ""}${e.body !== undefined ? `\n${e.body}\n` : ""}`,
 				)
 				.join("\n");
 			return {

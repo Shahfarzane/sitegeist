@@ -428,6 +428,157 @@ async function resizeImage(
 	return { data: btoa(binary), mimeType, width, height };
 }
 
+// ---- Isolated world ---------------------------------------------------------------
+//
+// Without the userScripts toggle, sitegeist's own page code (snapshot, find, REPL) runs through
+// the debugger. It runs in an isolated world named "sitegeist" that shares the DOM but not the
+// page's JavaScript globals, the same isolation the userScripts path has: the page cannot see
+// or call sitegeist's helpers, and a page that patches built-ins cannot break them.
+
+export const ISOLATED_WORLD = "sitegeist";
+const worldContexts = new Map<number, number>();
+let worldListenerInstalled = false;
+
+function installWorldListener(): void {
+	if (worldListenerInstalled) return;
+	worldListenerInstalled = true;
+	// A new document gets a new world; the old context id is gone.
+	chrome.webNavigation.onCommitted.addListener((d) => {
+		if (d.frameId === 0) worldContexts.delete(d.tabId);
+	});
+	chrome.debugger.onDetach.addListener((source) => {
+		if (source.tabId !== undefined) worldContexts.delete(source.tabId);
+	});
+	chrome.tabs.onRemoved.addListener((tabId) => worldContexts.delete(tabId));
+}
+
+async function isolatedContext(tabId: number): Promise<number> {
+	installWorldListener();
+	const known = worldContexts.get(tabId);
+	if (known !== undefined) return known;
+	const { frameTree } = await cdpSend<{ frameTree: { frame: { id: string } } }>(tabId, "Page.getFrameTree");
+	const { executionContextId } = await send<{ executionContextId: number }>(tabId, "Page.createIsolatedWorld", {
+		frameId: frameTree.frame.id,
+		worldName: ISOLATED_WORLD,
+	});
+	worldContexts.set(tabId, executionContextId);
+	return executionContextId;
+}
+
+export interface EvaluateResult<T> {
+	result: { value?: T; description?: string; objectId?: string };
+	exceptionDetails?: { exception?: { description?: string }; text?: string };
+}
+
+/** Runtime.evaluate in the tab's "sitegeist" isolated world (same DOM, separate globals). */
+export async function evaluateIsolated<T = unknown>(
+	tabId: number,
+	expression: string,
+	options: { returnByValue?: boolean; awaitPromise?: boolean } = {},
+): Promise<EvaluateResult<T>> {
+	const params = {
+		expression,
+		returnByValue: options.returnByValue ?? true,
+		awaitPromise: options.awaitPromise ?? false,
+	};
+	try {
+		return await send<EvaluateResult<T>>(tabId, "Runtime.evaluate", {
+			...params,
+			contextId: await isolatedContext(tabId),
+		});
+	} catch (err) {
+		// The document changed between the lookup and the call (a navigation the listener has not seen yet).
+		if (!/context/i.test(err instanceof Error ? err.message : String(err))) throw err;
+		worldContexts.delete(tabId);
+		return send<EvaluateResult<T>>(tabId, "Runtime.evaluate", { ...params, contextId: await isolatedContext(tabId) });
+	}
+}
+
+// ---- Cross-origin iframes ----------------------------------------------------------
+//
+// A cross-origin iframe runs in its own renderer: commands on {tabId} never reach it, and
+// page scripts in the top frame cannot read it. Target.setAutoAttach with flatten gives a
+// child session per such frame, reachable through chrome.debugger with {tabId, sessionId}
+// (Chrome 125+). Chrome applies the same URL checks to each child as to a tab.
+
+const frameSessions = new Map<number, Set<string>>();
+const autoAttached = new Set<number>();
+let frameListenerInstalled = false;
+
+function installFrameListener(): void {
+	if (frameListenerInstalled) return;
+	frameListenerInstalled = true;
+	chrome.debugger.onEvent.addListener((source, method, params) => {
+		if (source.tabId === undefined) return;
+		const p = (params ?? {}) as { sessionId?: string; targetInfo?: { type?: string } };
+		if (method === "Target.attachedToTarget" && p.sessionId && p.targetInfo?.type === "iframe") {
+			const set = frameSessions.get(source.tabId) ?? new Set<string>();
+			set.add(p.sessionId);
+			frameSessions.set(source.tabId, set);
+		} else if (method === "Target.detachedFromTarget" && p.sessionId) {
+			frameSessions.get(source.tabId)?.delete(p.sessionId);
+		}
+	});
+	chrome.debugger.onDetach.addListener((source) => {
+		if (source.tabId === undefined) return;
+		frameSessions.delete(source.tabId);
+		autoAttached.delete(source.tabId);
+	});
+	chrome.tabs.onRemoved.addListener((tabId) => {
+		frameSessions.delete(tabId);
+		autoAttached.delete(tabId);
+	});
+}
+
+async function ensureFrameSessions(tabId: number): Promise<void> {
+	installFrameListener();
+	await ensureAttached(tabId);
+	if (autoAttached.has(tabId)) return;
+	await send(tabId, "Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+	autoAttached.add(tabId);
+	// attachedToTarget for frames that already exist arrives right after the call.
+	await new Promise((r) => setTimeout(r, 150));
+}
+
+async function frameSend<T>(
+	tabId: number,
+	sessionId: string,
+	method: string,
+	params?: Record<string, unknown>,
+): Promise<T> {
+	return (await chrome.debugger.sendCommand({ tabId, sessionId }, method, params)) as T;
+}
+
+/** Evaluate in the first cross-origin iframe whose URL contains `match`. */
+export async function evaluateInFrame<T = unknown>(tabId: number, match: string, expression: string): Promise<T> {
+	await ensureFrameSessions(tabId);
+	const seen: string[] = [];
+	for (const sessionId of frameSessions.get(tabId) ?? []) {
+		const href = await frameSend<{ result: { value?: string } }>(tabId, sessionId, "Runtime.evaluate", {
+			expression: "location.href",
+			returnByValue: true,
+		}).catch(() => undefined);
+		const url = href?.result.value ?? "";
+		seen.push(url);
+		if (!url.includes(match)) continue;
+		const result = await frameSend<EvaluateResult<T>>(tabId, sessionId, "Runtime.evaluate", {
+			expression,
+			returnByValue: true,
+			awaitPromise: true,
+		});
+		if (result.exceptionDetails)
+			throw new Error(
+				result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Evaluation failed",
+			);
+		return result.result.value as T;
+	}
+	throw new Error(
+		seen.length
+			? `No cross-origin iframe matches "${match}". Frames: ${seen.join(", ")}`
+			: "This page has no cross-origin iframes; same-origin frames are reachable from the page itself (iframe.contentDocument).",
+	);
+}
+
 /** Evaluate in the page's MAIN world and return the value (JSON-serialisable). */
 export async function evaluateMain<T = unknown>(tabId: number, expression: string): Promise<T> {
 	const result = await cdpSend<{
@@ -730,6 +881,18 @@ function installCaptureListener(): void {
 				text: details?.exception?.description ?? details?.text ?? "Uncaught exception",
 				timestamp: Date.now(),
 			});
+		} else if (method === "Log.entryAdded") {
+			// Browser-side messages: failed loads, CSP violations, interventions, deprecations.
+			const buf = consoleBuffers.get(tabId);
+			if (!buf) return;
+			const entry = p.entry as { level?: string; source?: string; text?: string; url?: string };
+			const where = entry.url ? ` (${entry.url})` : "";
+			buf.push({
+				level: String(entry.level ?? "info"),
+				text: `[${entry.source ?? "browser"}] ${entry.text ?? ""}${where}`,
+				timestamp: Date.now(),
+			});
+			if (buf.length > MAX_ENTRIES) buf.splice(0, buf.length - MAX_ENTRIES);
 		} else if (method === "Network.requestWillBeSent") {
 			const buf = networkBuffers.get(tabId);
 			if (!buf) return;
@@ -764,6 +927,8 @@ export async function enableConsoleCapture(tabId: number): Promise<void> {
 	if (consoleBuffers.has(tabId)) return;
 	consoleBuffers.set(tabId, []);
 	await cdpSend(tabId, "Runtime.enable");
+	// Log.enable also replays what the browser logged before capture started.
+	await cdpSend(tabId, "Log.enable").catch(() => undefined);
 }
 
 export function readConsole(tabId: number, clear = false): ConsoleEntry[] {
@@ -792,6 +957,44 @@ export async function enableNetworkCapture(tabId: number): Promise<void> {
 	if (networkBuffers.has(tabId)) return;
 	networkBuffers.set(tabId, new Map());
 	await cdpSend(tabId, "Network.enable");
+	// Keep response bodies across cross-process navigations (Chrome 145+), so they can be read later.
+	await cdpSend(tabId, "Network.configureDurableMessages", {}).catch(() => undefined);
+}
+
+const TEXT_MIME = /^(text\/|application\/(json|.*\+json|javascript|xml|.*\+xml|x-www-form-urlencoded|graphql))/i;
+
+/** The response body of captured requests, text only, cut to maxChars each. */
+export async function withResponseBodies(
+	tabId: number,
+	entries: NetworkEntry[],
+	maxChars = 20000,
+): Promise<Array<NetworkEntry & { body?: string }>> {
+	const out: Array<NetworkEntry & { body?: string }> = [];
+	for (const entry of entries) {
+		if (entry.status === undefined || entry.failed) {
+			out.push(entry);
+			continue;
+		}
+		if (entry.mimeType && !TEXT_MIME.test(entry.mimeType)) {
+			out.push({ ...entry, body: `[${entry.mimeType} body not shown]` });
+			continue;
+		}
+		try {
+			const r = await send<{ body: string; base64Encoded: boolean }>(tabId, "Network.getResponseBody", {
+				requestId: entry.requestId,
+			});
+			const text = r.base64Encoded
+				? new TextDecoder().decode(Uint8Array.from(atob(r.body), (c) => c.charCodeAt(0)))
+				: r.body;
+			out.push({
+				...entry,
+				body: text.length > maxChars ? `${text.slice(0, maxChars)}... [${text.length} chars]` : text,
+			});
+		} catch {
+			out.push({ ...entry, body: "[body no longer available]" });
+		}
+	}
+	return out;
 }
 
 export function readNetwork(tabId: number, clear = false): NetworkEntry[] {

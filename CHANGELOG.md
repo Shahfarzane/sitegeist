@@ -4,6 +4,10 @@
 
 ### Added
 
+- `file_upload` hands local files to Chrome when sitegeist's "Allow access to file URLs" is on: no 25 MB cap, trusted `input`/`change` and drop events, and an upload button's native picker is answered (`Page.setInterceptFileChooserDialog`) instead of avoided. With the toggle off it uses the page-script path as before.
+- `run_js` with `frame` runs code inside a cross-origin iframe (embedded checkouts, editors, consent dialogs) through a child debugger session.
+- `read_network` with `body: true` (and the panel's `read_network`) returns text response bodies; bodies survive cross-process navigations (`Network.configureDurableMessages`).
+- Console capture includes browser-side messages from the Log domain: failed loads, CSP violations, interventions and deprecations, including those logged before capture started.
 - `record_video`: an MP4 of the tab encoded by Chrome itself (`Page.startScreenRecording`, Chrome 153), hidden tabs included.
 - `handle_dialog`: choose how the next `confirm()` or `prompt()` is answered.
 - Live views (`screencast.start`) show Chrome's own click feedback (`Page.setInputVisualization`, Chrome 157); the agent viewport uses overlay scrollbars, so its 1280 px are all page.
@@ -48,6 +52,7 @@
 
 ### Changed
 
+- Without the user scripts toggle, sitegeist's page code (snapshot, find, REPL) runs in an isolated world through the debugger instead of the page's main world: the page can no longer see or call `__sitegeistPending`, the messaging binding or the snapshot refs. `run_js` with `world: "main"` still runs in the page's own world.
 - New look for the panel: warm light and cool dark colors, a teal accent on the caret, focus ring and links, a rounded composer with a `+` and a round send button, and a calmer empty chat.
 - The panel now uses a bundled typeface, Public Sans, with larger text: 16 px in the chat and composer. The theme's font never reached the page before, so it was on the system font.
 - Nothing moves while the panel loads: the header and composer are in place from the first frame, and suggestions arrive in space of their own. Replaces the "Loading..." screen.
