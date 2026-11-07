@@ -36,11 +36,13 @@ Agents work in hidden tabs of their own group, on your logins, with full access 
 | Parallel tasks     | One panel per tab, each with its own session and tab group                                                                                                                                           |
 | Connectors         | MCP servers next to the browser: remote ones with a token or OAuth, local commands through the native host, and Claude plugin folders (Settings > Connectors)                                        |
 | 1Password          | `fill_login` signs in from your vault. 1Password asks for approval, the values go straight into the page, and an item only fills on its own site                                                     |
-| Files              | Attach files to any page without the native picker: file inputs, hidden ones too, and drop zones                                                                                                     |
-| Recording          | Annotated GIFs of what an agent did, from hidden tabs too                                                                                                                                            |
+| Files              | Attach files to any page without the native picker: file inputs, hidden ones too, upload buttons and drop zones. With "Allow access to file URLs" on, Chrome takes the files itself, any size        |
+| Recording          | Annotated GIFs and MP4 videos (encoded by Chrome) of what an agent did, from hidden tabs too                                                                                                         |
 | Notifications      | A desktop notification when a task finishes, fails or needs you (Settings > Notifications)                                                                                                           |
+| Dialogs            | Page alerts, confirms and prompts are answered at once instead of freezing the tab, and reported to the agent; harnesses choose the answer with `handle_dialog`                                      |
+| Downloads          | Agents see the files pages saved (Settings > Downloads, off until you turn it on)                                                                                                                    |
 | Skills and prompts | Site skills, recorded workflows, skills for any site, saved prompts in the `/` menu; defaults for GitHub, Gmail, Google Docs, Slack and others                                                       |
-| Debugging          | Console, network, raw CDP and viewport emulation for the panel agent and for harnesses                                                                                                               |
+| Debugging          | Console with the browser's own errors, network with response bodies, cross-origin iframes, raw CDP and viewport emulation, for the panel agent and for harnesses                                     |
 
 ## Install the extension
 
@@ -93,7 +95,7 @@ and through the debugger's `Runtime.evaluate` otherwise (the page's main world; 
 shows its "is debugging this browser" bar). If you want the stricter sandbox, enable
 **Allow user scripts** in the extension's details; everything works either way.
 
-Requires Chrome 141+ or the equivalent Chromium release.
+Requires Chrome 154+ or the equivalent Chromium release.
 
 ## Use it from a coding agent
 
