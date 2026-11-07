@@ -11,6 +11,7 @@ import {
 	withResponseBodies,
 } from "../browser/cdp.js";
 import { getCurrentBrowserSession } from "../browser/current.js";
+import { recentDownloads } from "../downloads/downloads.js";
 
 const consoleSchema = Type.Object({
 	onlyErrors: Type.Optional(Type.Boolean({ description: "Errors and exceptions only" })),
@@ -27,6 +28,27 @@ const networkSchema = Type.Object({
 		Type.Boolean({ description: "Include text response bodies (JSON, HTML, scripts); narrow with urlPattern" }),
 	),
 });
+
+const downloadsSchema = Type.Object({
+	limit: Type.Optional(Type.Number({ description: "Newest downloads to return (default 20)" })),
+});
+
+export function createDownloadsTool(): AgentTool<typeof downloadsSchema, { count: number }> {
+	return {
+		name: "list_downloads",
+		label: "List downloads",
+		description:
+			"Files pages downloaded, newest first: path on disk, source URL, type, size and state. Use it after a click that saves a file. Needs Settings > Downloads.",
+		parameters: downloadsSchema,
+		execute: async (_toolCallId, args: Static<typeof downloadsSchema>) => {
+			const entries = await recentDownloads(args.limit);
+			const lines = entries
+				.map((d) => `${d.state} ${d.path} (${d.mimeType}, ${d.bytes} bytes) from ${d.url}`)
+				.join("\n");
+			return { content: [{ type: "text", text: lines || "No downloads." }], details: { count: entries.length } };
+		},
+	};
+}
 
 async function currentTabId(): Promise<number> {
 	const tab = await getCurrentBrowserSession().attachedCurrentTab();

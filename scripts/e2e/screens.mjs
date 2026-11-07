@@ -83,7 +83,7 @@ try {
 		await click(panel, "Settings");
 		await panel.waitFor(`document.querySelectorAll("nav button").length > 5`);
 		await shoot(panel, "settings", theme);
-		for (const section of ["Notifications", "Prompts", "Connectors", "Bridge"]) {
+		for (const section of ["Notifications", "Downloads", "Prompts", "Connectors", "Bridge"]) {
 			await click(panel, section, "nav button");
 			await new Promise((r) => setTimeout(r, section === "Connectors" ? 1500 : 200));
 			await shoot(panel, section.toLowerCase(), theme);

@@ -190,9 +190,11 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 				const consoleLogs = pageConsoleProvider.getLogs();
 
 				if (!result) {
+					// The wrapper always returns an object. Chrome gives null when the code does not
+					// parse (userScripts.execute reports no error for that) or the page navigated away.
 					respond({
-						success: true,
-						error: "No result returned from script execution",
+						success: false,
+						error: "The page script did not run: check it for a syntax error, or the page navigated away while it ran.",
 						console: consoleLogs,
 					});
 					return;

@@ -445,6 +445,15 @@ export async function runMcpServer(): Promise<void> {
 		(args) => call("press", args),
 	);
 	server.registerTool(
+		"list_downloads",
+		{
+			description:
+				"Files pages downloaded, newest first: absolute path, source URL, type, size and state. Use it after a click that saves a file, then read the file from its path. The user turns this on under Settings > Downloads in the side panel.",
+			inputSchema: { limit: z.number().int().min(1).max(100).optional() },
+		},
+		(args) => call("downloads.list", args),
+	);
+	server.registerTool(
 		"handle_dialog",
 		{
 			description:

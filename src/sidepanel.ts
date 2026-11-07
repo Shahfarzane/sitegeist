@@ -49,6 +49,7 @@ import { BridgeTab } from "./dialogs/BridgeTab.js";
 import { ConnectorsTab } from "./dialogs/ConnectorsTab.js";
 import { CostsTab } from "./dialogs/CostsTab.js";
 import { CustomProvidersTab } from "./dialogs/CustomProvidersTab.js";
+import { DownloadsTab } from "./dialogs/DownloadsTab.js";
 import { NotificationsTab } from "./dialogs/NotificationsTab.js";
 import { PromptsTab } from "./dialogs/PromptsTab.js";
 import { RecordSkillDialog } from "./dialogs/RecordSkillDialog.js";
@@ -76,7 +77,7 @@ import { SitegeistAppStorage } from "./storage/app-storage.js";
 import { CoalescedTask } from "./storage/coalesced-task.js";
 import { ANY_SITE } from "./storage/skill-match.js";
 import { DebuggerTool } from "./tools/debugger.js";
-import { createConsoleTool, createNetworkTool } from "./tools/devtools.js";
+import { createConsoleTool, createDownloadsTool, createNetworkTool } from "./tools/devtools.js";
 import { ExtractImageTool, registerExtractImageRenderer } from "./tools/extract-image.js";
 import { createFillLoginTool } from "./tools/fill-login.js";
 import { createGifTool } from "./tools/gif.js";
@@ -512,6 +513,7 @@ function settingsSections(): SettingsSection[] {
 		{ label: "Connectors", hint: "MCP servers and plugins", tab: connectorsTab() },
 		{ label: "Bridge", hint: "Let coding agents use this browser", tab: new BridgeTab() },
 		{ label: "Notifications", hint: "When a task finishes or needs you", tab: new NotificationsTab() },
+		{ label: "Downloads", hint: "Let agents see files pages saved", tab: new DownloadsTab() },
 		{ label: "Costs", hint: "Spend by day and model", tab: new CostsTab() },
 		{ label: "Proxy", hint: "CORS proxy for providers that need one", tab: new ProxyTab() },
 		{ label: "About", hint: "Version and links", tab: new AboutTab() },
@@ -1137,6 +1139,7 @@ const createAgent = async (initialState?: Partial<AgentState>, shouldSave = true
 				createGifTool(),
 				createConsoleTool(),
 				createNetworkTool(),
+				createDownloadsTool(),
 				createFillLoginTool(),
 			];
 

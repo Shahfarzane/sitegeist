@@ -4,6 +4,9 @@
 
 ### Added
 
+- Settings > Downloads and `list_downloads` (panel and bridge): agents see the files pages saved (path, source, type, size, state). `downloads` is an optional permission, off until the user turns it on.
+- Right-click a tab (or several selected tabs) in the tab strip: "Ask Sitegeist about these tabs" opens a task with the tabs listed in the composer.
+- Cmd+Shift+S closes an open panel (`sidePanel.close`), so the shortcut toggles.
 - `file_upload` hands local files to Chrome when sitegeist's "Allow access to file URLs" is on: no 25 MB cap, trusted `input`/`change` and drop events, and an upload button's native picker is answered (`Page.setInterceptFileChooserDialog`) instead of avoided. With the toggle off it uses the page-script path as before.
 - `run_js` with `frame` runs code inside a cross-origin iframe (embedded checkouts, editors, consent dialogs) through a child debugger session.
 - `read_network` with `body: true` (and the panel's `read_network`) returns text response bodies; bodies survive cross-process navigations (`Network.configureDurableMessages`).
@@ -84,6 +87,7 @@
 
 ### Fixed
 
+- A REPL `browserjs()` call whose page script did not run (Chrome returns `null` for code that does not parse, or the page navigated away) was reported as a success with a note; it is now an error.
 - Cmd and Option shortcuts (Cmd+A, Cmd+Z, Option+Left and others) did nothing on macOS: synthetic key events skip Cocoa's key bindings. `press` and the REPL's native keys now send the editing command with the chord, and `nativePress` applies keys held with `nativeKeyDown`.
 - A page `alert()`, `confirm()` or `prompt()` in an agent tab blocked every later script on it. Dialogs are now answered at once (accepted unless `handle_dialog` set otherwise), listed in the bridge result as `dialogs`, and logged to the console capture.
 - A 4 fps GIF recording of an animating page got about 12 frames a second: Chrome keeps three screencast frames in flight unless told otherwise (`maxFramesInFlight: 1`, Chrome 154).
