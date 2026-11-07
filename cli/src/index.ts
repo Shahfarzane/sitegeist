@@ -8,6 +8,7 @@ import { runNativeHost } from "./host.ts";
 import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
 import { runMcpServer } from "./mcp.ts";
 import { writePiExtension } from "./pi-extension.ts";
+import { publishedVersion } from "./release.ts";
 import { VERSION } from "./version.ts";
 
 const HELP = `sitegeist ${VERSION} - browser bridge for coding harnesses
@@ -18,7 +19,7 @@ Usage:
   sitegeist status          Show whether the extension is reachable
   sitegeist browsers        List the browsers with a live bridge (SITEGEIST_BROWSER=<name> picks one)
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
-  sitegeist update          Make every running browser check for a new signed release now
+  sitegeist update          Make every running browser install the release published here, if newer
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
   sitegeist yolo            Allow agents to open ANY site, no per-site prompts (default)
   sitegeist ask             Require a prompt before agents open an un-allowed site
@@ -182,14 +183,16 @@ async function main(): Promise<void> {
 			return;
 		}
 		case "update": {
-			// Every running browser has its own host; ask each extension to check its update_url.
+			// Every running browser has its own host; each extension checks its update_url only
+			// when the published version is newer than its own (an empty check is throttled for hours).
 			const sockets = listSockets();
 			if (sockets.length === 0) throw new Error("No running browser has the extension connected");
+			const version = publishedVersion();
 			for (const path of sockets) {
 				const client = new BridgeClient({ name: "update" });
 				try {
 					await client.connect(path);
-					console.log(`${path}: ${JSON.stringify(await client.call("bridge.update", {}, 15000))}`);
+					console.log(`${path}: ${JSON.stringify(await client.call("bridge.update", version ? { version } : {}, 15000))}`);
 				} catch (err) {
 					console.log(`${path}: ${err instanceof Error ? err.message : String(err)}`);
 				} finally {

@@ -11,6 +11,7 @@ import { stopScreencastsOwnedBy } from "../browser/cdp.js";
 import { setCdpMessageHandler } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
+import { checkForUpdate } from "../utils/self-update.js";
 import {
 	addPendingRequest,
 	allowHost,
@@ -247,6 +248,10 @@ function onHostMessage(message: HostToExt): void {
 		case "client_disconnected":
 			void onClientDisconnected(message.clientId);
 			return;
+		case "published":
+			// Sent by the host after our hello: the release in its updates.xml.
+			void checkForUpdate(message.version, trace, "host").catch(() => undefined);
+			return;
 		case "request": {
 			if (message.method === "permission.respond") {
 				// Answers must bypass the per-client queue: the request waiting for them is at its head.
@@ -405,9 +410,9 @@ function onHostMessage(message: HostToExt): void {
 				return;
 			}
 			if (message.method === "bridge.update") {
-				// Check the update_url now instead of waiting for Chrome's schedule; onUpdateAvailable applies it.
-				chrome.runtime
-					.requestUpdateCheck()
+				// `sitegeist update` passes the version in updates.xml; onUpdateAvailable applies the update.
+				const published = typeof message.params?.version === "string" ? message.params.version : undefined;
+				checkForUpdate(published, trace, "sitegeist update")
 					.then(({ status, version }) => ({
 						result: { status, available: version ?? null, installed: chrome.runtime.getManifest().version },
 					}))
