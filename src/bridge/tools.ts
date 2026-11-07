@@ -51,6 +51,7 @@ import {
 import type { BrowserSession } from "../browser/session.js";
 import { fileAccessAllowed, uploadPaths } from "../browser/upload.js";
 import { fillLogin } from "../credentials/login.js";
+import { recentDownloads } from "../downloads/downloads.js";
 import { showNotification } from "../notify/notifications.js";
 import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
 import type { GifOptions } from "../recording/gif-types.js";
@@ -398,6 +399,15 @@ export const handlers: Record<string, Handler> = {
 		const y = num(params, "y");
 		const point = x !== undefined && y !== undefined ? screenshotToCss(tabId, { x, y }) : undefined;
 		return uploadPaths(tabId, target(params), paths as string[], point);
+	},
+
+	/** Files pages downloaded, newest first (needs the optional downloads permission). */
+	"downloads.list": async (_ctx, params) => {
+		try {
+			return { downloads: await recentDownloads(num(params, "limit")) };
+		} catch (err) {
+			throw new BridgeError(ERR.PERMISSION_DENIED, err instanceof Error ? err.message : String(err));
+		}
 	},
 
 	/** Hand chunked files to the page. */

@@ -259,16 +259,49 @@ chrome.runtime.onConnect.addListener((port: chrome.runtime.Port) => {
 // Right-click menu: open a task on the tab with the question already in the composer.
 const MENU_PAGE = "sitegeist-ask-page";
 const MENU_SELECTION = "sitegeist-ask-selection";
+const MENU_TABS = "sitegeist-ask-tabs";
 
-chrome.runtime.onInstalled.addListener(() => {
+function createMenus(): void {
 	chrome.contextMenus.removeAll(() => {
 		chrome.contextMenus.create({ id: MENU_PAGE, title: "Ask Sitegeist about this page", contexts: ["page"] });
 		chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Ask Sitegeist about "%s"', contexts: ["selection"] });
+		// The tab strip's own menu (Chrome 150+); it covers every selected tab.
+		chrome.contextMenus.create(
+			{
+				id: MENU_TABS,
+				title: "Ask Sitegeist about these tabs",
+				contexts: ["tab" as chrome.contextMenus.ContextType],
+			},
+			() => void chrome.runtime.lastError,
+		);
 	});
-});
+}
+
+// onExtensionLoaded (Chrome 157) also fires on enable and reload, which onInstalled misses.
+const runtimeEvents = chrome.runtime as unknown as { onExtensionLoaded?: chrome.events.Event<() => void> };
+if (runtimeEvents.onExtensionLoaded) runtimeEvents.onExtensionLoaded.addListener(createMenus);
+else chrome.runtime.onInstalled.addListener(createMenus);
+
+/** The prompt a tab-strip menu click starts with: the selected tabs, or just this one. */
+async function tabsPrompt(tab: chrome.tabs.Tab): Promise<string> {
+	const selected = await chrome.tabs.query({ windowId: tab.windowId, highlighted: true }).catch(() => [tab]);
+	const tabs = selected.some((t) => t.id === tab.id) ? selected : [tab];
+	if (tabs.length === 1) return `About the tab "${tab.title ?? tab.url ?? ""}": `;
+	return `About these tabs:\n${tabs.map((t) => `- ${t.title ?? ""} (${t.url ?? ""})`).join("\n")}\n\n`;
+}
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
 	if (tab?.id === undefined) return;
+	if (info.menuItemId === MENU_TABS) {
+		// Open first, inside the click's user gesture; the prompt follows.
+		const shownForTabs = panelPathCache.get(tab.id);
+		const homeForTabs = shownForTabs ? new URLSearchParams(shownForTabs.split("?")[1]).get("tabId") : null;
+		openPanelOnTab(tab.id, "tab menu");
+		void tabsPrompt(tab).then((prompt) =>
+			chrome.storage.session.set({ [`panel_prefill_${homeForTabs ?? tab.id}`]: prompt }).catch(() => undefined),
+		);
+		return;
+	}
 	const prompt =
 		info.menuItemId === MENU_SELECTION
 			? `About this text on the page:\n\n"${info.selectionText}"\n\n`
@@ -281,9 +314,23 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 	chrome.storage.session.set({ [`panel_prefill_${home ?? tab.id}`]: prompt }).catch(() => undefined);
 });
 
-// Keyboard shortcut: open a task on the current tab (Chrome offers no per-tab close API).
+// Keyboard shortcut: toggle. An open panel closes (sidePanel.close, Chrome 141); otherwise a
+// task opens on the current tab.
 chrome.commands.onCommand.addListener((command: string, sender?: chrome.tabs.Tab) => {
 	if (command !== "toggle-sidepanel") return;
+	const windowId = sender?.windowId;
+	if (windowId !== undefined && openSidepanels.has(windowId)) {
+		const close = (
+			chrome.sidePanel as unknown as { close?: (o: { tabId?: number; windowId?: number }) => Promise<void> }
+		).close;
+		if (close) {
+			const byTab = sender?.id !== undefined ? close({ tabId: sender.id }) : Promise.reject(new Error("no tab"));
+			// A panel open for the whole window rejects a tab-specific close (Chrome 145+).
+			byTab.catch(() => close({ windowId })).catch((err) => recordPanelError("close(command)", err));
+			panelLog(`close window=${windowId} (command)`);
+			return;
+		}
+	}
 	if (sender?.id !== undefined) openPanelOnTab(sender.id, "command");
-	else if (sender?.windowId !== undefined) chrome.sidePanel.open({ windowId: sender.windowId }).catch(() => undefined);
+	else if (windowId !== undefined) chrome.sidePanel.open({ windowId }).catch(() => undefined);
 });

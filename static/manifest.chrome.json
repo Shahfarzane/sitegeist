@@ -43,7 +43,8 @@
 	],
 	"optional_permissions": [
 		"userScripts",
-		"notifications"
+		"notifications",
+		"downloads"
 	],
 	"host_permissions": [
 		"http://*/*",
