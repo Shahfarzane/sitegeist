@@ -17,7 +17,7 @@
 
 import { cdpSend, ensureAttached } from "./cdp.js";
 
-interface UserScriptsApi {
+export interface UserScriptsApi {
 	configureWorld(config: { worldId: string; messaging?: boolean; csp?: string }): Promise<void>;
 	execute(config: {
 		js: Array<{ code: string }>;
@@ -25,18 +25,29 @@ interface UserScriptsApi {
 		world: "USER_SCRIPT";
 		worldId?: string;
 		injectImmediately?: boolean;
-		executionId?: string;
 	}): Promise<Array<{ result?: unknown; error?: unknown }>>;
-	terminate?(tabId: number, executionId: string): Promise<void>;
+	getScripts(filter?: unknown): Promise<unknown[]>;
 }
 
-export function userScriptsApi(): UserScriptsApi | undefined {
+/**
+ * The userScripts API when it can run code now. Revoking "Allow User Scripts" leaves
+ * `chrome.userScripts` and its methods in place while every call throws until the
+ * extension reloads, so a probe call is the only reliable check (Chrome's docs say the same).
+ */
+export async function usableUserScripts(): Promise<UserScriptsApi | undefined> {
 	const api = (chrome as unknown as { userScripts?: UserScriptsApi }).userScripts;
-	return api && typeof api.execute === "function" ? api : undefined;
+	if (!api || typeof api.execute !== "function") return undefined;
+	try {
+		await api.getScripts();
+		return api;
+	} catch {
+		return undefined;
+	}
 }
 
-export function hasUserScripts(): boolean {
-	return userScriptsApi() !== undefined;
+/** An error from the API itself (toggle revoked mid-session), not from the injected code. */
+export function isUserScriptsUnavailable(err: unknown): boolean {
+	return /not available in this context|userScripts/i.test(err instanceof Error ? err.message : String(err));
 }
 
 const configuredWorlds = new Set<string>();
@@ -46,8 +57,8 @@ export interface InjectOptions {
 	worldId?: string;
 	/** userScripts world CSP; ignored on the debugger path. */
 	csp?: string;
-	/** Enables cancellation (userScripts.terminate or Runtime.terminateExecution). */
-	executionId?: string;
+	/** Cancels the run: the call rejects at once and a tab stuck in the script is freed. */
+	signal?: AbortSignal;
 }
 
 /** Handles messages the injected code sends through the shim; set once per context. */
@@ -97,7 +108,6 @@ export async function dispatchToSandbox(message: Record<string, unknown>): Promi
 const BINDING = "__sitegeistSend";
 const bindingReady = new Set<number>();
 let bindingListenerInstalled = false;
-const runningExecutions = new Map<string, number>();
 
 function installBindingListener(): void {
 	if (bindingListenerInstalled) return;
@@ -172,34 +182,28 @@ const SHIM = `(() => {
 	}
 })();`;
 
-async function cdpInject<T>(tabId: number, code: string, options: InjectOptions): Promise<T> {
+async function cdpInject<T>(tabId: number, code: string): Promise<T> {
 	await ensureBinding(tabId);
 	// `chrome` inside the injected code resolves to the shim; the page's own window.chrome is untouched.
 	const expression = `${SHIM}\n(async () => { const chrome = window.__sitegeistChrome; return await (${code}); })()`;
-	if (options.executionId) runningExecutions.set(options.executionId, tabId);
-	try {
-		const result = await cdpSend<{
-			result: { value?: T; description?: string };
-			exceptionDetails?: { exception?: { description?: string }; text?: string };
-		}>(tabId, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
-		if (result.exceptionDetails) {
-			throw new Error(
-				result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Evaluation failed",
-			);
-		}
-		return result.result.value as T;
-	} finally {
-		if (options.executionId) runningExecutions.delete(options.executionId);
+	const result = await cdpSend<{
+		result: { value?: T; description?: string };
+		exceptionDetails?: { exception?: { description?: string }; text?: string };
+	}>(tabId, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+	if (result.exceptionDetails) {
+		throw new Error(
+			result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Evaluation failed",
+		);
 	}
+	return result.result.value as T;
 }
 
-/**
- * Run `code` (an expression or IIFE, may return a promise) in the page and return
- * its value, matching userScripts.execute's `results[0].result`.
- */
-export async function injectScript<T = unknown>(tabId: number, code: string, options: InjectOptions = {}): Promise<T> {
-	const api = userScriptsApi();
-	if (!api) return cdpInject<T>(tabId, code, options);
+async function userScriptsInject<T>(
+	api: UserScriptsApi,
+	tabId: number,
+	code: string,
+	options: InjectOptions,
+): Promise<T> {
 	const worldId = options.worldId ?? "sitegeist";
 	if (!configuredWorlds.has(worldId)) {
 		try {
@@ -215,27 +219,72 @@ export async function injectScript<T = unknown>(tabId: number, code: string, opt
 		world: "USER_SCRIPT",
 		worldId,
 		injectImmediately: true,
-		...(options.executionId && api.terminate ? { executionId: options.executionId } : {}),
 	});
 	const first = results[0];
 	if (first?.error) throw new Error(String((first.error as { message?: string }).message ?? first.error));
 	return first?.result as T;
 }
 
-/** Cancel a running injection on either path. */
-export async function terminateInjection(tabId: number, executionId: string): Promise<boolean> {
-	const api = userScriptsApi();
-	if (api?.terminate) {
-		await api.terminate(tabId, executionId);
-		return true;
-	}
-	if (runningExecutions.has(executionId)) {
-		await cdpSend(tabId, "Runtime.terminateExecution").catch(() => undefined);
-		return true;
-	}
-	return false;
+export const CANCELLED_MESSAGE = "Script execution was cancelled";
+
+/** Reject as soon as `signal` aborts, and free the tab if the script still holds it. */
+function cancellable<T>(run: Promise<T>, tabId: number, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return run;
+	if (signal.aborted) return Promise.reject(new Error(CANCELLED_MESSAGE));
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => {
+			reject(new Error(CANCELLED_MESSAGE));
+			void freeTab(tabId);
+		};
+		signal.addEventListener("abort", onAbort, { once: true });
+		run.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+	});
 }
 
-export function supportsTermination(): boolean {
-	return true;
+/**
+ * Run `code` (an expression or IIFE, may return a promise) in the page and return
+ * its value, matching userScripts.execute's `results[0].result`.
+ */
+export async function injectScript<T = unknown>(tabId: number, code: string, options: InjectOptions = {}): Promise<T> {
+	const run = async () => {
+		const api = await usableUserScripts();
+		if (!api) return cdpInject<T>(tabId, code);
+		try {
+			return await userScriptsInject<T>(api, tabId, code, options);
+		} catch (err) {
+			// The toggle was turned off since the check: the debugger path needs no toggle.
+			if (isUserScriptsUnavailable(err)) return cdpInject<T>(tabId, code);
+			throw err;
+		}
+	};
+	return cancellable(run(), tabId, options.signal);
+}
+
+/** How long a cancelled script may keep the page busy before the tab is reloaded. */
+const FREE_TAB_GRACE_MS = 1500;
+
+/**
+ * Chrome gives extensions no way to stop a script: `userScripts.terminate` never shipped and
+ * `Runtime.terminateExecution` is refused for chrome.debugger ("not allowed for untrusted
+ * clients"). A script that awaits keeps running in the page until it finishes or the page
+ * goes away; one that holds the main thread blocks the tab, so that tab is discarded and
+ * reloaded. Async work is left alone: reloading would throw away the user's page state.
+ */
+export async function freeTab(tabId: number): Promise<"responsive" | "reloaded" | "stuck"> {
+	const probe = chrome.scripting
+		.executeScript({ target: { tabId }, func: () => true, world: "ISOLATED" })
+		.then(() => true)
+		.catch(() => true);
+	const answered = await Promise.race([
+		probe,
+		new Promise<false>((r) => setTimeout(() => r(false), FREE_TAB_GRACE_MS)),
+	]);
+	if (answered) return "responsive";
+	try {
+		await chrome.tabs.discard(tabId);
+		await chrome.tabs.reload(tabId);
+		return "reloaded";
+	} catch {
+		return "stuck";
+	}
 }

@@ -1,7 +1,7 @@
 import { ConsoleRuntimeProvider, RUNTIME_MESSAGE_ROUTER, type SandboxRuntimeProvider } from "@mariozechner/pi-web-ui";
 import { isRestrictedUrl } from "../../browser/cdp.js";
 import { getCurrentBrowserSession } from "../../browser/current.js";
-import { hasUserScripts, injectScript, terminateInjection, unregisterSandboxProviders } from "../../browser/inject.js";
+import { injectScript, unregisterSandboxProviders } from "../../browser/inject.js";
 import {
 	BROWSERJS_RUNTIME_PROVIDER_DESCRIPTION,
 	NAVIGATE_RUNTIME_PROVIDER_DESCRIPTION,
@@ -22,14 +22,6 @@ import { buildWrapperCode } from "./userscripts-helpers.js";
  */
 export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 	private activeSandboxIds: Set<string> = new Set();
-	private activeExecutions = new Map<
-		string,
-		{
-			tabId: number;
-			executionId: string;
-			abortSignal?: AbortSignal;
-		}
-	>();
 	private sandboxAbortSignals = new Map<string, AbortSignal>();
 
 	constructor(private sharedProviders: SandboxRuntimeProvider[]) {}
@@ -176,40 +168,6 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 		// Use fixed worldId for all executions
 		const FIXED_WORLD_ID = "sitegeist-browser-script";
 
-		// Cancellation: userScripts.terminate (Chrome 138+) or Runtime.terminateExecution on the debugger path
-		const supportsTerminate =
-			!hasUserScripts() ||
-			typeof (chrome as { userScripts?: { terminate?: unknown } }).userScripts?.terminate === "function";
-
-		// Generate execution ID for cancellation support (only if terminate is available)
-		const executionId = supportsTerminate ? crypto.randomUUID() : undefined;
-
-		// Track this execution for potential cancellation
-		if (executionId) {
-			this.activeExecutions.set(sandboxId, {
-				tabId: tab.id,
-				executionId: executionId,
-				abortSignal: abortSignal,
-			});
-		}
-
-		// Set up abort handler if signal is available and terminate is supported
-		const abortHandler = executionId
-			? async () => {
-					console.log(`[BrowserJsRuntimeProvider] Aborting execution ${executionId}`);
-					try {
-						await terminateInjection(tab.id!, executionId);
-						console.log(`[BrowserJsRuntimeProvider] Successfully terminated execution ${executionId}`);
-					} catch (e) {
-						console.error(`[BrowserJsRuntimeProvider] Failed to terminate execution:`, e);
-					}
-				}
-			: undefined;
-
-		if (abortSignal && abortHandler) {
-			abortSignal.addEventListener("abort", abortHandler);
-		}
-
 		try {
 			// userScripts world when the browser exposes it (sandboxed CSP), else an isolated content-script world
 			{
@@ -224,7 +182,8 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 				>(tab.id, wrapperCode, {
 					worldId: FIXED_WORLD_ID,
 					csp: "script-src 'unsafe-eval' 'unsafe-inline'; connect-src 'none'; img-src 'none'; media-src 'none'; frame-src 'none'; font-src 'none'; object-src 'none'; default-src 'none';",
-					executionId,
+					// Cancelling rejects at once; a tab the script still blocks is reloaded.
+					signal: abortSignal,
 				});
 
 				// Get console output from the dedicated ConsoleRuntimeProvider for this execution
@@ -267,16 +226,6 @@ export class BrowserJsRuntimeProvider implements SandboxRuntimeProvider {
 				cancelled: wasCancelled,
 			});
 		} finally {
-			// Cleanup abort handler
-			if (abortSignal && abortHandler) {
-				abortSignal.removeEventListener("abort", abortHandler);
-			}
-
-			// Cleanup execution tracking
-			if (executionId) {
-				this.activeExecutions.delete(sandboxId);
-			}
-
 			// Cleanup sandbox registration
 			this.cleanup(sandboxId);
 		}

@@ -204,6 +204,7 @@ The function is **serialized** and executed in the page context. This means:
 **What doesn't work:**
 - ❌ CANNOT access variables from REPL scope (closure doesn't work)
 - ❌ CANNOT navigate - no navigate(), window.location, or history methods inside browserjs()
+- ❌ fetch() to localhost or a private network address from a public page shows Chrome's local network access prompt on that page and waits for the user
 
 #### Functions
 - await browserjs(func, ...args) - Execute function in page, returns JSON-serializable result

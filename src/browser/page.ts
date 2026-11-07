@@ -6,6 +6,7 @@
  */
 
 import { cdpSend, isRestrictedUrl } from "./cdp.js";
+import { isUserScriptsUnavailable, type UserScriptsApi, usableUserScripts } from "./inject.js";
 
 const SNAPSHOT_WORLD_ID = "sitegeist-snapshot";
 const SNAPSHOT_CSP = "script-src 'unsafe-eval' 'unsafe-inline'; default-src 'none';";
@@ -26,6 +27,19 @@ export interface NavigateOptions {
  * loading past the timeout resolves with where the tab is; callers report the tab's
  * status so the model knows it may still be loading.
  */
+/**
+ * Chrome 154 and later put public http:// pages the user has not visited lately behind a
+ * "Not secure" warning when https fails; the navigation then ends in ERR_BLOCKED_BY_CLIENT.
+ */
+export function navigationError(requested: string, failedUrl: string, error: string): string {
+	if (error.includes("ERR_BLOCKED_BY_CLIENT") && /^http:\/\//i.test(failedUrl || requested))
+		return (
+			`Chrome stopped ${failedUrl || requested} at its "Not secure" warning: the site has no working https and ` +
+			"Chrome warns before plain http pages (HTTPS by default). Use an https:// URL, or ask the user to open the page and choose Continue to site."
+		);
+	return `Navigation to ${requested} failed: ${error}`;
+}
+
 export async function navigateTab(tabId: number, url: string, options: NavigateOptions = {}): Promise<string> {
 	return (await navigateTabDetailed(tabId, url, options)).url;
 }
@@ -68,7 +82,7 @@ export async function navigateTabDetailed(
 		const onError = (d: chrome.webNavigation.WebNavigationFramedErrorCallbackDetails) => {
 			// ERR_ABORTED is a superseded navigation (redirect to a download, a newer navigate).
 			if (top(d) && !d.error.includes("ERR_ABORTED"))
-				finish(() => reject(new Error(`Navigation to ${url} failed: ${d.error}`)));
+				finish(() => reject(new Error(navigationError(url, d.url, d.error))));
 		};
 		const onAbort = () => finish(() => reject(new Error("Aborted")));
 		const timer = setTimeout(() => {
@@ -128,25 +142,6 @@ export async function goForward(tabId: number): Promise<boolean> {
 	return waitForLoad(tabId);
 }
 
-interface UserScriptsApi {
-	configureWorld(config: { worldId: string; messaging?: boolean; csp?: string }): Promise<void>;
-	execute(config: {
-		js: Array<{ code: string }>;
-		target: { tabId: number; allFrames?: boolean };
-		world: "USER_SCRIPT";
-		worldId: string;
-		injectImmediately?: boolean;
-	}): Promise<Array<{ result?: unknown; error?: unknown }>>;
-}
-
-function userScripts(): UserScriptsApi {
-	const api = (chrome as unknown as { userScripts?: UserScriptsApi }).userScripts;
-	if (!api || typeof api.execute !== "function") {
-		throw new Error('userScripts API not available. Enable "Allow user scripts" for the extension.');
-	}
-	return api;
-}
-
 const configuredWorlds = new Set<string>();
 
 /**
@@ -161,13 +156,23 @@ export async function runInPage<T = unknown>(tabId: number, code: string, worldI
 	const wrapped = `(async () => { try { const __v = await (${code}); return { ok: true, value: __v }; } catch (e) { return { ok: false, error: String(e && e.stack || e) }; } })()`;
 	// userScripts needs the "Allow user scripts" toggle; without it, evaluate through the
 	// debugger in the main world (CSP does not apply to Runtime.evaluate).
-	let api: UserScriptsApi | undefined;
-	try {
-		api = userScripts();
-	} catch {
-		api = undefined;
-	}
+	const api = await usableUserScripts();
 	if (!api) return cdpEvaluate<T>(tabId, wrapped);
+	try {
+		return await runInUserScriptWorld<T>(api, tabId, wrapped, worldId);
+	} catch (err) {
+		// The toggle was turned off since the check: the debugger path needs no toggle.
+		if (isUserScriptsUnavailable(err)) return cdpEvaluate<T>(tabId, wrapped);
+		throw err;
+	}
+}
+
+async function runInUserScriptWorld<T>(
+	api: UserScriptsApi,
+	tabId: number,
+	wrapped: string,
+	worldId: string,
+): Promise<T> {
 	if (!configuredWorlds.has(worldId)) {
 		try {
 			await api.configureWorld({ worldId, messaging: true, csp: SNAPSHOT_CSP });

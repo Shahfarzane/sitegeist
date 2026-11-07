@@ -8,7 +8,7 @@
  */
 
 import { stopScreencastsOwnedBy } from "../browser/cdp.js";
-import { setCdpMessageHandler } from "../browser/inject.js";
+import { setCdpMessageHandler, usableUserScripts } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
 import { checkAnnouncedUpdate, checkForUpdate } from "../utils/self-update.js";
@@ -305,6 +305,7 @@ function onHostMessage(message: HostToExt): void {
 			}
 			if (message.method === "bridge.debug") {
 				Promise.all([
+					usableUserScripts().then((api) => api !== undefined),
 					listSessions(),
 					chrome.permissions.getAll(),
 					chrome.storage.session.get(["sidepanel_last_error", "sidepanel_open_windows", "sidepanel_trace"]),
@@ -327,14 +328,14 @@ function onHostMessage(message: HostToExt): void {
 						const options = await chrome.sidePanel.getOptions({ tabId: tab.id }).catch(() => null);
 						return { tabId: tab.id, url: tab.url, groupId: tab.groupId, options };
 					}),
-				]).then(([sessions, perms, panelState, groups, windows, activeTab]) =>
+				]).then(([userScriptsApi, sessions, perms, panelState, groups, windows, activeTab]) =>
 					send({
 						type: "response",
 						clientId: message.clientId,
 						id: message.id,
 						result: {
 							version: chrome.runtime.getManifest().version,
-							userScriptsApi: typeof (chrome as { userScripts?: unknown }).userScripts !== "undefined",
+							userScriptsApi,
 							sidePanel: { ...panelState, activeTab, groups },
 							windows,
 							grantedPermissions: perms.permissions ?? [],
