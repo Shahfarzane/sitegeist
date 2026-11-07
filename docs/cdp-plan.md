@@ -11,43 +11,45 @@ Implements `docs/cdp-review.md` (review of Chrome 141 to 158, written 2026-11-07
 
 ## Items
 
-| Item | Decision | PR |
+| Item | Outcome | PR |
 |---|---|---|
-| 1.1 REPL cancel | Fix (reject on abort, free a stuck tab, drop the `terminate` probe) | 1 |
-| 1.2 Revoked user scripts toggle | Fix (`getScripts()` check, CDP fallback on error, capability report) | 1 |
-| 1.3 Viewport after detach | Fix (clear before detach) and raise `minimum_chrome_version` to 154 | 1 |
-| 1.4 Policy attach errors | Fix (name the policy) | 1 |
-| 1.5 Deny list names | Fix | 1 |
-| 1.6 Chrome for Testing host folder | Fix | 1 |
-| 1.7 Split view visibility | Fix | 1 |
-| 1.8 HTTPS warning page | Fix after a probe of how it shows | 1 |
-| 1.9 Drag cancels pointer events | No change (not reproduced) | none |
-| 1.10 Back/forward cache restore | Fix for the screencast init script | 1 |
-| 1.11 Local network prompts | Document in the REPL description | 1 |
-| 2.1 Cmd shortcuts on macOS | Build | 2 |
-| 2.2 Screencast frame cap | Build | 2 |
-| 2.3 Page dialogs | Build | 2 |
-| 2.6 Video recording | Build | 2 |
-| 2.11 Viewport emulation fields | Build | 2 |
-| 2.12 Click markers | Build | 2 |
-| 2.4 File upload through CDP | Build | 3 |
-| 2.7 Isolated world for the debugger path | Build | 3 |
-| 2.8 Log domain | Build | 3 |
-| 2.9 Network response bodies | Build | 3 |
-| 2.10 Cross-origin iframes | Build | 3 |
-| 2.5 Side panel close and events | Build | 4 |
-| 2.13 Small API additions | Build | 4 |
-| 2.14 WebMCP tools | Build | 4 |
-| 2.15 Annotated page content | Decide after a probe | 4 |
-| 2.16 Agent tab in split view | Build | 4 |
-| 3.9 Optional `downloads` | Build | 4 |
-| 3.2, 3.3, 3.4 Policy profile | Build | 5 |
-| 3.8 Background tab freezing | Check freezing first, then code-side fix | 5 |
-| 3.6 Debugger on `chrome://` | Code allows it when the browser does; the Helium flag stays his call | 5 |
-| 3.1 File URL access toggle | One click per browser, after PR 3 | rollout |
+| 1.1 REPL cancel | Fixed: reject on abort, reload a tab the script still blocks (the review's fix is refused by Chrome) | #27 |
+| 1.2 Revoked user scripts toggle | Fixed | #27 |
+| 1.3 Viewport after detach | Fixed; `minimum_chrome_version` 154 | #27 |
+| 1.4 Policy attach errors | Fixed | #27 |
+| 1.5 Deny list names | Kept with a note (deprecated names still work) | #27 |
+| 1.6 Chrome for Testing host folder | Fixed | #27 |
+| 1.7 Split view visibility | Fixed | #27 |
+| 1.8 HTTPS warning page | Fixed (Chrome reports it as `ERR_BLOCKED_BY_CLIENT`) | #27 |
+| 1.9 Drag cancels pointer events | No change: not reproduced on 157 | none |
+| 1.10 Back/forward cache restore | Fixed for the screencast init script | #27 |
+| 1.11 Local network prompts | Documented in the REPL description | #27 |
+| 2.1 Cmd shortcuts on macOS | Built | #28 |
+| 2.2 Screencast frame cap | Built | #28 |
+| 2.3 Page dialogs | Built, with `handle_dialog` | #28 |
+| 2.6 Video recording | Built (`record_video`, bridge only) | #28 |
+| 2.11 Viewport emulation fields | `scrollbarType: "overlay"`; `viewportMeta` and `textLayoutMode` have no use outside `mobile`, which already sets both | #28 |
+| 2.12 Click markers | Built for live views | #28 |
+| 2.4 File upload through CDP | Built (`upload.paths`), page-script fallback kept | #29 |
+| 2.7 Isolated world for the debugger path | Built | #29 |
+| 2.8 Log domain | Built | #29 |
+| 2.9 Network response bodies | Built | #29 |
+| 2.10 Cross-origin iframes | Built (`run_js` `frame`) | #29 |
+| 2.5 Side panel close and events | Shortcut toggles with `sidePanel.close` | #30 |
+| 2.13 Small API additions | Tab menu and `onExtensionLoaded` built. Structured clone: no gain (frames arrive base64 from CDP). Syntax check: the claim fails (`execute()` returns `null` with no error), so a `null` result is now an error | #30 |
+| 2.14 WebMCP tools | Not built: `navigator.modelContext` does not exist on 157, so no page can register tools | none |
+| 2.15 Annotated page content | Not built: undocumented protobuf with the same text as `read_page`; the `cdp` tool can call it | none |
+| 2.16 Agent tab in split view | Not built: a split needs both tabs in one group, and leaving the session group hands the tab back | none |
+| 3.9 Optional `downloads` | Built: Settings > Downloads, `list_downloads` | #30 |
+| 3.2, 3.4 Policy profile | Built: per-id `ExtensionSettings` (toolbar pin, `file://` navigation) for Chrome and a `net.imput.helium` payload | #31 |
+| 3.3 Install sources | No change: the profile already lists the `file://` release folder | none |
+| 3.8 Background tab freezing | No change: no tab froze in 5.5 minutes (control included), and a freeze cannot be simulated in a way that sets `tab.frozen`. Found instead: agent tabs get the same background timer throttling as plain tabs (63 ticks of a 1 s interval in 330 s) | none |
+| 3.6 Debugger on `chrome://` | Not built: with `--extensions-on-chrome-urls`, attaching to `chrome://version` is still refused in Chrome for Testing 157 and in Helium 157 | none |
+| 3.1 File URL access toggle | One click per browser (rollout) | none |
 | 3.5 Debugger infobar in Chrome | Not possible without MDM; a launch flag does not persist | none |
 | 3.7 User scripts toggle policy | Nothing exists to set | none |
 
-## Progress
+## Rollout
 
-Updated as each PR lands.
+- Install the regenerated `release/sitegeist-chrome-policy.mobileconfig` on each Mac (it replaces the old one) and restart Chrome and Helium.
+- Turn on "Allow access to file URLs" for sitegeist in each browser's extension details, for the Chrome upload path.

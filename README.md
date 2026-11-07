@@ -58,13 +58,17 @@ and signed releases install under the same id.
    finds and, once a release is published on this Mac, Helium's external-install file.
 4. Helium: restart it and turn sitegeist on once in `chrome://extensions` (Helium adds an
    externally installed extension switched off).
-5. Google Chrome: install `release/sitegeist-chrome-policy.mobileconfig` once in System
-   Settings > General > Device Management (it puts the id on `ExtensionInstallAllowlist`;
-   without it, Chrome on macOS disables off-store extensions), restart Chrome, then run
+5. Install `release/sitegeist-chrome-policy.mobileconfig` once in System Settings >
+   General > Device Management. For Chrome it puts the id on `ExtensionInstallAllowlist`
+   (without it, Chrome on macOS disables off-store extensions); for Chrome and Helium it pins
+   sitegeist to the toolbar and lets it open `file://` pages. Reinstalling a newer profile
+   replaces the old one. `pack-crx.mjs --no-crx` writes it without the signing key.
+   Restart the browsers and check `chrome://policy`.
+6. Google Chrome: run
    `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" file://$HOME/.local/share/sitegeist/extension/sitegeist-<version>.crx`
    and confirm Add extension. Chrome force-installs off-store extensions only on Macs
    enrolled in MDM, so this one click stays.
-6. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
+7. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
    panel's width, so drag its edge to size it; the layout is built for 360 to 520 px.
 
 Later releases are automatic: `scripts/install-auto-release.sh m3` installs a launchd agent
