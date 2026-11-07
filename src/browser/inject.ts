@@ -7,15 +7,15 @@
  *
  * 1. `userScripts.execute` when the toggle is on (isolated world, our own CSP, real
  *    `chrome.runtime.sendMessage` messaging).
- * 2. The debugger's `Runtime.evaluate` in the page's main world otherwise. CSP does not
- *    apply to it. Messaging is provided by a CDP binding: injected code calls a local
- *    `chrome.runtime.sendMessage` shim that posts through the binding, and replies come
- *    back through `Runtime.evaluate`.
+ * 2. The debugger's `Runtime.evaluate` in an isolated world otherwise (same DOM, separate
+ *    globals, CSP does not apply). Messaging is provided by a CDP binding exposed only to
+ *    that world: injected code calls a local `chrome.runtime.sendMessage` shim that posts
+ *    through the binding, and replies come back through `Runtime.evaluate`.
  *
  * Both paths run the same code; callers do not need to know which one is in use.
  */
 
-import { cdpSend, ensureAttached } from "./cdp.js";
+import { cdpSend, ensureAttached, evaluateIsolated, ISOLATED_WORLD } from "./cdp.js";
 
 export interface UserScriptsApi {
 	configureWorld(config: { worldId: string; messaging?: boolean; csp?: string }): Promise<void>;
@@ -134,7 +134,7 @@ function installBindingListener(): void {
 			const expression = `window.__sitegeistReceive && window.__sitegeistReceive(${parsed.id}, ${JSON.stringify(
 				response ?? null,
 			)}, ${JSON.stringify(error ?? null)})`;
-			await cdpSend(tabId, "Runtime.evaluate", { expression, returnByValue: true }).catch(() => undefined);
+			await evaluateIsolated(tabId, expression).catch(() => undefined);
 		})();
 	});
 	chrome.tabs.onRemoved.addListener((tabId) => bindingReady.delete(tabId));
@@ -148,7 +148,10 @@ async function ensureBinding(tabId: number): Promise<void> {
 	await ensureAttached(tabId);
 	if (bindingReady.has(tabId)) return;
 	await cdpSend(tabId, "Runtime.enable");
-	await cdpSend(tabId, "Runtime.addBinding", { name: BINDING }).catch(() => undefined);
+	// Only the isolated world gets the binding: page scripts cannot post to sitegeist.
+	await cdpSend(tabId, "Runtime.addBinding", { name: BINDING, executionContextName: ISOLATED_WORLD }).catch(
+		() => undefined,
+	);
 	bindingReady.add(tabId);
 }
 
@@ -186,10 +189,7 @@ async function cdpInject<T>(tabId: number, code: string): Promise<T> {
 	await ensureBinding(tabId);
 	// `chrome` inside the injected code resolves to the shim; the page's own window.chrome is untouched.
 	const expression = `${SHIM}\n(async () => { const chrome = window.__sitegeistChrome; return await (${code}); })()`;
-	const result = await cdpSend<{
-		result: { value?: T; description?: string };
-		exceptionDetails?: { exception?: { description?: string }; text?: string };
-	}>(tabId, "Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+	const result = await evaluateIsolated<T>(tabId, expression, { awaitPromise: true });
 	if (result.exceptionDetails) {
 		throw new Error(
 			result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Evaluation failed",

@@ -5,7 +5,7 @@
  * are not active.
  */
 
-import { cdpSend, isRestrictedUrl } from "./cdp.js";
+import { evaluateIsolated, isRestrictedUrl } from "./cdp.js";
 import { isUserScriptsUnavailable, type UserScriptsApi, usableUserScripts } from "./inject.js";
 
 const SNAPSHOT_WORLD_ID = "sitegeist-snapshot";
@@ -202,10 +202,7 @@ function unwrap<T>(raw: unknown): T {
 }
 
 async function cdpEvaluate<T>(tabId: number, wrapped: string): Promise<T> {
-	const result = await cdpSend<{
-		result: { value?: unknown };
-		exceptionDetails?: { exception?: { description?: string }; text?: string };
-	}>(tabId, "Runtime.evaluate", { expression: wrapped, returnByValue: true, awaitPromise: true });
+	const result = await evaluateIsolated(tabId, wrapped, { awaitPromise: true });
 	if (result.exceptionDetails) {
 		throw new Error(
 			result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Evaluation failed",
@@ -445,7 +442,7 @@ function pageResolveTarget(target: ElementTarget): Element {
 }
 
 /** Stringified target lookup for page scripts: `resolve` in scope, `target` from the caller. */
-function resolverSource(target: ElementTarget): string {
+export function resolverSource(target: ElementTarget): string {
 	return `const resolve = ${pageResolveTarget.toString()};
 		const target = ${JSON.stringify(target)};`;
 }

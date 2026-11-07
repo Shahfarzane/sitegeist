@@ -14,6 +14,7 @@ import {
 	drag,
 	enableConsoleCapture,
 	enableNetworkCapture,
+	evaluateInFrame,
 	evaluateMain,
 	hover,
 	networkEntries,
@@ -25,6 +26,7 @@ import {
 	stopScreencast,
 	typeText,
 	type ViewportSize,
+	withResponseBodies,
 } from "../browser/cdp.js";
 import { rankNodes } from "../browser/find.js";
 import { injectScript } from "../browser/inject.js";
@@ -47,6 +49,7 @@ import {
 	waitForLoad,
 } from "../browser/page.js";
 import type { BrowserSession } from "../browser/session.js";
+import { fileAccessAllowed, uploadPaths } from "../browser/upload.js";
 import { fillLogin } from "../credentials/login.js";
 import { showNotification } from "../notify/notifications.js";
 import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
@@ -376,6 +379,27 @@ export const handlers: Record<string, Handler> = {
 		return { received: upload.chars };
 	},
 
+	/**
+	 * Local files by path, through Chrome (no size cap, trusted events, upload buttons work).
+	 * Needs "Allow access to file URLs"; without it the caller falls back to upload.chunk.
+	 */
+	"upload.paths": async (ctx, params) => {
+		const paths = params.paths;
+		if (
+			!Array.isArray(paths) ||
+			paths.length === 0 ||
+			!paths.every((p) => typeof p === "string" && p.startsWith("/"))
+		)
+			throw new BridgeError(ERR.BAD_PARAMS, "paths must be absolute file paths");
+		if (!(await fileAccessAllowed()))
+			return { fallback: true, reason: "Allow access to file URLs is off for sitegeist" };
+		const tabId = await resolveTab(ctx, params, true);
+		const x = num(params, "x");
+		const y = num(params, "y");
+		const point = x !== undefined && y !== undefined ? screenshotToCss(tabId, { x, y }) : undefined;
+		return uploadPaths(tabId, target(params), paths as string[], point);
+	},
+
 	/** Hand chunked files to the page. */
 	"upload.commit": async (ctx, params) => {
 		const specs = params.files as Array<{ uploadId: string; name: string; mimeType: string }> | undefined;
@@ -652,6 +676,11 @@ export const handlers: Record<string, Handler> = {
 			if (!skill) throw new BridgeError(ERR.NOT_FOUND, `No skill named ${skillName}`);
 			code = `(async () => { ${skill.library ?? ""}\n; return (${code}); })()`;
 		}
+		const frame = str(params, "frame");
+		if (frame) {
+			const tabId = await resolveTab(ctx, params, true);
+			return { value: await evaluateInFrame(tabId, frame, code) };
+		}
 		const world = str(params, "world") === "main" ? "main" : "user";
 		if (world === "main") {
 			const tabId = await resolveTab(ctx, params, true);
@@ -768,12 +797,13 @@ export const handlers: Record<string, Handler> = {
 	"network.read": async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, true);
 		await enableNetworkCapture(tabId);
+		const entries = networkEntries(tabId, {
+			urlPattern: str(params, "urlPattern"),
+			clear: params.clear === true,
+			limit: num(params, "limit"),
+		});
 		return {
-			entries: networkEntries(tabId, {
-				urlPattern: str(params, "urlPattern"),
-				clear: params.clear === true,
-				limit: num(params, "limit"),
-			}),
+			entries: params.body === true ? await withResponseBodies(tabId, entries, num(params, "bodyChars")) : entries,
 		};
 	},
 };
