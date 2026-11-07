@@ -11,7 +11,7 @@ import { stopScreencastsOwnedBy } from "../browser/cdp.js";
 import { setCdpMessageHandler } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
-import { checkForUpdate } from "../utils/self-update.js";
+import { checkAnnouncedUpdate, checkForUpdate } from "../utils/self-update.js";
 import {
 	addPendingRequest,
 	allowHost,
@@ -250,7 +250,7 @@ function onHostMessage(message: HostToExt): void {
 			return;
 		case "published":
 			// Sent by the host after our hello: the release in its updates.xml.
-			void checkForUpdate(message.version, trace, "host").catch(() => undefined);
+			void checkAnnouncedUpdate(message.version, trace).catch(() => undefined);
 			return;
 		case "request": {
 			if (message.method === "permission.respond") {

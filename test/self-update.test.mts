@@ -4,13 +4,21 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { checkForUpdate, isNewerVersion } from "../src/utils/self-update.ts";
+import { checkAnnouncedUpdate, checkForUpdate, isNewerVersion } from "../src/utils/self-update.ts";
 
 let checks = 0;
+let session: Record<string, unknown> = {};
 
 beforeEach(() => {
 	checks = 0;
+	session = {};
 	(globalThis as { chrome?: unknown }).chrome = {
+		storage: {
+			session: {
+				get: async (key: string) => (key in session ? { [key]: session[key] } : {}),
+				set: async (items: Record<string, unknown>) => Object.assign(session, items),
+			},
+		},
 		runtime: {
 			getManifest: () => ({ version: "1.2.322" }),
 			requestUpdateCheck: async () => {
@@ -46,4 +54,17 @@ test("asks Chrome when the published release is newer", async () => {
 test("asks Chrome when an older CLI sends no version", async () => {
 	await checkForUpdate(undefined, quiet, "test");
 	assert.equal(checks, 1);
+});
+
+test("a release the host announces again after a reconnect is not checked twice", async () => {
+	assert.equal((await checkAnnouncedUpdate("1.2.330", quiet)).status, "update_available");
+	assert.equal((await checkAnnouncedUpdate("1.2.330", quiet)).status, "skipped");
+	assert.equal(checks, 1);
+	await checkAnnouncedUpdate("1.2.331", quiet);
+	assert.equal(checks, 2);
+});
+
+test("an announced release that is not newer is not remembered", async () => {
+	assert.equal((await checkAnnouncedUpdate("1.2.322", quiet)).status, "current");
+	assert.deepEqual(session, {});
 });

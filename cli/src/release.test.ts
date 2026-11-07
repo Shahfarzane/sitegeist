@@ -28,6 +28,8 @@ const manifest = (version: string) => `<?xml version="1.0" encoding="UTF-8"?>
 
 test("reads the version from the updatecheck tag, not the xml or protocol version", () => {
 	assert.equal(parsePublishedVersion(manifest("1.2.330")), "1.2.330");
+	assert.equal(parsePublishedVersion("<gupdate><app><updatecheck codebase='file:///x.crx' version = '1.2.9'/></app></gupdate>"), "1.2.9");
+	assert.equal(parsePublishedVersion("<gupdate><app><updatecheck codebase='file:///x.crx'/></app></gupdate>"), undefined);
 	assert.equal(parsePublishedVersion("<gupdate protocol=\"2.0\"></gupdate>"), undefined);
 });
 

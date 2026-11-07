@@ -104,6 +104,19 @@ test("the host announces a newer release on connect and the extension checks onc
 	assert.match(lines[0], /update check \(host\): .* \(published 10\.0\.0\)/);
 });
 
+test("a host that reconnects announces the release again and the extension does not recheck", async () => {
+	const [old] = readdirSync(browser.socketDir).filter((n) => n.endsWith(".sock"));
+	process.kill(Number.parseInt(old, 10), "SIGTERM");
+	await waitFor(() => {
+		const socks = readdirSync(browser.socketDir).filter((n) => n.endsWith(".sock"));
+		return socks.length === 1 && socks[0] !== old;
+	}, 20000);
+	await waitFor(async () =>
+		(await bridgeCall("bridge.debug")).log.some((l) => l.includes("release 10.0.0 announced again")),
+	);
+	assert.equal((await updateChecks()).length, 1);
+});
+
 test("`sitegeist update` leaves Chrome alone when the published release is not newer", async () => {
 	publish("1.0.0");
 	const before = (await updateChecks()).length;

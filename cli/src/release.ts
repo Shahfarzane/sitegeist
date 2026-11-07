@@ -24,7 +24,7 @@ export function updateManifestUrl(): string {
 /** The version in an update manifest (`<updatecheck ... version="1.2.3" />`). */
 export function parsePublishedVersion(xml: string): string | undefined {
 	const tag = /<updatecheck\b[^>]*>/.exec(xml)?.[0];
-	return tag ? /\bversion="([0-9.]+)"/.exec(tag)?.[1] : undefined;
+	return tag ? /\bversion\s*=\s*(["'])([0-9.]+)\1/.exec(tag)?.[2] : undefined;
 }
 
 /** The release published on this machine, if there is one. */

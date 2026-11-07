@@ -10,7 +10,7 @@
  */
 const LEGACY_ALARM = "self-update-check";
 
-/** Chrome's answer (`update_available`, `no_update`, `throttled`), or `current` when no check was needed. */
+/** Chrome's answer (`update_available`, `no_update`, `throttled`), or `current`/`skipped` when no check ran. */
 export interface UpdateCheck {
 	status: string;
 	version?: string;
@@ -44,6 +44,25 @@ export async function checkForUpdate(
 		`update check (${reason}): ${status}${version ? ` ${version}` : ""}${published ? ` (published ${published})` : ""}`,
 	);
 	return { status, version };
+}
+
+const ANNOUNCED_KEY = "self_update_announced_checked";
+
+/**
+ * A release the host announces on connect is checked once per browser session (the lifetime
+ * of chrome.storage.session and of Chrome's backoff). If Chrome cannot reach the update
+ * manifest, the check ends empty; repeating it on every reconnect would keep the backoff armed
+ * and block `sitegeist update`, which always checks.
+ */
+export async function checkAnnouncedUpdate(published: string, log: (line: string) => void): Promise<UpdateCheck> {
+	const stored = await chrome.storage.session.get(ANNOUNCED_KEY);
+	if (stored[ANNOUNCED_KEY] === published) {
+		log(`release ${published} announced again, already checked this session`);
+		return { status: "skipped" };
+	}
+	const result = await checkForUpdate(published, log, "host");
+	if (result.status !== "current") await chrome.storage.session.set({ [ANNOUNCED_KEY]: published });
+	return result;
 }
 
 export function startSelfUpdate(log: (line: string) => void): void {
