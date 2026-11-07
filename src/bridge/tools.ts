@@ -20,6 +20,7 @@ import {
 	pressKey,
 	screenshotToCss,
 	setAgentViewport,
+	setNextDialogAnswer,
 	startScreencast,
 	stopScreencast,
 	typeText,
@@ -50,6 +51,7 @@ import { fillLogin } from "../credentials/login.js";
 import { showNotification } from "../notify/notifications.js";
 import { type GifAction, gifRecorderFor, noteGifAction } from "../recording/gif-recorder.js";
 import type { GifOptions } from "../recording/gif-types.js";
+import { startVideo, stopVideo } from "../recording/video-recorder.js";
 import { readStore } from "../storage/raw-store.js";
 import { ANY_SITE, matchesAnyPattern } from "../storage/skill-match.js";
 import type { SavedPrompt } from "../storage/stores/prompts-store.js";
@@ -426,6 +428,20 @@ export const handlers: Record<string, Handler> = {
 		}
 	},
 
+	/** A video of the session's tab, encoded by Chrome (MP4, AV1). */
+	video: async (ctx, params) => {
+		const tabId = await resolveTab(ctx, params, true);
+		switch (requireStr(params, "action")) {
+			case "start":
+				await startVideo(tabId, { frameRate: num(params, "frameRate"), maxWidth: num(params, "maxWidth") });
+				return { tabId, recording: true };
+			case "stop":
+				return { tabId, ...(await stopVideo(tabId)) };
+			default:
+				throw new BridgeError(ERR.BAD_PARAMS, "action must be start or stop");
+		}
+	},
+
 	"screencast.start": async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, true);
 		await startScreencast(
@@ -438,6 +454,7 @@ export const handlers: Record<string, Handler> = {
 				maxHeight: num(params, "maxHeight"),
 				maxFps: num(params, "maxFps"),
 				initScript: str(params, "initScript"),
+				showClicks: params.showClicks !== false,
 			},
 			(frame) => ctx.emit("screencast_frame", { tabId, data: frame.data, metadata: frame.metadata }),
 			(reason) => ctx.emit("screencast_stopped", { tabId, reason }),
@@ -564,6 +581,15 @@ export const handlers: Record<string, Handler> = {
 		record(ctx, { kind: "label", label: `Press ${key}` });
 		for (let i = 0; i < repeat; i++) await pressKey(tabId, key);
 		return { pressed: key, repeat };
+	},
+
+	/** How to answer the next confirm() or prompt() the page opens; alerts are always accepted. */
+	"dialog.next": async (ctx, params) => {
+		const tabId = await resolveTab(ctx, params, false);
+		const accept = params.accept !== false;
+		const promptText = str(params, "promptText");
+		setNextDialogAnswer(tabId, { accept, ...(promptText !== undefined ? { promptText } : {}) });
+		return { tabId, accept, ...(promptText !== undefined ? { promptText } : {}) };
 	},
 
 	scroll: async (ctx, params) => {

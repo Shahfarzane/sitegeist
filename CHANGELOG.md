@@ -4,6 +4,9 @@
 
 ### Added
 
+- `record_video`: an MP4 of the tab encoded by Chrome itself (`Page.startScreenRecording`, Chrome 153), hidden tabs included.
+- `handle_dialog`: choose how the next `confirm()` or `prompt()` is answered.
+- Live views (`screencast.start`) show Chrome's own click feedback (`Page.setInputVisualization`, Chrome 157); the agent viewport uses overlay scrollbars, so its 1280 px are all page.
 - Capture an area: drag a rectangle on the page from the header menu and it joins your message as an image.
 - The welcome screen suggests what fits the page (review this PR, summarize my inbox, proofread this doc), plus the site's skills.
 - Right-click menu: "Ask Sitegeist about this page" and about a selection open a task with the question in the composer.
@@ -76,6 +79,9 @@
 
 ### Fixed
 
+- Cmd and Option shortcuts (Cmd+A, Cmd+Z, Option+Left and others) did nothing on macOS: synthetic key events skip Cocoa's key bindings. `press` and the REPL's native keys now send the editing command with the chord, and `nativePress` applies keys held with `nativeKeyDown`.
+- A page `alert()`, `confirm()` or `prompt()` in an agent tab blocked every later script on it. Dialogs are now answered at once (accepted unless `handle_dialog` set otherwise), listed in the bridge result as `dialogs`, and logged to the console capture.
+- A 4 fps GIF recording of an animating page got about 12 frames a second: Chrome keeps three screencast frames in flight unless told otherwise (`maxFramesInFlight: 1`, Chrome 154).
 - Stopping a REPL script did nothing: Chrome never shipped `userScripts.terminate`, and it refuses `Runtime.terminateExecution` from extensions. A cancel now returns at once, and a tab the script still blocks is discarded and reloaded.
 - Turning "Allow User Scripts" off while the browser runs broke every page script: `chrome.userScripts.execute` stays defined and throws. sitegeist now checks with `getScripts()` and falls back to the debugger path.
 - An agent tab shown in a split view (Chrome 155) was rendered at the 1280x800 agent viewport and letterboxed; it now counts as on screen.

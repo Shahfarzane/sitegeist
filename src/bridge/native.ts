@@ -7,7 +7,7 @@
  * backoff and on a 30 s alarm, which also keeps the worker alive.
  */
 
-import { stopScreencastsOwnedBy } from "../browser/cdp.js";
+import { stopScreencastsOwnedBy, takeDialogs } from "../browser/cdp.js";
 import { setCdpMessageHandler, usableUserScripts } from "../browser/inject.js";
 import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
@@ -225,7 +225,13 @@ async function runRequest(state: ClientState, req: HostForwardedRequest): Promis
 		};
 		const result = await withTimeout(handler(ctx, req.params ?? {}), HANDLER_TIMEOUT_MS, req.method);
 		trace(`${state.name} ${req.method} session=${tSession}ms total=${Math.round(performance.now() - t0)}ms`);
-		reply(result);
+		// Dialogs the page opened during the call were answered already; say what they asked.
+		const dialogs = takeDialogs(session.tabIds);
+		reply(
+			dialogs.length && result && typeof result === "object" && !Array.isArray(result)
+				? { ...result, dialogs }
+				: result,
+		);
 	} catch (err) {
 		state.lastError = `${req.method}: ${err instanceof Error ? err.message : String(err)}`;
 		console.warn("[Bridge]", state.lastError);
