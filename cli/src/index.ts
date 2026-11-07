@@ -15,7 +15,8 @@ const HELP = `sitegeist ${VERSION} - browser bridge for coding harnesses
 
 Usage:
   sitegeist mcp             Run the MCP server on stdio (installs the native host on first run)
-  sitegeist install         Write the native messaging manifest for every Chromium browser found
+  sitegeist install         Write the native messaging manifest for every Chromium browser found,
+                            and have Helium install the self-hosted release when one is published here
   sitegeist status          Show whether the extension is reachable
   sitegeist browsers        List the browsers with a live bridge (SITEGEIST_BROWSER=<name> picks one)
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
