@@ -68,5 +68,13 @@ cat >"$PLIST" <<EOF
 </plist>
 EOF
 plutil -lint "$PLIST" >/dev/null
+
+# With loginitem on PATH (a builder for signed helper apps, not part of this repo), Login
+# Items lists the job as "Sitegeist Release" with its own icon instead of the launcher's
+# name: it adds Program and AssociatedBundleIdentifiers and leaves ProgramArguments alone.
+if command -v loginitem >/dev/null 2>&1; then
+	loginitem link "$PLIST" sitegeist-release --name "Sitegeist Release" --glyph shippingbox --tint green --quiet >/dev/null ||
+		echo "note: loginitem link failed, so Login Items lists the job as sitegeist-auto-release" >&2
+fi
 launchctl bootstrap "$DOMAIN" "$PLIST"
 echo "installed $LABEL (every 10 minutes, log: $LOG)"
