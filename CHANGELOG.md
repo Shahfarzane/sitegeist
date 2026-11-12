@@ -56,6 +56,7 @@
 
 ### Changed
 
+- The debugger tool's `cookies` action lists names, domains, paths, expiry and flags only, never a cookie's value: a value is a credential, and tool results are kept in transcripts.
 - Without the user scripts toggle, sitegeist's page code (snapshot, find, REPL) runs in an isolated world through the debugger instead of the page's main world: the page can no longer see or call `__sitegeistPending`, the messaging binding or the snapshot refs. `run_js` with `world: "main"` still runs in the page's own world.
 - New look for the panel: warm light and cool dark colors, a teal accent on the caret, focus ring and links, a rounded composer with a `+` and a round send button, and a calmer empty chat.
 - The panel now uses a bundled typeface, Public Sans, with larger text: 16 px in the chat and composer. The theme's font never reached the page before, so it was on the system font.

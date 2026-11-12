@@ -13,6 +13,7 @@ import { createRef, ref } from "lit/directives/ref.js";
 import { Bug } from "lucide";
 import { evaluateMain } from "../browser/cdp.js";
 import { getCurrentBrowserSession } from "../browser/current.js";
+import { formatCookies, summarizeCookies } from "./cookie-list.js";
 
 // ============================================================================
 // TYPES
@@ -57,11 +58,12 @@ ACTIONS:
    { action: "eval", code: "window.myFunction()" } - Call page function
    { action: "eval", code: "JSON.stringify(localStorage)" } - Get localStorage
 
-2. cookies - Get all cookies for current domain (including HttpOnly)
-   Returns cookies in format: name: value (one per line)
+2. cookies - List the cookies of the current page (including HttpOnly)
+   Returns one line per cookie: name, domain and path, expiry, flags.
+   Values are never returned: a cookie value is a credential.
 
    Example:
-   { action: "cookies" } - Get all cookies
+   { action: "cookies" } - List the cookies (names, never values)
 
 CRITICAL: Use browserjs() and repl tool for DOM manipulation. Use this ONLY for MAIN world access or browser APIs.`;
 	parameters = debuggerSchema;
@@ -107,10 +109,9 @@ CRITICAL: Use browserjs() and repl tool for DOM manipulation. Use this ONLY for 
 				}
 
 				try {
-					const cookies = await chrome.cookies.getAll({ url: tab.url });
-					const output = cookies.map((c: { name: string; value: string }) => `${c.name}: ${c.value}`).join("\n");
+					const cookies = summarizeCookies(await chrome.cookies.getAll({ url: tab.url }));
 					const details: DebuggerResult = { value: cookies };
-					return { content: [{ type: "text", text: output }], details };
+					return { content: [{ type: "text", text: formatCookies(cookies) }], details };
 				} catch (err: any) {
 					throw new Error(`Failed to get cookies: ${err.message}`);
 				}
