@@ -4,9 +4,15 @@
 //   release/updates.xml              update manifest for self-hosting (with --codebase)
 //   release/sitegeist-chrome-policy.mobileconfig
 //                                    macOS profile that allowlists the extension id in Chrome
+// or, with --store, only the Chrome Web Store upload:
+//   <out>/sitegeist-<version>.zip    no `key`, no `update_url`; with --include-key the private
+//                                    key rides along as key.pem, which on an item's first upload
+//                                    gives the store item the same id (lnncppjiohlpejgcbdgoihplimdckddn)
 //
 // Usage:
 //   node scripts/pack-crx.mjs --key <private-key.pem> [--codebase <base-url>] [--no-crx]
+//   node scripts/pack-crx.mjs --store [--out <dir>]                 (default release/store)
+//   node scripts/pack-crx.mjs --store --include-key <private-key.pem> --out <dir>
 //   CRX_PRIVATE_KEY="$(cat key.pem)" node scripts/pack-crx.mjs ...
 //
 // The extension id is derived from the signing key. The key must match the `key` in the
@@ -39,11 +45,15 @@ const { values: args } = parseArgs({
 	options: {
 		key: { type: "string" },
 		dir: { type: "string", default: join(packageRoot, "dist-chrome") },
-		out: { type: "string", default: join(packageRoot, "release") },
+		out: { type: "string" },
 		codebase: { type: "string" },
 		"no-crx": { type: "boolean", default: false },
+		store: { type: "boolean", default: false },
+		"include-key": { type: "string" },
 	},
 });
+// The store zip has its own folder, so it never replaces the release zip of the same version.
+const outDir = args.out ?? join(packageRoot, args.store ? "release/store" : "release");
 
 const varint = (value) => {
 	const bytes = [];
@@ -85,7 +95,7 @@ const loadKey = () => {
 	return { privateKey, publicKeyDer, crxId, id: extensionIdFor(crxId) };
 };
 
-const buildZip = async (manifest) => {
+const buildZip = async (manifest, extraFiles = {}) => {
 	const zip = new JSZip();
 	// Fixed timestamps keep the archive byte-identical for identical input.
 	const date = new Date("2000-01-01T00:00:00Z");
@@ -95,6 +105,7 @@ const buildZip = async (manifest) => {
 		const content = name === "manifest.json" ? `${JSON.stringify(manifest, null, "\t")}\n` : readFileSync(path);
 		zip.file(name, content, { date });
 	}
+	for (const [name, content] of Object.entries(extraFiles)) zip.file(name, content, { date });
 	return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
 };
 
@@ -205,18 +216,43 @@ const updateManifest = (id, version, codebase) => `<?xml version="1.0" encoding=
 </gupdate>
 `;
 
+const idForPublicKey = (base64) =>
+	extensionIdFor(createHash("sha256").update(Buffer.from(base64, "base64")).digest().subarray(0, 16));
+
+// The Web Store rejects an upload whose manifest carries `key`, and it serves updates itself.
+// The id comes from key.pem instead, read only on the item's first upload.
+const packStore = async (manifest) => {
+	const id = manifest.key ? idForPublicKey(manifest.key) : undefined;
+	delete manifest.key;
+	delete manifest.update_url;
+	const extraFiles = {};
+	if (args["include-key"]) {
+		// key.pem fixes the store item's id for good, so it must be the key unpacked builds use,
+		// and a zip holding it goes only where the caller asked (store-zip.sh: a temp folder).
+		if (!id) throw new Error("--include-key needs the manifest's `key` to check the id against");
+		if (!args.out) throw new Error("--include-key needs --out: the zip holds the private key");
+		const pem = readFileSync(args["include-key"], "utf8");
+		const publicKey = createPublicKey(createPrivateKey(pem)).export({ type: "spki", format: "der" });
+		const keyId = idForPublicKey(publicKey.toString("base64"));
+		if (keyId !== id) throw new Error(`key.pem (id ${keyId}) does not match the manifest key (id ${id})`);
+		extraFiles["key.pem"] = pem;
+	}
+	mkdirSync(outDir, { recursive: true });
+	const zipPath = join(outDir, `sitegeist-${manifest.version}.zip`);
+	writeFileSync(zipPath, await buildZip(manifest, extraFiles));
+	console.log(zipPath);
+};
+
 const run = async () => {
 	const manifest = JSON.parse(readFileSync(join(args.dir, "manifest.json"), "utf8"));
+	if (args.store) return packStore(manifest);
+	if (args["include-key"]) throw new Error("--include-key goes with --store");
 	const version = manifest.version;
 	const key = args["no-crx"] ? undefined : loadKey();
 	if (!args["no-crx"] && !key) throw new Error("Pass --key <pem> or set CRX_PRIVATE_KEY (or --no-crx for a zip only)");
 	const codebase = args.codebase?.replace(/\/$/, "");
 	// The id the policy profile names: from the signing key, or the manifest's public key.
-	const profileId =
-		key?.id ??
-		(manifest.key
-			? extensionIdFor(createHash("sha256").update(Buffer.from(manifest.key, "base64")).digest().subarray(0, 16))
-			: undefined);
+	const profileId = key?.id ?? (manifest.key ? idForPublicKey(manifest.key) : undefined);
 	if (key) {
 		const publicKey = key.publicKeyDer.toString("base64");
 		if (manifest.key && manifest.key !== publicKey) {
@@ -229,9 +265,9 @@ const run = async () => {
 		delete manifest.key;
 	}
 
-	mkdirSync(args.out, { recursive: true });
+	mkdirSync(outDir, { recursive: true });
 	const zip = await buildZip(manifest);
-	const zipPath = join(args.out, `sitegeist-${version}.zip`);
+	const zipPath = join(outDir, `sitegeist-${version}.zip`);
 	writeFileSync(zipPath, zip);
 	console.log(`zip:     ${relative(packageRoot, zipPath)}`);
 	if (!key) {
@@ -240,14 +276,14 @@ const run = async () => {
 	}
 
 	const crxName = `sitegeist-${version}.crx`;
-	const crxPath = join(args.out, crxName);
+	const crxPath = join(outDir, crxName);
 	writeFileSync(crxPath, buildCrx(zip, key));
 	console.log(`crx:     ${relative(packageRoot, crxPath)}`);
 	console.log(`id:      ${key.id}`);
 	console.log(`version: ${version}`);
 
 	if (codebase) {
-		const xmlPath = join(args.out, "updates.xml");
+		const xmlPath = join(outDir, "updates.xml");
 		writeFileSync(xmlPath, updateManifest(key.id, version, `${codebase}/${crxName}`));
 		console.log(`update:  ${relative(packageRoot, xmlPath)} -> ${codebase}/${crxName}`);
 	}
@@ -256,7 +292,7 @@ const run = async () => {
 };
 
 function writeProfile(id, codebase) {
-	const profilePath = join(args.out, "sitegeist-chrome-policy.mobileconfig");
+	const profilePath = join(outDir, "sitegeist-chrome-policy.mobileconfig");
 	writeFileSync(profilePath, policyProfile(id, codebase));
 	console.log(`policy:  ${relative(packageRoot, profilePath)}`);
 }

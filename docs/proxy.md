@@ -125,10 +125,10 @@ if (proxyEnabled === null) {
 }
 ```
 
-**Defaults**:
-- Proxy is **enabled by default**
-- Default URL: `https://proxy.mariozechner.at/proxy`
-- This proxy does not retain or log data (as stated in tutorials)
+**Defaults**: in this fork the proxy is **off**. `src/sidepanel.ts` sets `proxy.enabled` to
+`false` each time the side panel starts, because the `declarativeNetRequest` rules in
+`static/cors-rules.json` add the CORS headers the providers need. The first-run block above
+is upstream's; a proxy turned on in Settings lasts until the panel next starts.
 
 ### Storage Schema
 

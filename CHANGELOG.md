@@ -4,6 +4,7 @@
 
 ### Added
 
+- Chrome Web Store upload: `scripts/store-zip.sh` (`npm run package:store`) builds the release as a zip without `key` and `update_url`; `--first-upload` adds the signing key as `key.pem` so the store item keeps id `lnncppjiohlpejgcbdgoihplimdckddn` (`pack-crx.mjs --store --include-key`). Listing, permission answers and the remote-code review: `docs/chrome-web-store.md`. Privacy policy: `PRIVACY.md`.
 - The policy profile pins sitegeist to the toolbar and allows `file://` pages (`ExtensionSettings`) in Google Chrome, and carries a `net.imput.helium` payload so Helium gets the same. `pack-crx.mjs --no-crx` writes the profile from the manifest key, without the signing key.
 - Settings > Downloads and `list_downloads` (panel and bridge): agents see the files pages saved (path, source, type, size, state). `downloads` is an optional permission, off until the user turns it on.
 - Right-click a tab (or several selected tabs) in the tab strip: "Ask Sitegeist about these tabs" opens a task with the tabs listed in the composer.
@@ -56,6 +57,7 @@
 
 ### Changed
 
+- The extension is named "Sitegeist Bridge (unofficial fork)", and About links to this fork's repository and privacy policy instead of sitegeist.ai.
 - The debugger tool's `cookies` action lists names, domains, paths, expiry and flags only, never a cookie's value: a value is a credential, and tool results are kept in transcripts.
 - Without the user scripts toggle, sitegeist's page code (snapshot, find, REPL) runs in an isolated world through the debugger instead of the page's main world: the page can no longer see or call `__sitegeistPending`, the messaging binding or the snapshot refs. `run_js` with `world: "main"` still runs in the page's own world.
 - New look for the panel: warm light and cool dark colors, a teal accent on the caret, focus ring and links, a rounded composer with a `+` and a round send button, and a calmer empty chat.

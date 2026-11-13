@@ -89,6 +89,12 @@ To start a new minor line, change the first two numbers of the version in
 For development, `npm run build` and Load unpacked `dist-chrome/` work as before and
 replace the installed release (same id, same data).
 
+The fork is moving to the Chrome Web Store as an Unlisted item named "Sitegeist Bridge
+(unofficial fork)", under the same id. `scripts/store-zip.sh` builds the upload; the listing,
+the policy review and the first-upload steps are in
+[docs/chrome-web-store.md](docs/chrome-web-store.md). Until the store item is live, the
+self-hosted `.crx` above stays the way to install.
+
 No toggles are required. In-page JavaScript runs through the `userScripts` API when the
 browser exposes it (an isolated world whose CSP blocks network access from injected code)
 and through the debugger's `Runtime.evaluate` otherwise (the page's main world; Chrome
