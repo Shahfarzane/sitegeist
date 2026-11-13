@@ -8,7 +8,7 @@ Sitegeist Bridge is an unofficial fork of sitegeist. It has no server of its own
 - `fill_login` signs in from 1Password only after you approve it in 1Password. The values go into the page, never to the AI provider.
 - Pages the assistant builds run in a sandboxed page with no access to the extension, and may load open-source libraries from public CDNs (jsDelivr, unpkg, cdnjs, esm.sh).
 - The model list is refreshed from models.dev, a public list of models and prices. The request carries nothing about you.
-- If you turn on the optional CORS proxy, requests that need it go through the proxy address you entered.
+- The CORS proxy is off: the side panel turns it off each time it opens, and the extension's own network rules handle the providers that need CORS headers. If you turn it on in Settings, requests that need it go through the proxy address you entered until the panel next opens.
 
 Nothing is sold, shared for advertising, or used for anything other than the task you gave the assistant.
 

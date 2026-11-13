@@ -11,7 +11,8 @@
 //
 // Usage:
 //   node scripts/pack-crx.mjs --key <private-key.pem> [--codebase <base-url>] [--no-crx]
-//   node scripts/pack-crx.mjs --store [--include-key <private-key.pem>] [--out <dir>]
+//   node scripts/pack-crx.mjs --store [--out <dir>]                 (default release/store)
+//   node scripts/pack-crx.mjs --store --include-key <private-key.pem> --out <dir>
 //   CRX_PRIVATE_KEY="$(cat key.pem)" node scripts/pack-crx.mjs ...
 //
 // The extension id is derived from the signing key. The key must match the `key` in the
@@ -44,13 +45,15 @@ const { values: args } = parseArgs({
 	options: {
 		key: { type: "string" },
 		dir: { type: "string", default: join(packageRoot, "dist-chrome") },
-		out: { type: "string", default: join(packageRoot, "release") },
+		out: { type: "string" },
 		codebase: { type: "string" },
 		"no-crx": { type: "boolean", default: false },
 		store: { type: "boolean", default: false },
 		"include-key": { type: "string" },
 	},
 });
+// The store zip has its own folder, so it never replaces the release zip of the same version.
+const outDir = args.out ?? join(packageRoot, args.store ? "release/store" : "release");
 
 const varint = (value) => {
 	const bytes = [];
@@ -224,14 +227,18 @@ const packStore = async (manifest) => {
 	delete manifest.update_url;
 	const extraFiles = {};
 	if (args["include-key"]) {
+		// key.pem fixes the store item's id for good, so it must be the key unpacked builds use,
+		// and a zip holding it goes only where the caller asked (store-zip.sh: a temp folder).
+		if (!id) throw new Error("--include-key needs the manifest's `key` to check the id against");
+		if (!args.out) throw new Error("--include-key needs --out: the zip holds the private key");
 		const pem = readFileSync(args["include-key"], "utf8");
 		const publicKey = createPublicKey(createPrivateKey(pem)).export({ type: "spki", format: "der" });
 		const keyId = idForPublicKey(publicKey.toString("base64"));
-		if (id && keyId !== id) throw new Error(`key.pem (id ${keyId}) does not match the manifest key (id ${id})`);
+		if (keyId !== id) throw new Error(`key.pem (id ${keyId}) does not match the manifest key (id ${id})`);
 		extraFiles["key.pem"] = pem;
 	}
-	mkdirSync(args.out, { recursive: true });
-	const zipPath = join(args.out, `sitegeist-${manifest.version}.zip`);
+	mkdirSync(outDir, { recursive: true });
+	const zipPath = join(outDir, `sitegeist-${manifest.version}.zip`);
 	writeFileSync(zipPath, await buildZip(manifest, extraFiles));
 	console.log(zipPath);
 };
@@ -258,9 +265,9 @@ const run = async () => {
 		delete manifest.key;
 	}
 
-	mkdirSync(args.out, { recursive: true });
+	mkdirSync(outDir, { recursive: true });
 	const zip = await buildZip(manifest);
-	const zipPath = join(args.out, `sitegeist-${version}.zip`);
+	const zipPath = join(outDir, `sitegeist-${version}.zip`);
 	writeFileSync(zipPath, zip);
 	console.log(`zip:     ${relative(packageRoot, zipPath)}`);
 	if (!key) {
@@ -269,14 +276,14 @@ const run = async () => {
 	}
 
 	const crxName = `sitegeist-${version}.crx`;
-	const crxPath = join(args.out, crxName);
+	const crxPath = join(outDir, crxName);
 	writeFileSync(crxPath, buildCrx(zip, key));
 	console.log(`crx:     ${relative(packageRoot, crxPath)}`);
 	console.log(`id:      ${key.id}`);
 	console.log(`version: ${version}`);
 
 	if (codebase) {
-		const xmlPath = join(args.out, "updates.xml");
+		const xmlPath = join(outDir, "updates.xml");
 		writeFileSync(xmlPath, updateManifest(key.id, version, `${codebase}/${crxName}`));
 		console.log(`update:  ${relative(packageRoot, xmlPath)} -> ${codebase}/${crxName}`);
 	}
@@ -285,7 +292,7 @@ const run = async () => {
 };
 
 function writeProfile(id, codebase) {
-	const profilePath = join(args.out, "sitegeist-chrome-policy.mobileconfig");
+	const profilePath = join(outDir, "sitegeist-chrome-policy.mobileconfig");
 	writeFileSync(profilePath, policyProfile(id, codebase));
 	console.log(`policy:  ${relative(packageRoot, profilePath)}`);
 }

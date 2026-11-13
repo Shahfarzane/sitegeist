@@ -63,3 +63,28 @@ test("--include-key refuses a key that would give the item another id", () => {
 	assert.notEqual(result.status, 0);
 	assert.match(result.stderr, /does not match the manifest key/);
 });
+
+test("--include-key refuses to write the key without an explicit --out", () => {
+	const keyFile = join(work, "key.pem");
+	writeFileSync(keyFile, pem(key));
+	const result = spawnSync(process.execPath, [packCrx, "--store", "--dir", dist, "--include-key", keyFile], {
+		encoding: "utf8",
+	});
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /needs --out/);
+});
+
+test("--include-key refuses a build whose manifest has no key to check against", () => {
+	const keyless = join(work, "keyless");
+	execFileSync("mkdir", ["-p", keyless]);
+	writeFileSync(join(keyless, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "test", version: "1.2.3" }));
+	const keyFile = join(work, "key.pem");
+	writeFileSync(keyFile, pem(key));
+	const result = spawnSync(
+		process.execPath,
+		[packCrx, "--store", "--dir", keyless, "--out", join(work, "keyless-out"), "--include-key", keyFile],
+		{ encoding: "utf8" },
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /needs the manifest's `key`/);
+});
