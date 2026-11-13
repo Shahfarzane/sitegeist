@@ -10,6 +10,7 @@
 		"build:chrome": "node ./scripts/build.mjs && tailwindcss -i ./src/app.css -o ./dist-chrome/app.css --minify",
 		"build": "npm run build:chrome",
 		"package:store": "scripts/store-zip.sh",
+		"publish:store": "scripts/store-publish.sh publish",
 		"dev": "concurrently -n \"build,css,server\" -c \"blue,green,yellow\" \"node ./scripts/build.mjs --watch\" \"tailwindcss -i ./src/app.css -o ./dist-chrome/app.css --watch\" \"node ./scripts/dev-server.mjs\"",
 		"typecheck": "tsc --noEmit",
 		"test": "node --import tsx --test test/*.test.mts",

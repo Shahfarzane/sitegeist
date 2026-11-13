@@ -4,6 +4,7 @@
 
 ### Added
 
+- `scripts/store-publish.sh status|publish`: reads the store item's status, or builds, uploads and submits a version through the Chrome Web Store API v2 with a service account key from 1Password DEV (`scripts/store-publish.mjs`, no dependencies).
 - Chrome Web Store upload: `scripts/store-zip.sh` (`npm run package:store`) builds the release as a zip without `key` and `update_url`; `--first-upload` adds the signing key as `key.pem` so the store item keeps id `lnncppjiohlpejgcbdgoihplimdckddn` (`pack-crx.mjs --store --include-key`). Listing, permission answers and the remote-code review: `docs/chrome-web-store.md`. Privacy policy: `PRIVACY.md`.
 - The policy profile pins sitegeist to the toolbar and allows `file://` pages (`ExtensionSettings`) in Google Chrome, and carries a `net.imput.helium` payload so Helium gets the same. `pack-crx.mjs --no-crx` writes the profile from the manifest key, without the signing key.
 - Settings > Downloads and `list_downloads` (panel and bridge): agents see the files pages saved (path, source, type, size, state). `downloads` is an optional permission, off until the user turns it on.

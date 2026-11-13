@@ -15,6 +15,15 @@ The first upload of the item uses `--first-upload`. It adds "sitegeist CRX signi
 
 The item was created on 2026-11-13 from 1.2.347 with `--first-upload`, and the dashboard shows id `lnncppjiohlpejgcbdgoihplimdckddn`.
 
+## Publishing a version
+
+```sh
+scripts/store-publish.sh status   # live and submitted revisions, from the API
+scripts/store-publish.sh publish  # store-zip.sh, upload, submit for review
+```
+
+`scripts/store-publish.mjs` calls the Chrome Web Store API v2 with a service account that is linked to the publisher in the dashboard (Settings > Service account) and has no Cloud roles. Its JSON key is the 1Password DEV document "Chrome Web Store API service account"; `store-publish.sh` reads it with `op-agents` into a temp folder removed on exit. An upload the store rejects stops before submitting. A submitted version is reviewed and then goes live by itself, Unlisted. Each upload needs a higher version than the store has, which the commit count gives.
+
 ## Policy review (Manifest V3 remote code, read 2026-11-13)
 
 [Program policy](https://developer.chrome.com/docs/webstore/program-policies/mv3-requirements): the extension's logic has to be in the package. Two exemptions cover the code sitegeist runs that is not:
