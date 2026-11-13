@@ -1,8 +1,8 @@
 {
 	"manifest_version": 3,
 	"minimum_chrome_version": "154",
-	"name": "sitegeist",
-	"description": "Your AI companion for the web - Research, automate, create",
+	"name": "Sitegeist Bridge (unofficial fork)",
+	"description": "An AI side panel, and a bridge that lets coding agents use your browser. Unofficial sitegeist fork, not by sitegeist.ai.",
 	"version": "1.2.3",
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzAtNxsR6dCW90JCnKqLo3vSRPfm1LJgKDHxo/3F9thwy22EZKNbwLplvVopITTsNBVRmGH4mz2NUBD5rzNqYuHb4BgmqVcsjtbnORC6rcXcIAKcApXYNZXrGJLGi4cK+4a0nGsNZaUW5ok7cA88+81+lUSBRiF22DpkDH1VDmTPdGF0lBE7ZKiqLgAY/VarO99CvI6/brOhVF8Ul/Xprr6z/YYKwnyxTfipzXoAXzfuGG/9ZNiaWU2BSI8Rw0pNI8sshwu0O0hDeS/0GVeSk5mlcWKF2W0kDy3XG4057+Ax7BnGWgwJIa/nM9JV4a/KXjMBNqw+ZkT8Eprark8TJbwIDAQAB",
 	"action": {

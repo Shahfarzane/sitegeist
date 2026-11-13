@@ -18,7 +18,7 @@ export class AboutTab extends SettingsTab {
 		return html`
 			<div class="flex flex-col gap-4">
 				<div class="space-y-2">
-					<h3 class="text-lg font-semibold text-foreground">Sitegeist</h3>
+					<h3 class="text-lg font-semibold text-foreground">${manifest.name}</h3>
 					<p class="text-sm text-muted-foreground">${i18n("AI-powered browser extension for web navigation and interaction")}</p>
 				</div>
 
@@ -29,18 +29,25 @@ export class AboutTab extends SettingsTab {
 					</div>
 				</div>
 
+				${
+					// Self-hosted releases carry a file:// update URL; store installs update through the store.
+					manifest.update_url?.startsWith("file://")
+						? html`<p class="text-xs text-muted-foreground">
+								Private build. New signed releases install automatically from your release folder
+								(<code>scripts/release-crx.sh</code>).
+							</p>`
+						: ""
+				}
+
 				<p class="text-xs text-muted-foreground">
-					Private build. New signed releases install automatically from your release folder
-					(<code>scripts/release-crx.sh</code>).
+					An unofficial fork of sitegeist, not made by or affiliated with sitegeist.ai.
 				</p>
 
 				<div class="pt-4 space-y-2">
 					<div class="text-xs text-muted-foreground space-x-3">
-						<a href="https://sitegeist.ai" target="_blank" class="text-primary hover:underline">${i18n("Website")}</a>
+						<a href="https://github.com/Shahfarzane/sitegeist" target="_blank" class="text-primary hover:underline">${i18n("Website")}</a>
 						<span>·</span>
-						<a href="https://sitegeist.ai/imprint" target="_blank" class="text-primary hover:underline">${i18n("Imprint")}</a>
-						<span>·</span>
-						<a href="https://sitegeist.ai/privacy" target="_blank" class="text-primary hover:underline">${i18n("Privacy")}</a>
+						<a href="https://github.com/Shahfarzane/sitegeist/blob/main/PRIVACY.md" target="_blank" class="text-primary hover:underline">${i18n("Privacy")}</a>
 					</div>
 				</div>
 			</div>
