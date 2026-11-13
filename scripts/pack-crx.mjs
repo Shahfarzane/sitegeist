@@ -4,9 +4,14 @@
 //   release/updates.xml              update manifest for self-hosting (with --codebase)
 //   release/sitegeist-chrome-policy.mobileconfig
 //                                    macOS profile that allowlists the extension id in Chrome
+// or, with --store, only the Chrome Web Store upload:
+//   <out>/sitegeist-<version>.zip    no `key`, no `update_url`; with --include-key the private
+//                                    key rides along as key.pem, which on an item's first upload
+//                                    gives the store item the same id (lnncppjiohlpejgcbdgoihplimdckddn)
 //
 // Usage:
 //   node scripts/pack-crx.mjs --key <private-key.pem> [--codebase <base-url>] [--no-crx]
+//   node scripts/pack-crx.mjs --store [--include-key <private-key.pem>] [--out <dir>]
 //   CRX_PRIVATE_KEY="$(cat key.pem)" node scripts/pack-crx.mjs ...
 //
 // The extension id is derived from the signing key. The key must match the `key` in the
@@ -42,6 +47,8 @@ const { values: args } = parseArgs({
 		out: { type: "string", default: join(packageRoot, "release") },
 		codebase: { type: "string" },
 		"no-crx": { type: "boolean", default: false },
+		store: { type: "boolean", default: false },
+		"include-key": { type: "string" },
 	},
 });
 
@@ -85,7 +92,7 @@ const loadKey = () => {
 	return { privateKey, publicKeyDer, crxId, id: extensionIdFor(crxId) };
 };
 
-const buildZip = async (manifest) => {
+const buildZip = async (manifest, extraFiles = {}) => {
 	const zip = new JSZip();
 	// Fixed timestamps keep the archive byte-identical for identical input.
 	const date = new Date("2000-01-01T00:00:00Z");
@@ -95,6 +102,7 @@ const buildZip = async (manifest) => {
 		const content = name === "manifest.json" ? `${JSON.stringify(manifest, null, "\t")}\n` : readFileSync(path);
 		zip.file(name, content, { date });
 	}
+	for (const [name, content] of Object.entries(extraFiles)) zip.file(name, content, { date });
 	return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 } });
 };
 
@@ -205,18 +213,39 @@ const updateManifest = (id, version, codebase) => `<?xml version="1.0" encoding=
 </gupdate>
 `;
 
+const idForPublicKey = (base64) =>
+	extensionIdFor(createHash("sha256").update(Buffer.from(base64, "base64")).digest().subarray(0, 16));
+
+// The Web Store rejects an upload whose manifest carries `key`, and it serves updates itself.
+// The id comes from key.pem instead, read only on the item's first upload.
+const packStore = async (manifest) => {
+	const id = manifest.key ? idForPublicKey(manifest.key) : undefined;
+	delete manifest.key;
+	delete manifest.update_url;
+	const extraFiles = {};
+	if (args["include-key"]) {
+		const pem = readFileSync(args["include-key"], "utf8");
+		const publicKey = createPublicKey(createPrivateKey(pem)).export({ type: "spki", format: "der" });
+		const keyId = idForPublicKey(publicKey.toString("base64"));
+		if (id && keyId !== id) throw new Error(`key.pem (id ${keyId}) does not match the manifest key (id ${id})`);
+		extraFiles["key.pem"] = pem;
+	}
+	mkdirSync(args.out, { recursive: true });
+	const zipPath = join(args.out, `sitegeist-${manifest.version}.zip`);
+	writeFileSync(zipPath, await buildZip(manifest, extraFiles));
+	console.log(zipPath);
+};
+
 const run = async () => {
 	const manifest = JSON.parse(readFileSync(join(args.dir, "manifest.json"), "utf8"));
+	if (args.store) return packStore(manifest);
+	if (args["include-key"]) throw new Error("--include-key goes with --store");
 	const version = manifest.version;
 	const key = args["no-crx"] ? undefined : loadKey();
 	if (!args["no-crx"] && !key) throw new Error("Pass --key <pem> or set CRX_PRIVATE_KEY (or --no-crx for a zip only)");
 	const codebase = args.codebase?.replace(/\/$/, "");
 	// The id the policy profile names: from the signing key, or the manifest's public key.
-	const profileId =
-		key?.id ??
-		(manifest.key
-			? extensionIdFor(createHash("sha256").update(Buffer.from(manifest.key, "base64")).digest().subarray(0, 16))
-			: undefined);
+	const profileId = key?.id ?? (manifest.key ? idForPublicKey(manifest.key) : undefined);
 	if (key) {
 		const publicKey = key.publicKeyDer.toString("base64");
 		if (manifest.key && manifest.key !== publicKey) {
