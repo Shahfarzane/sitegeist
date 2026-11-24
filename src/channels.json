@@ -10,7 +10,8 @@
 		"socketPrefix": "sitegeist-bridge",
 		"toolPrefix": "",
 		"groupPrefix": "Sitegeist",
-		"label": "Sitegeist"
+		"label": "Sitegeist",
+		"liveReload": false
 	},
 	"dev": {
 		"extensionId": "jdoloceeppngimcgcjcopnammjaaggim",
@@ -24,6 +25,7 @@
 		"toolPrefix": "dev_",
 		"groupPrefix": "Sitegeist dev",
 		"label": "Sitegeist DEV",
+		"liveReload": true,
 		"manifest": {
 			"name": "Sitegeist Bridge DEV (unofficial fork)",
 			"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv0AOi9ARZThnqxfXBuTOdgAIFNpYjdkE3O1nZy0YH7mIiaxLVk/hgq29TV5YD/5WsZ0l+hyWjei2sUDulnOFVy7gfWfjaYw6rpEN+Lfe6RFrIomQ0M6EPoY3vpDUC9BkF3+oHWpGnSMS/uTmknfGq5bnfeB6JfTNINHE9YWtIGzkt8OzWYso7jWVvsRDR9CiMstuhYMop2XQhBMnX69PgSubHyX4dHTqRuAzTPFZnsI1bpENlnGnrkY13f+05hX8kTTw/s58FpWJ//Pz6rFgfTKjIgT7qKle3u2JkFbmntlEzRMWSPv312IUpQmoIG+TYh7OhRLUUeiz2XW1nvh9ZwIDAQAB",

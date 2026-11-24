@@ -31,6 +31,18 @@ const entryPoints = {
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
+// The reload script (src/utils/live-reload.ts) connects to `npm run dev`'s server on
+// localhost:8765 and reloads the extension on every rebuild. Only the dev channel carries it:
+// the store build opens no localhost socket, and a dev rebuild never reloads the store copy.
+const liveReloadOnlyInDev = {
+	name: "live-reload-only-in-dev",
+	setup(build) {
+		if (channel.liveReload) return;
+		build.onResolve({ filter: /\/live-reload\.js$/ }, (args) => ({ path: args.path, namespace: "left-out" }));
+		build.onLoad({ filter: /.*/, namespace: "left-out" }, () => ({ contents: "", loader: "js" }));
+	},
+};
+
 const buildOptions = {
 	absWorkingDir: packageRoot,
 	entryPoints,
@@ -58,6 +70,7 @@ const buildOptions = {
 		global: "globalThis",
 	},
 	inject: [join(packageRoot, "scripts/process-shim.js")],
+	plugins: [liveReloadOnlyInDev],
 	// Let bare imports inside the bundled pi-mono source resolve against pi-mono's
 	// installed dependencies (openai, @anthropic-ai/sdk, typebox, ...).
 	nodePaths: [join(packageRoot, "../pi-mono/node_modules")],
