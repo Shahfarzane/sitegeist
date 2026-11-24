@@ -1,4 +1,5 @@
-// Dev mode hot reload - check if we're in development
+// Reloads the extension when `npm run dev` rebuilds it (scripts/dev-server.mjs). Only dev-channel
+// builds include this file; the store build leaves it out (scripts/build.mjs).
 const connectWebSocket = () => {
 	try {
 		const ws = new WebSocket("ws://localhost:8765");

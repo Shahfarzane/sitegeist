@@ -1,5 +1,6 @@
 // The store copy and a dev copy in one browser profile, as both run on a Mac: each on its own
-// bridge, and neither breaking up the other's agent tab groups when it starts or reloads.
+// bridge, neither breaking up the other's agent tab groups when it starts or reloads, and a dev
+// rebuild reloading only the dev copy.
 // Run: npm run build && npm run build:dev && (cd cli && npm run build) && npm run test:e2e
 
 import assert from "node:assert/strict";
@@ -7,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { WebSocketServer } from "ws";
 import { readChannel } from "../channel-build.mjs";
 import { Browser, bridgeReady, Harness, repoRoot, startFakeServer } from "./lib.mjs";
 
@@ -139,4 +141,41 @@ test("the store copy keeps its shortcut; the dev copy asks for none", { skip }, 
 	};
 	assert.ok(await shortcut("production"), "production has Command+Shift+S");
 	assert.equal(await shortcut("dev"), "");
+});
+
+test("a dev rebuild reloads the dev copy and never the store copy", { skip }, async (t) => {
+	// The reload script's fixed port (scripts/dev-server.mjs, src/utils/live-reload.ts).
+	const devServer = new WebSocketServer({ host: "127.0.0.1", port: 8765 });
+	const listening = await new Promise((resolve) => {
+		devServer.once("listening", () => resolve(true));
+		devServer.once("error", () => resolve(false));
+	});
+	if (!listening) return t.skip("port 8765 is taken: an `npm run dev` runs on this Mac");
+	const connected = [];
+	devServer.on("connection", (ws, request) => connected.push({ ws, origin: request.headers.origin }));
+	try {
+		const workers = {};
+		for (const name of NAMES) workers[name] = await browser.worker({ id: browser.channels[name].id });
+		const panels = [];
+		for (const name of NAMES) {
+			panels.push(await browser.open(`chrome-extension://${browser.channels[name].id}/sidepanel.html`));
+		}
+		// The dev panel connects at once; the store panel gets the same time to show it never does.
+		const deadline = Date.now() + 8000;
+		while (Date.now() < deadline && connected.length === 0) await sleep(100);
+		await sleep(3000);
+		assert.deepEqual(
+			connected.map((c) => c.origin),
+			[`chrome-extension://${browser.channels.dev.id}`],
+		);
+		for (const c of connected) c.ws.send(JSON.stringify({ type: "reload" }));
+		await browser.worker({ id: browser.channels.dev.id, except: workers.dev.targetId, timeoutMs: 20000 });
+		await sleep(1000);
+		const store = await browser.worker({ id: browser.channels.production.id });
+		assert.equal(store.targetId, workers.production.targetId, "the store copy did not reload");
+		for (const panel of panels) await panel.close();
+	} finally {
+		for (const c of connected) c.ws.terminate();
+		await new Promise((resolve) => devServer.close(resolve));
+	}
 });

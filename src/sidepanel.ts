@@ -93,6 +93,7 @@ import { downloadChatMarkdown } from "./utils/export-chat.js";
 import * as port from "./utils/port.js";
 import { watchSystemTheme } from "./utils/theme.js";
 import "./utils/i18n-extension.js";
+// Dev channel only: scripts/build.mjs leaves it out of the store build.
 import "./utils/live-reload.js";
 
 // Register custom message renderers
