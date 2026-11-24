@@ -130,6 +130,18 @@ test("a page text that was cut says how much there is", async () => {
 	assert.ok(!(await harness.callText("navigate", { url: `${server.origin}/form` })).includes("characters;"));
 });
 
+test("get_page_text and get_page_html say when maxChars cut them", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/long`, read: false });
+	const text = await harness.callText("get_page_text", { maxChars: 100 });
+	assert.equal(text.cut, "first 100 of 5000 characters; raise maxChars or narrow the selector");
+	assert.equal(text.text.length, 100);
+	const html = await harness.callText("get_page_html", { selector: "p", maxChars: 50 });
+	assert.equal(html.cut, "first 50 of 5007 characters; raise maxChars or narrow the selector");
+	const whole = await harness.callText("get_page_text", {});
+	assert.equal(whole.cut, undefined);
+	assert.equal(whole.text.length, 5000);
+});
+
 test("results that are text report the dialogs answered during the call", async () => {
 	await harness.callText("navigate", { url: `${server.origin}/confirm`, read: false });
 	const calls = {
