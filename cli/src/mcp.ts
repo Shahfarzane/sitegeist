@@ -334,7 +334,7 @@ export async function runMcpServer(): Promise<void> {
 			"navigate",
 			{
 				description:
-					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. A wait or read_page after it is needed only when the page still shows a placeholder.",
+					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. No wait or read_page is needed after it; if it still shows a placeholder, wait for the text you expect.",
 				inputSchema: {
 					url: z.string(),
 					tabId,
