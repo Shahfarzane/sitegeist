@@ -209,14 +209,20 @@ export class BridgeClient {
 	 * service worker restart, host respawn). The session key is stable, so the retry
 	 * lands on the same tabs. RPC errors from the extension are never retried.
 	 */
-	async call<T = unknown>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<T> {
+	async call<T = unknown>(
+		method: string,
+		params: Record<string, unknown> = {},
+		timeoutMs?: number,
+		/** Gets the id of each request sent, so events naming it can be matched to the caller. */
+		track?: (id: number) => void,
+	): Promise<T> {
 		try {
-			return await this.callOnce<T>(method, params, timeoutMs);
+			return await this.callOnce<T>(method, params, timeoutMs, track);
 		} catch (err) {
 			if (err instanceof BridgeRpcError || !isConnectionError(err)) throw err;
 			this.close();
 			await this.reconnect(40000);
-			return this.callOnce<T>(method, params, timeoutMs);
+			return this.callOnce<T>(method, params, timeoutMs, track);
 		}
 	}
 
@@ -239,11 +245,17 @@ export class BridgeClient {
 		if (!this.connected) throw lastError instanceof Error ? lastError : new Error("Bridge unavailable");
 	}
 
-	private async callOnce<T>(method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<T> {
+	private async callOnce<T>(
+		method: string,
+		params: Record<string, unknown>,
+		timeoutMs?: number,
+		track?: (id: number) => void,
+	): Promise<T> {
 		if (!this.connected) await this.connect();
 		const socket = this.socket;
 		if (!socket) throw new Error("Not connected");
 		const id = ++this.seq;
+		track?.(id);
 		const timeout = timeoutMs ?? this.options.requestTimeoutMs ?? 120000;
 		return new Promise<T>((resolve, reject) => {
 			const timer = setTimeout(() => {

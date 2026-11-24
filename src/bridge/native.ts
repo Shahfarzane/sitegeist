@@ -142,7 +142,8 @@ async function onClientDisconnected(clientId: string): Promise<void> {
 	}
 }
 
-async function askPermission(state: ClientState, url: string): Promise<boolean> {
+/** `callId` is the client's id for the request waiting on the answer, so the CLI finds the tool call. */
+async function askPermission(state: ClientState, url: string, callId: number): Promise<boolean> {
 	if (await isUrlAllowed(url)) return true;
 	const host = hostOf(url);
 	if (!host) return false;
@@ -165,7 +166,7 @@ async function askPermission(state: ClientState, url: string): Promise<boolean> 
 		type: "event",
 		clientId: state.clientId,
 		event: "permission_request",
-		data: { requestId, host, url, timeoutMs: PERMISSION_TIMEOUT_MS },
+		data: { requestId, host, url, timeoutMs: PERMISSION_TIMEOUT_MS, callId },
 	});
 	showNotification({
 		kind: "needs-you",
@@ -211,7 +212,7 @@ async function runRequest(state: ClientState, req: HostForwardedRequest): Promis
 			clientId: state.clientId,
 			emit: (event, data) => send({ type: "event", clientId: state.clientId, event, data }),
 			checkUrl: async (url: string) => {
-				if (!(await askPermission(state, url))) {
+				if (!(await askPermission(state, url, req.id))) {
 					const mode = await getPermissionMode();
 					throw new BridgeError(
 						ERR.PERMISSION_DENIED,

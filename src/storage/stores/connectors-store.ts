@@ -1,11 +1,16 @@
 import { Store, type StoreConfig } from "@mariozechner/pi-web-ui";
+import type {
+	OAuthDiscoveryState,
+	StoredOAuthClientInformation,
+	StoredOAuthTokens,
+} from "@modelcontextprotocol/client";
 
-/** OAuth state of a remote connector, kept with it. */
+/** OAuth state of a remote connector, kept with it as the SDK hands it over. */
 export interface ConnectorAuth {
-	clientInformation?: Record<string, unknown>;
-	tokens?: Record<string, unknown>;
+	clientInformation?: StoredOAuthClientInformation;
+	tokens?: StoredOAuthTokens;
 	codeVerifier?: string;
-	discoveryState?: Record<string, unknown>;
+	discoveryState?: OAuthDiscoveryState;
 }
 
 /** An MCP server the panel agent can use. */

@@ -1,10 +1,11 @@
-// Connectors in a real panel: a remote server with a token, OAuth through the settings UI, a local
-// command through the native host, and a result over the 1 MiB native messaging limit.
+// Connectors in a real panel: a remote server with a token, OAuth through the settings UI (and a
+// redirect from the wrong issuer refused), local commands of both protocol eras through the native
+// host, and a result over the 1 MiB native messaging limit.
 // Run: SITEGEIST_VERSION=9.9.9 node scripts/build.mjs && (cd cli && npm run build) && npm run test:e2e
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,10 +26,25 @@ let server;
 let turns;
 let mcp;
 let mcpOrigin;
-const seen = { authorization: [] };
+const seen = { authorization: [], tokenRequests: 0 };
+/** The issuer the fake authorization server puts in its redirects; a test sets another to stage a mix-up. */
+let redirectIssuer;
 const configDir = mkdtempSync(join(tmpdir(), "sitegeist-e2e-config-"));
+/** Each local fake server writes "start" per process and a line per request here. */
+const logs = {
+	legacy: join(configDir, "legacy.log"),
+	strict: join(configDir, "strict.log"),
+	modern: join(configDir, "modern.log"),
+};
+const logLines = (file) => {
+	try {
+		return readFileSync(file, "utf8").trim().split("\n");
+	} catch {
+		return [];
+	}
+};
 
-function jsonRpc(req, res, body) {
+function jsonRpc(res, body) {
 	const { id, method, params } = body;
 	if (id === undefined) return res.writeHead(202).end();
 	let result;
@@ -75,6 +91,7 @@ function startMcp() {
 					response_types_supported: ["code"],
 					grant_types_supported: ["authorization_code"],
 					code_challenge_methods_supported: ["S256"],
+					authorization_response_iss_parameter_supported: true,
 				});
 			}
 			if (url.pathname === "/register") {
@@ -85,10 +102,14 @@ function startMcp() {
 				const redirect = new URL(url.searchParams.get("redirect_uri"));
 				redirect.searchParams.set("code", "the-code");
 				redirect.searchParams.set("state", url.searchParams.get("state") ?? "");
+				redirect.searchParams.set("iss", redirectIssuer ?? mcpOrigin);
 				res.writeHead(302, { location: redirect.toString() });
 				return res.end();
 			}
-			if (url.pathname === "/token") return json({ access_token: "oauth-token", token_type: "Bearer" });
+			if (url.pathname === "/token") {
+				seen.tokenRequests++;
+				return json({ access_token: "oauth-token", token_type: "Bearer" });
+			}
 			if (url.pathname === "/mcp" || url.pathname === "/oauth-mcp") {
 				if (req.method !== "POST") return res.writeHead(405).end();
 				const authorization = req.headers.authorization ?? "";
@@ -103,7 +124,7 @@ function startMcp() {
 					});
 					return res.end();
 				}
-				return jsonRpc(req, res, JSON.parse(await readJson(req)));
+				return jsonRpc(res, JSON.parse(await readJson(req)));
 			}
 			res.writeHead(404).end();
 		});
@@ -117,22 +138,27 @@ function startMcp() {
 before(async () => {
 	mcp = await startMcp();
 	server = await startFakeServer({
-		routes: { "/c1": page, "/c2": page, "/c3": page, "/c4": page },
+		routes: { "/c1": page, "/c2": page, "/c3": page, "/c4": page, "/c5": page, "/c6": page },
 		script: (body, index) => turns(body, index),
 	});
-	execFileSync(
-		process.execPath,
-		[
-			join(repoRoot, "cli/dist/index.js"),
-			"connectors",
-			"add",
-			"fake-local",
-			"--",
+	const addLocal = (name, script, ...args) =>
+		execFileSync(
 			process.execPath,
-			join(repoRoot, "scripts/e2e/fake-stdio-server.mjs"),
-		],
-		{ env: { ...process.env, SITEGEIST_CONFIG_DIR: configDir } },
-	);
+			[
+				join(repoRoot, "cli/dist/index.js"),
+				"connectors",
+				"add",
+				name,
+				"--",
+				process.execPath,
+				join(repoRoot, "scripts/e2e", script),
+				...args,
+			],
+			{ env: { ...process.env, SITEGEIST_CONFIG_DIR: configDir } },
+		);
+	addLocal("fake-local", "fake-stdio-server.mjs", logs.legacy);
+	addLocal("fake-strict", "fake-stdio-server.mjs", logs.strict, "strict");
+	addLocal("fake-modern", "fake-stdio-server-2026.mjs", logs.modern);
 	browser = await Browser.launch({ bridge: true, env: { SITEGEIST_CONFIG_DIR: configDir } });
 	await browser.worker();
 	await bridgeReady(browser);
@@ -238,9 +264,106 @@ test("an OAuth connector logs in from Settings", async () => {
 	assert.equal(new Set(names).size, names.length, "a login must not duplicate connector tools");
 	assert.ok(names.includes("secure__search"));
 	const stored = await context.panel.evaluate(
-		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const q = r.result.transaction("connectors").objectStore("connectors").get("secure"); q.onsuccess = () => { r.result.close(); res(q.result.auth.tokens.access_token); }; }; })`,
+		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const q = r.result.transaction("connectors").objectStore("connectors").get("secure"); q.onsuccess = () => { r.result.close(); res(q.result.auth.tokens); }; }; })`,
 	);
-	assert.equal(stored, "oauth-token");
+	assert.equal(stored.access_token, "oauth-token");
+	assert.equal(stored.issuer, mcpOrigin, "tokens are stored with the issuer that minted them");
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("local connectors of both eras connect once each, and a 2026 question fails clearly", async () => {
+	for (const file of Object.values(logs)) writeFileSync(file, "");
+	server.requests.length = 0;
+	turns = (_body, index) => {
+		if (index === 0) return { toolCalls: [{ name: "fake-modern__echo", args: { text: "ping" } }] };
+		if (index === 1) return { toolCalls: [{ name: "fake-strict__echo", args: { text: "pong" } }] };
+		if (index === 2) return { toolCalls: [{ name: "fake-modern__confirm", args: {} }] };
+		if (index === 3) return { toolCalls: [{ name: "fake-modern__confirm_checked", args: {} }] };
+		return { text: "eras checked" };
+	};
+	const context = await openPanel(browser, server, { path: "/c5" });
+	await sendPrompt(context.panel, "use the local connectors");
+	await context.panel.waitFor(`document.body.innerText.includes("eras checked")`, { timeoutMs: 30000 });
+	assert.ok(lastToolText(1).includes("modern says ping"), lastToolText(1).slice(0, 200));
+	assert.ok(lastToolText(2).includes("local says pong"), lastToolText(2).slice(0, 200));
+	assert.match(lastToolText(3), /fake-modern asked for input during confirm, and the side panel cannot answer that/);
+	assert.match(lastToolText(4), /fake-modern asked for input during confirm_checked/);
+
+	const modern = logLines(logs.modern);
+	assert.equal(modern.filter((l) => l === "start").length, 1, modern.join(" | "));
+	assert.equal(modern[1], "server/discover 2026-07-28");
+	assert.ok(!modern.some((l) => l.startsWith("initialize")), "a 2026 server never sees initialize");
+	assert.ok(modern.includes("tools/call 2026-07-28"), modern.join(" | "));
+	const legacy = logLines(logs.legacy);
+	assert.equal(legacy.filter((l) => l === "start").length, 1, legacy.join(" | "));
+	assert.deepEqual(legacy.slice(1, 3), ["server/discover", "initialize"], "the probe falls back in place");
+	// It exits on the probe, so it is started once more and connected without one.
+	const strict = logLines(logs.strict);
+	assert.deepEqual(strict.slice(0, 4), ["start", "server/discover", "start", "initialize"], strict.join(" | "));
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a login saved by an older version, without the issuer stamp, still connects", async () => {
+	server.requests.length = 0;
+	turns = () => ({ text: "old login checked" });
+	const context = await openPanel(browser, server, { path: "/c6" });
+	await addConnector(context.panel, {
+		name: "oldlogin",
+		url: `${mcpOrigin}/oauth-mcp`,
+		auth: { tokens: { access_token: "oauth-token", token_type: "Bearer" } },
+	});
+	await context.panel.send("Page.reload");
+	await context.panel.waitFor(`!!document.querySelector("message-editor textarea")`);
+	await sendPrompt(context.panel, "which tools?");
+	await context.panel.waitFor(`document.body.innerText.includes("old login checked")`, { timeoutMs: 15000 });
+	assert.ok(toolNames(server.requests[0]).includes("oldlogin__search"), toolNames(server.requests[0]).join(","));
+	await context.panel.evaluate(
+		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const tx = r.result.transaction("connectors", "readwrite"); tx.objectStore("connectors").delete("oldlogin"); tx.oncomplete = () => { r.result.close(); res(); }; }; })`,
+	);
+	await context.panel.close();
+	await context.tab.close();
+});
+
+test("a login redirect from another issuer is refused", async () => {
+	turns = () => ({ text: "unused" });
+	const context = await openPanel(browser, server, { path: "/c6" });
+	await addConnector(context.panel, { name: "mixup", url: `${mcpOrigin}/oauth-mcp` });
+	await context.panel.send("Page.reload");
+	await context.panel.waitFor(`!!document.querySelector("message-editor textarea")`);
+	await context.panel.evaluate(`document.querySelector("overflow-menu button").click()`);
+	await context.panel.waitFor(
+		`[...document.querySelectorAll("button,[role=menuitem]")].some((b) => b.textContent.trim() === "Settings")`,
+	);
+	await context.panel.evaluate(
+		`[...document.querySelectorAll("button,[role=menuitem]")].find((b) => b.textContent.trim() === "Settings").click()`,
+	);
+	await context.panel.waitFor(
+		`[...document.querySelectorAll("nav button")].some((b) => b.textContent.includes("Connectors"))`,
+	);
+	await context.panel.evaluate(
+		`[...document.querySelectorAll("nav button")].find((b) => b.textContent.includes("Connectors")).click()`,
+	);
+	await context.panel.waitFor(`document.body.innerText.includes("Needs login")`, { timeoutMs: 15000 });
+	const tokenRequests = seen.tokenRequests;
+	redirectIssuer = "https://attacker.example";
+	try {
+		await context.panel.evaluate(
+			`[...document.querySelectorAll("connectors-tab button")].find((b) => b.textContent.trim() === "Log in").click()`,
+		);
+		await context.panel.waitFor(
+			`document.body.innerText.includes("came back from a different authorization server")`,
+			{ timeoutMs: 15000 },
+		);
+	} finally {
+		redirectIssuer = undefined;
+	}
+	assert.equal(seen.tokenRequests, tokenRequests, "the code must not be exchanged");
+	const tokens = await context.panel.evaluate(
+		`new Promise((res) => { const r = indexedDB.open("sitegeist-storage"); r.onsuccess = () => { const q = r.result.transaction("connectors").objectStore("connectors").get("mixup"); q.onsuccess = () => { r.result.close(); res(q.result.auth?.tokens ?? null); }; }; })`,
+	);
+	assert.equal(tokens, null);
 	await context.panel.close();
 	await context.tab.close();
 });

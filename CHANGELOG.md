@@ -89,6 +89,13 @@
 - Header: Sessions, chat title, New chat and an overflow menu (Share this tab, Record a skill, Download chat, Light/Dark/System theme, Settings); a Stop control stays visible while recording.
 - Chat: per-message usage on hover, a finished thinking block reads Thinking, send/stop is the one filled composer control; Sessions sheet has a one-line total and icon actions.
 - First run: the welcome screen carries a Connect a provider button (opens the Providers section) instead of a modal that always forced Settings open; the orb is grayscale.
+- `sitegeist mcp` serves MCP 2026-07-28 next to the 2025-era revisions: `@modelcontextprotocol/server` 2.4 with `serveStdio`, one tool set and the same instructions for both. Claude Code 2.1.331 now connects on 2026-07-28; Codex 0.172.0 stays on 2025-06-18.
+- "Ask before opening a new site": on a 2026-07-28 connection the question comes back as the tool call's own result (`input_required`) and the client's retry carries the answer, since the revision has no server-initiated elicitation. 2025-era clients get the same question as an elicitation, as before. `permission_request` events now name the waiting bridge request (`callId`). A client that cancels the question (`claude -p` does at once) is denied immediately.
+- Connectors: the panel's MCP client is `@modelcontextprotocol/client` 2.4. It speaks 2026-07-28 to servers that offer it and falls back to initialize otherwise; a local server that exits on the version probe is started once more without it. Tool lists come in one call.
+- Connector OAuth follows the 2026-07-28 rules: the redirect's `iss` is checked (RFC 9207) and a redirect from another authorization server is refused before the code is exchanged; tokens and client registrations are stored with the issuer that minted them; the authorization server found at login is kept for the code exchange (discovery state). Logins saved by earlier versions keep working without a new login.
+- Connector tool results are checked against the tool's output schema. The browser build of the SDK validates without generating code, so the switch that turned validation off for the extension's CSP is gone.
+- A connector that asks for input in the middle of a call (2026-07-28 `input_required`) fails that call with an error saying so; the side panel does not answer such questions.
+- Dependencies at their latest releases, among them Biome 2.6.8, minimatch 11, pdfjs-dist 6.5.438, three 0.187, Tailwind 4.3.5 and Vite 8.3.8 (site). `@modelcontextprotocol/sdk` is replaced by `@modelcontextprotocol/client` (extension) and `@modelcontextprotocol/server` (CLI).
 
 ### Fixed
 

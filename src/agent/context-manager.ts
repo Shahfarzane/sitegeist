@@ -57,7 +57,8 @@ export class ContextManager {
 
 	private limit(): number {
 		const window = this.options.model().contextWindow;
-		return window > 0 ? window : 0;
+		// `|| 0` keeps a missing or NaN window at 0, as the comparison did.
+		return Math.max(window || 0, 0);
 	}
 
 	private view(messages: AgentMessage[], prune: PruneOptions): AgentMessage[] {
