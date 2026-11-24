@@ -58,6 +58,9 @@
 
 ### Changed
 
+- Fewer tokens through `sitegeist mcp` (`docs/mcp-token-plan.md`). The tool list is 27% smaller (25,041 to 18,183 characters): schemas no longer carry the JSON Schema draft URL or safe-integer bounds, and descriptions say each thing once. `navigate` returns the page by default (`read: false` for the summary alone) and `click` takes `read`, so the wait and the read that followed most navigations and clicks are no longer separate turns. A read in the same call as a navigation or a click waits until the page holds still (2.5 s at most), so a client-rendered page does not come back empty.
+- `read_page` and `navigate` say when the page text was cut and how long it is. `actions`, `read_page` and `find` report the dialogs answered during the call, which their text results left out.
+- `run_js` says in its description that it takes one expression, and a syntax error from statements comes back with the IIFE form.
 - The extension is named "Sitegeist Bridge (unofficial fork)", and About links to this fork's repository and privacy policy instead of sitegeist.ai.
 - The debugger tool's `cookies` action lists names, domains, paths, expiry and flags only, never a cookie's value: a value is a credential, and tool results are kept in transcripts.
 - Without the user scripts toggle, sitegeist's page code (snapshot, find, REPL) runs in an isolated world through the debugger instead of the page's main world: the page can no longer see or call `__sitegeistPending`, the messaging binding or the snapshot refs. `run_js` with `world: "main"` still runs in the page's own world.

@@ -356,7 +356,7 @@ export async function startFakeServer({ script, routes = {} } = {}) {
 		}
 		const route = routes[url.pathname];
 		if (route !== undefined) {
-			const content = typeof route === "function" ? route(req, url) : route;
+			const content = typeof route === "function" ? await route(req, url) : route;
 			res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
 			return res.end(content);
 		}

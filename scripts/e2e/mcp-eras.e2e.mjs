@@ -46,7 +46,7 @@ test("a 2026 client gets the same tools and instructions as a 2025 one", async (
 		assert.match(legacy.client.getInstructions() ?? "", /drives the user's real Chromium browser/);
 		assert.equal(modern.client.getInstructions(), legacy.client.getInstructions());
 		await fullAccess();
-		assert.equal((await modern.callText("navigate", { url: asked() })).title, "Asked");
+		assert.equal((await modern.callText("navigate", { url: asked(), read: false })).title, "Asked");
 	} finally {
 		await legacy.close();
 		await modern.close();
@@ -67,14 +67,14 @@ for (const era of ["2025", "2026"]) {
 			},
 		});
 		try {
-			assert.equal((await harness.callText("navigate", { url: asked() })).title, "Asked");
+			assert.equal((await harness.callText("navigate", { url: asked(), read: false })).title, "Asked");
 			assert.deepEqual(await allowedHosts(), [], "allow once stores nothing");
 			decision = "deny";
 			await assert.rejects(harness.call("navigate", { url: asked() }), /Not allowed to open 127\.0\.0\.1/);
 			decision = "allow_host";
-			assert.equal((await harness.callText("navigate", { url: asked() })).title, "Asked");
+			assert.equal((await harness.callText("navigate", { url: asked(), read: false })).title, "Asked");
 			assert.deepEqual(await allowedHosts(), ["127.0.0.1"]);
-			await harness.callText("navigate", { url: asked() });
+			await harness.callText("navigate", { url: asked(), read: false });
 			assert.equal(questions.length, 3, "an allowed host is not asked about again");
 			assert.equal(questions[0], "sitegeist: the browser agent wants to open 127.0.0.1. Allow?");
 		} finally {
@@ -109,7 +109,7 @@ test("SITEGEIST_AUTO_ALLOW=1 allows once without asking", async () => {
 		},
 	});
 	try {
-		assert.equal((await harness.callText("navigate", { url: asked() })).title, "Asked");
+		assert.equal((await harness.callText("navigate", { url: asked(), read: false })).title, "Asked");
 		assert.deepEqual(await allowedHosts(), []);
 	} finally {
 		await harness.close();

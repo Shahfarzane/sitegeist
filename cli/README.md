@@ -108,10 +108,16 @@ recording: `file_upload`, `upload_image`, `gif_creator`. Sign-in: `fill_login`. 
 
 `tabs_show` is the only tool that changes what the user sees.
 
-Every tool call is a full model turn, so do as much as possible per call: `navigate` with
-`read: true` returns the page, `actions` runs a whole form (`fill`, `click`, `navigate` steps)
-and can end with `read` or `screenshot`, and `click`, `fill` and friends name an element by what
-a person reads (`text`) as well as by ref or selector.
+Every tool call is a full model turn, so each one does as much as it can: `navigate` waits
+for the page to settle and returns it (elements with refs, and text; `read: false` for the
+title alone), `click` with `read: true` returns the page after the click, `actions` runs a
+whole form (`fill`, `click`, `navigate` steps) and can end with `read` or `screenshot`, and
+`click`, `fill` and friends name an element by what a person reads (`text`) as well as by ref
+or selector. A fixed `wait` after `navigate` is not needed. What the tool list and the
+results cost, and how that was measured: [docs/mcp-token-plan.md](../docs/mcp-token-plan.md).
+
+`run_js` takes one expression (a promise is awaited). Statements go in an IIFE:
+`(() => { const rows = [...document.querySelectorAll("tr")]; return rows.length; })()`.
 
 `sitegeist update` asks every running browser's extension to check its update URL now (used
 by `scripts/release-crx.sh`); the extension reloads itself once an update is downloaded.

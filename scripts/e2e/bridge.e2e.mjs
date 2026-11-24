@@ -36,6 +36,17 @@ const hidden = `<!doctype html><title>Hidden</title>
 const zoneInForm = `<!doctype html><title>Zone</title><form><input type="file" onchange="document.title = 'wrong input'">
 <div id="zone" style="width:200px;height:100px" ondragover="event.preventDefault()" ondrop="event.preventDefault(); document.title = 'dropped'">Drop</div></form>`;
 
+// Renders from a script that arrives after DOMContentLoaded, like a client-rendered app.
+const late = `<!doctype html><title>Late</title><div id="app">Loading</div>
+<script>const s = document.createElement("script"); s.src = "/late.js"; document.head.append(s);</script>`;
+const lateScript = `document.getElementById("app").innerHTML = '<button id="save">Save</button><p id="out">Rendered late</p>';
+document.getElementById("save").onclick = () => { document.getElementById("out").textContent = "Saved now"; };`;
+
+const long = `<!doctype html><title>Long</title><p>${"x".repeat(5000)}</p>`;
+
+const confirmPage = `<!doctype html><title>Confirm</title>
+<button onclick="document.title = confirm('Sure?') ? 'yes' : 'no'">Ask</button>`;
+
 const uploadPage = `<!doctype html><title>Upload</title>
 <input id="hidden" type="file" multiple style="display:none" onchange="document.title = 'input:' + [...this.files].map((f) => f.name + ':' + f.size + ':' + f.type).join(',')">
 <div id="zone" style="width:300px;height:200px;background:#eee"
@@ -44,7 +55,20 @@ const uploadPage = `<!doctype html><title>Upload</title>
 
 before(async () => {
 	server = await startFakeServer({
-		routes: { "/form": form, "/upload": uploadPage, "/animated": animated, "/hidden": hidden, "/zone": zoneInForm },
+		routes: {
+			"/form": form,
+			"/upload": uploadPage,
+			"/animated": animated,
+			"/hidden": hidden,
+			"/zone": zoneInForm,
+			"/late": late,
+			"/late.js": async () => {
+				await new Promise((r) => setTimeout(r, 700));
+				return lateScript;
+			},
+			"/long": long,
+			"/confirm": confirmPage,
+		},
 		script: () => ({ text: "unused" }),
 	});
 	browser = await Browser.launch({ bridge: true });
@@ -60,10 +84,39 @@ after(async () => {
 });
 
 test("the bridge drives a page end to end", async () => {
-	const nav = await harness.callText("navigate", { url: `${server.origin}/form` });
+	const nav = await harness.callText("navigate", { url: `${server.origin}/form`, read: false });
 	assert.equal(nav.title, "Form");
 	const page = await harness.callText("read_page", {});
 	assert.ok(page.includes("Send"));
+});
+
+test("navigate returns the page, read once a late script has rendered it", async () => {
+	const nav = await harness.callText("navigate", { url: `${server.origin}/late` });
+	assert.equal(JSON.parse(nav.split("\n")[0]).title, "Late");
+	assert.ok(nav.includes('button "Save"') && nav.includes("Rendered late"), nav);
+});
+
+test("click with read returns the page after the click", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/late` });
+	const after = await harness.callText("click", { text: "Save", read: true });
+	assert.ok(after.startsWith("Clicked.") && after.includes("Saved now"), after);
+});
+
+test("a page text that was cut says how much there is", async () => {
+	const page = await harness.callText("navigate", { url: `${server.origin}/long` });
+	assert.match(page, /Text \(first 3000 of 5000 characters; get_page_text has the rest\):/);
+	assert.ok(!(await harness.callText("navigate", { url: `${server.origin}/form` })).includes("characters;"));
+});
+
+test("dialogs answered during actions are reported", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/confirm`, read: false });
+	const result = await harness.callText("actions", { steps: [{ click: { text: "Ask" } }], read: true });
+	assert.match(result, /Dialogs answered: .*Sure\?/);
+	assert.ok(result.includes("Page: yes"), result);
+});
+
+test("run_js on statements says it takes an expression", async () => {
+	await assert.rejects(harness.call("run_js", { code: "const a = 1; a" }), /Wrap statements in an IIFE/);
 });
 
 test("a whole form takes two calls", async () => {
@@ -322,7 +375,7 @@ test("skills and prompts reach a harness", async () => {
 			await window.__idbPut("prompts", "greet", { name: "greet", text: "Say hello", createdAt: "2026-01-01" });
 		})()`);
 	await panel.close();
-	const nav = await harness.callText("navigate", { url: `${server.origin}/form` });
+	const nav = await harness.callText("navigate", { url: `${server.origin}/form`, read: false });
 	assert.deepEqual(nav.skills, [{ name: "fixture-skill", description: "Reads the fixture" }]);
 	const listed = await harness.callText("skills_list", { url: `${server.origin}/form` });
 	assert.ok(listed.skills.some((s) => s.name === "fixture-skill"));
