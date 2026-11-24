@@ -108,12 +108,13 @@ recording: `file_upload`, `upload_image`, `gif_creator`. Sign-in: `fill_login`. 
 
 `tabs_show` is the only tool that changes what the user sees.
 
-Every tool call is a full model turn, so each one does as much as it can: `navigate` waits
-for the page to settle and returns it (elements with refs, and text; `read: false` for the
-title alone), `click` with `read: true` returns the page after the click, `actions` runs a
+Every tool call is a full model turn, so each one does as much as it can: `navigate` (and
+`tabs_create`) waits until the page holds still and returns it (elements with refs, and
+text; `read: false` for the title alone), `click` with `read: true` returns the page after the click, `actions` runs a
 whole form (`fill`, `click`, `navigate` steps) and can end with `read` or `screenshot`, and
 `click`, `fill` and friends name an element by what a person reads (`text`) as well as by ref
-or selector. A fixed `wait` after `navigate` is not needed. What the tool list and the
+or selector. A fixed `wait` after `navigate` is not needed; when a result arrives after a
+request, end the `actions` steps with a wait for its text. What the tool list and the
 results cost, and how that was measured: [docs/mcp-token-plan.md](../docs/mcp-token-plan.md).
 
 `run_js` takes one expression (a promise is awaited). Statements go in an IIFE:

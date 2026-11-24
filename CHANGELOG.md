@@ -58,7 +58,7 @@
 
 ### Changed
 
-- Fewer tokens through `sitegeist mcp` (`docs/mcp-token-plan.md`). The tool list is 27% smaller (25,041 to 18,183 characters): schemas no longer carry the JSON Schema draft URL or safe-integer bounds, and descriptions say each thing once. `navigate` returns the page by default (`read: false` for the summary alone) and `click` takes `read`, so the wait and the read that followed most navigations and clicks are no longer separate turns. A read in the same call as a navigation or a click waits until the page holds still (2.5 s at most), so a client-rendered page does not come back empty.
+- Fewer tokens through `sitegeist mcp` (`docs/mcp-token-plan.md`). The tool list is 26% smaller (25,041 to 18,503 characters, 2,800 fewer input tokens on every request in Claude Code): schemas no longer carry the JSON Schema draft URL or safe-integer bounds, and descriptions say each thing once. `navigate` and `tabs_create` return the page by default (`read: false` for the summary alone) and `click` takes `read`, so the wait and the read that followed most navigations and clicks are no longer separate turns. A read in the same call as a navigation or a click waits until the page holds still (about 600 ms of no change, 3 s at most), so a client-rendered page does not come back empty.
 - `read_page` and `navigate` say when the page text was cut and how long it is. `actions`, `read_page` and `find` report the dialogs answered during the call, which their text results left out.
 - `run_js` says in its description that it takes one expression, and a syntax error from statements comes back with the IIFE form.
 - The extension is named "Sitegeist Bridge (unofficial fork)", and About links to this fork's repository and privacy policy instead of sitegeist.ai.

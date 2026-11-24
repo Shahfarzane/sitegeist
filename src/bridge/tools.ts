@@ -293,7 +293,10 @@ export const handlers: Record<string, Handler> = {
 		if (url) await ctx.checkUrl(url);
 		const tab = await ctx.session.createTab(url);
 		const ready = url ? await waitForLoad(tab.id!, 20000) : true;
-		return tabSummary(tab.id!, !ready);
+		return {
+			...(await tabSummary(tab.id!, !ready)),
+			...(url && params.read ? { page: await readPage(tab.id!, params.read) } : {}),
+		};
 	},
 
 	"tabs.close": async (ctx, params) => {

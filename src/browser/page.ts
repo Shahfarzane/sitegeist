@@ -627,10 +627,13 @@ export async function scrollPage(
 }
 
 const SETTLE_POLL_MS = 150;
-/** Polls in a row that must agree once the page has loaded: about 300 ms of holding still. */
-const SETTLE_LOADED_POLLS = 3;
-/** While resources are still coming in the content may be one of them: about 1 s of holding still. */
-const SETTLE_LOADING_POLLS = 8;
+/**
+ * Polls in a row that must agree once the page has loaded: about 600 ms of holding still.
+ * Shorter, and a result fetched after a click (a request of a few hundred ms) is read as "Working".
+ */
+const SETTLE_LOADED_POLLS = 5;
+/** While resources are still coming in the content may be one of them: about 1.2 s of holding still. */
+const SETTLE_LOADING_POLLS = 9;
 
 /**
  * Wait until the page stops changing, for a read that follows a navigation or a click in the
@@ -638,9 +641,11 @@ const SETTLE_LOADING_POLLS = 8;
  * read taken then is an empty shell that costs the caller a wait and a second read.
  *
  * Polled from the worker: timers inside a hidden tab fire once a second at best. A page
- * that never holds still (a ticker, a feed) is read as it is when `maxMs` runs out.
+ * that never holds still (a ticker, a feed) is read as it is when `maxMs` runs out. A
+ * request still in flight is invisible from here: a page that holds still longer than the
+ * window while its data loads is read too early, and the caller waits for its text instead.
  */
-export async function settle(tabId: number, maxMs = 2500): Promise<void> {
+export async function settle(tabId: number, maxMs = 3000): Promise<void> {
 	const deadline = Date.now() + maxMs;
 	let last = "";
 	let stable = 0;

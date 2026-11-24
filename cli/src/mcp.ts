@@ -194,11 +194,11 @@ export async function runMcpServer(): Promise<void> {
 	const instructions = [
 		"sitegeist drives the user's real Chromium browser in the background: your own tab group, never in focus, no view of the user's other tabs.",
 		"Every tool call is a full model turn, so make each one do as much as it can.",
-		"navigate returns the settled page (elements with refs, and its text): do not wait or read_page after it.",
+		"navigate and tabs_create return the page once it holds still (elements with refs, and its text): do not wait or read_page after them.",
 		"click with read:true returns the page after the click.",
-		"Steps you already know (a form, a canvas gesture) are one actions call ending in read or screenshot, not one call per field, key or drag.",
+		"Steps you already know (a form, a canvas gesture) are one actions call ending in read or screenshot, not one call per field, key or drag; when the result comes from a request, end with a wait for its text.",
 		"Name fields and buttons by what a person reads (text); refs come from the latest read and expire when the page changes.",
-		"wait is for a condition (text, selector, URL), not a fixed sleep.",
+		"wait is for a condition (a text, a selector, a URL), not a fixed sleep.",
 		"Read with the page you already have, get_page_text or run_js; screenshots are for layout and canvas apps.",
 		"In canvas editors (Excalidraw, tldraw, Figma-like) use the app's shortcuts and mouse drags and check the screenshot; do not reverse-engineer its internals with run_js.",
 		"Reuse your tab: tabs_create only when two pages must stay open, tabs_close for the ones you are done with.",
@@ -226,12 +226,21 @@ export async function runMcpServer(): Promise<void> {
 			);
 		}
 
+		/** The tab's summary as JSON, then the page when the extension sent one. */
+		const loaded = ({ page, ...summary }: { page?: PageSnapshot }): Content[] =>
+			text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary);
+
 		// Shared by most tools, so every word here is paid for once per tool.
 		const tabId = z.number().int().optional().describe("Default: your current tab");
 		const readOption = z
 			.union([z.boolean(), z.literal("interactive")])
 			.optional()
 			.describe("Return the page afterwards: true for elements and text, interactive for elements only");
+		// A call that loads a URL returns the page: one that returned a title alone was followed by a wait and a read.
+		const loadRead = z
+			.union([z.boolean(), z.literal("interactive")])
+			.optional()
+			.describe("Default true. false: tabId, url and title only. interactive: elements without the text");
 
 		tool(
 			"list_connected_browsers",
@@ -291,10 +300,17 @@ export async function runMcpServer(): Promise<void> {
 		tool(
 			"tabs_create",
 			{
-				description: "Open a URL in another background tab and make it current. Only to keep a second page open; otherwise navigate.",
-				inputSchema: { url: z.string().url() },
+				description:
+					"Open a URL in another background tab, make it current and return the page as navigate does. Only to keep a second page open; otherwise navigate.",
+				inputSchema: { url: z.string().url(), read: loadRead },
 			},
-			(args, bridge) => call(bridge, "tabs.create", args),
+			async (args, bridge) => {
+				try {
+					return { content: loaded(await bridge("tabs.create", { ...args, read: args.read ?? true })) };
+				} catch (err) {
+					return errorResult(err);
+				}
+			},
 		);
 		tool(
 			"tabs_close",
@@ -318,22 +334,17 @@ export async function runMcpServer(): Promise<void> {
 			"navigate",
 			{
 				description:
-					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page has settled and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. No wait or read_page is needed after it.",
+					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. No wait or read_page is needed after it.",
 				inputSchema: {
 					url: z.string(),
 					tabId,
 					waitUntil: z.enum(["domcontentloaded", "load"]).optional(),
-					read: z
-						.union([z.boolean(), z.literal("interactive")])
-						.optional()
-						.describe("Default true. false: tabId, url and title only. interactive: elements without the text"),
+					read: loadRead,
 				},
 			},
 			async (args, bridge) => {
 				try {
-					// The page by default: a navigate that returned only a title was followed by a wait and a read, two more turns.
-					const { page, ...summary } = (await bridge("navigate", { ...args, read: args.read ?? true })) as { page?: PageSnapshot };
-					return { content: text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary) };
+					return { content: loaded(await bridge("navigate", { ...args, read: args.read ?? true })) };
 				} catch (err) {
 					return errorResult(err);
 				}
@@ -433,7 +444,7 @@ export async function runMcpServer(): Promise<void> {
 			"click",
 			{
 				description:
-					"Click an element by ref, selector or text, or at x/y of the latest screenshot, with real input events. read:true returns the page after the click, so no wait or read_page is needed.",
+					"Click an element by ref, selector or text, or at x/y of the latest screenshot, with real input events. read:true returns the page once it holds still after the click.",
 				inputSchema: {
 					...targetSchema,
 					button: z.enum(["left", "right", "middle"]).optional(),
@@ -545,8 +556,8 @@ export async function runMcpServer(): Promise<void> {
 					"Run several steps in one call, then read the page or screenshot it. " +
 					'A form: steps [{"fill":{"text":"Name","value":"Ada"}},{"click":{"text":"Send"}}], read true. ' +
 					'A canvas: steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"type":"Start"}], screenshot true. ' +
-					"Steps: navigate (url), fill ({ref|selector|text, value}), click ({ref|selector|text} or {x,y}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), press (key or chord), hover, scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
-					"x/y are pixels of the latest screenshot. Stops at the first failing step.",
+					"Steps: navigate (url), fill ({ref|selector|text, value}), click ({ref|selector|text} or {x,y}, clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), press (key or chord), hover, scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
+					"x/y are pixels of the latest screenshot. Stops at the first failing step. When the result arrives after a request, end with a wait for its text.",
 				inputSchema: {
 					steps: z.array(z.record(z.string(), z.any())).min(1).max(40),
 					screenshot: z.boolean().optional().describe("Screenshot after the last step"),
@@ -622,7 +633,7 @@ export async function runMcpServer(): Promise<void> {
 			"wait",
 			{
 				description:
-					"Wait until a selector, a text or a URL fragment appears (timeoutMs, default 10000), or for a fixed ms. navigate and read:true already wait for the page to settle, so do not sleep after them.",
+					"Wait until a selector, a text or a URL fragment appears (timeoutMs, default 10000), or for a fixed ms. navigate and read:true already wait until the page holds still; for content that a request brings later, wait for its text, not for a fixed time.",
 				inputSchema: {
 					tabId,
 					selector: z.string().optional(),

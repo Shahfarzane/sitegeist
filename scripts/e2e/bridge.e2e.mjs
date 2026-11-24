@@ -42,6 +42,10 @@ const late = `<!doctype html><title>Late</title><div id="app">Loading</div>
 const lateScript = `document.getElementById("app").innerHTML = '<button id="save">Save</button><p id="out">Rendered late</p>';
 document.getElementById("save").onclick = () => { document.getElementById("out").textContent = "Saved now"; };`;
 
+// The result of the click comes from a request, as a saved form's does.
+const slowSave = `<!doctype html><title>Slow save</title>
+<button onclick="document.getElementById('out').textContent = 'Working'; fetch('/saved').then((r) => r.text()).then((t) => { document.getElementById('out').textContent = t; })">Save</button><p id="out"></p>`;
+
 const long = `<!doctype html><title>Long</title><p>${"x".repeat(5000)}</p>`;
 
 const confirmPage = `<!doctype html><title>Confirm</title>
@@ -65,6 +69,11 @@ before(async () => {
 			"/late.js": async () => {
 				await new Promise((r) => setTimeout(r, 700));
 				return lateScript;
+			},
+			"/slow-save": slowSave,
+			"/saved": async () => {
+				await new Promise((r) => setTimeout(r, 400));
+				return "Saved by the server";
 			},
 			"/long": long,
 			"/confirm": confirmPage,
@@ -96,10 +105,23 @@ test("navigate returns the page, read once a late script has rendered it", async
 	assert.ok(nav.includes('button "Save"') && nav.includes("Rendered late"), nav);
 });
 
+test("tabs_create returns the page of the new tab", async () => {
+	const opened = await harness.callText("tabs_create", { url: `${server.origin}/late` });
+	const summary = JSON.parse(opened.split("\n")[0]);
+	assert.ok(opened.includes("Rendered late"), opened);
+	await harness.callText("tabs_close", { tabId: summary.tabId });
+});
+
 test("click with read returns the page after the click", async () => {
 	await harness.callText("navigate", { url: `${server.origin}/late` });
 	const after = await harness.callText("click", { text: "Save", read: true });
 	assert.ok(after.startsWith("Clicked.") && after.includes("Saved now"), after);
+});
+
+test("a read after a click waits for the result a request brings", async () => {
+	await harness.callText("navigate", { url: `${server.origin}/slow-save`, read: false });
+	const after = await harness.callText("click", { text: "Save", read: true });
+	assert.ok(after.includes("Saved by the server"), after);
 });
 
 test("a page text that was cut says how much there is", async () => {

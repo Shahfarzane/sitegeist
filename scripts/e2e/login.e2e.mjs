@@ -85,7 +85,8 @@ test("an item from another site is refused, even when asked for by id", async ()
 });
 
 test("a redirect during the 1Password prompt does not get the password", async () => {
-	await harness.callText("navigate", { url: `${server.origin}/redirecting` });
+	// read:false returns at once: the page redirects in 500 ms, and the login has to start before that.
+	await harness.callText("navigate", { url: `${server.origin}/redirecting`, read: false });
 	await assert.rejects(harness.call("fill_login", { item: "slow" }), /page changed while waiting/);
 	const landed = await harness.callText("run_js", { code: "location.host" });
 	assert.equal(landed.value, `localhost:${server.port}`);
