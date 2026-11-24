@@ -6,7 +6,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, Harness, repoRoot, startFakeServer } from "./lib.mjs";
+import { Browser, bridgeReady, EXTENSION_DIR, Harness, startFakeServer } from "./lib.mjs";
 
 let server;
 const cleanup = [];
@@ -46,7 +46,7 @@ test("with downloads granted, an agent finds the file a click saved", async () =
 	// The permission is optional; this copy asks for it up front.
 	const copy = mkdtempSync(join(tmpdir(), "sitegeist-e2e-ext-"));
 	cleanup.push(() => rmSync(copy, { recursive: true, force: true }));
-	cpSync(process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, "dist-chrome"), copy, { recursive: true });
+	cpSync(EXTENSION_DIR, copy, { recursive: true });
 	const manifest = JSON.parse(readFileSync(join(copy, "manifest.json"), "utf8"));
 	manifest.permissions.push("downloads");
 	writeFileSync(join(copy, "manifest.json"), JSON.stringify(manifest));

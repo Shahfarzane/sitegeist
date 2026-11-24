@@ -1,14 +1,17 @@
-import { watch } from "node:fs";
+import { mkdirSync, watch } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { readChannel } from "./channel-build.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Watch both browser directories
-const distDirChrome = join(__dirname, "..", "dist-chrome");
+// `npm run dev` builds the dev channel; its panels reload when that build changes.
+const distDirChrome = join(__dirname, "..", readChannel(join(__dirname, ".."), "dev").channel.outDir);
+// A first dev build may not have made it yet.
+mkdirSync(distDirChrome, { recursive: true });
 
 const PORT = 8765; // Fixed port for WebSocket server
 const server = createServer();

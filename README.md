@@ -88,8 +88,13 @@ Log: `~/Library/Logs/sitegeist-auto-release.log`.
 To start a new minor line, change the first two numbers of the version in
 `static/manifest.chrome.json`.
 
-For development, `npm run build` and Load unpacked `dist-chrome/` work as before and
-replace the installed release (same id, same data).
+For development, `npm run build:dev` (or `npm run dev`, which rebuilds on every change)
+builds the dev channel into `dist-chrome-dev/`. Load that folder unpacked and it installs
+beside the release instead of replacing it: its own id (`jdoloceeppngimcgcjcopnammjaaggim`,
+from the public key in `src/channels.json`; an unpacked build needs no private key), the
+name "Sitegeist Bridge DEV", a green dot on its icon, and a `version_name` that names the
+branch and commit. It has its own settings and logins, and its build never bumps the
+tracked version. `npm run build` stays the production build.
 
 The fork is moving to the Chrome Web Store as an Unlisted item named "Sitegeist Bridge
 (unofficial fork)", under the same id. `scripts/store-zip.sh` builds the upload; the listing,

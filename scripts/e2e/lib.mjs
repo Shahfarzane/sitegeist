@@ -21,10 +21,22 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { extensionIdForKey, readChannel } from "../channel-build.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = join(here, "../..");
-export const EXTENSION_ID = "lnncppjiohlpejgcbdgoihplimdckddn";
+/** The build under test: SITEGEIST_E2E_EXTENSION, else the folder of the channel SITEGEIST_CHANNEL names. */
+export const EXTENSION_DIR =
+	process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, readChannel(repoRoot).channel.outDir);
+
+/** The id a build loads under, from the key in its manifest. */
+export function extensionIdOf(dir) {
+	const path = join(dir, "manifest.json");
+	if (!existsSync(path)) throw new Error(`${path} is missing: build first (npm run build, or npm run build:dev)`);
+	return extensionIdForKey(JSON.parse(readFileSync(path, "utf8")).key);
+}
+
+export const EXTENSION_ID = extensionIdOf(EXTENSION_DIR);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function findChrome() {
@@ -124,7 +136,7 @@ export class Target {
 export class Browser {
 	/** `bridge`: install the freshly built CLI as this profile's native host, on private sockets. */
 	static async launch({
-		extensionDir = process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, "dist-chrome"),
+		extensionDir = EXTENSION_DIR,
 		userDataDir,
 		headless = true,
 		env,
