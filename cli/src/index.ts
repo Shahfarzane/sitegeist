@@ -41,7 +41,7 @@ Usage:
   sitegeist host            (internal) native messaging host, spawned by the browser
   sitegeist credentials <p> (internal) one login lookup for the host, printed as JSON
 
-Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegeist install\` prints them):
+Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`${CHANNEL.command} install\` prints them):
   claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp
   codex:  [mcp_servers.sitegeist]  command = "sitegeist"  args = ["mcp"]
   omp:    add an MCP server entry running "sitegeist mcp"
@@ -221,7 +221,8 @@ async function main(): Promise<void> {
 			console.log(CHANNEL_NAME === "production" ? VERSION : `${VERSION} (${CHANNEL_NAME})`);
 			return;
 		default:
-			process.stdout.write(HELP);
+			// The usage lines name the channel's own command (sitegeist-dev in the dev channel).
+			process.stdout.write(HELP.replace(/^ {2}sitegeist /gm, `  ${CHANNEL.command} `));
 			if (command && command !== "--help" && command !== "-h") process.exitCode = 1;
 	}
 }

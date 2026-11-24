@@ -136,3 +136,18 @@ test("every hint a dev CLI prints names the dev command, never production's", ()
 	assert.match(dev, /sitegeist-dev install/);
 	assert.doesNotMatch(dev, /`sitegeist (allow|install)/);
 });
+
+test("the dev CLI's help lists its commands under its own name", () => {
+	const cli = join(src, "index.ts");
+	const help = (channel: string) =>
+		spawnSync(process.execPath, ["--import", "tsx", cli, "--help"], {
+			cwd: join(src, ".."),
+			encoding: "utf8",
+			env: { ...process.env, SITEGEIST_CHANNEL: channel },
+		}).stdout;
+	const dev = help("dev");
+	assert.match(dev, /^ {2}sitegeist-dev allow <host>/m);
+	assert.match(dev, /`sitegeist-dev install` prints them/);
+	assert.doesNotMatch(dev, /^ {2}sitegeist (allow|install|reload|mcp) /m);
+	assert.match(help("production"), /^ {2}sitegeist allow <host>/m);
+});
