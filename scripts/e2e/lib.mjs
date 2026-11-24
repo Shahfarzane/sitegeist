@@ -136,8 +136,36 @@ export class Target {
 	}
 }
 
+/**
+ * Writes `channel`'s native host manifest into the profile, for the build in `extensionDir`, with
+ * a launcher that runs `cli`. `socketDir` set: the launcher pins the host to it, so two hosts in one
+ * browser keep apart sockets (else the host takes SITEGEIST_SOCKET_DIR from the browser).
+ */
+function writeHost(profile, channel, extensionDir, cli, socketDir) {
+	const launcher = join(profile, `${channel.nativeHost}.sh`);
+	const pin = socketDir ? `SITEGEIST_SOCKET_DIR="${socketDir}" ` : "";
+	writeFileSync(launcher, `#!/bin/sh\n${pin}exec "${process.execPath}" "${cli}" host "$@"\n`, { mode: 0o755 });
+	const hosts = join(profile, "NativeMessagingHosts");
+	mkdirSync(hosts, { recursive: true });
+	writeFileSync(
+		join(hosts, `${channel.nativeHost}.json`),
+		JSON.stringify({
+			name: channel.nativeHost,
+			description: "sitegeist e2e",
+			path: launcher,
+			type: "stdio",
+			allowed_origins: [`chrome-extension://${extensionIdOf(extensionDir)}/`],
+		}),
+	);
+}
+
 export class Browser {
-	/** `bridge`: install the freshly built CLI as this profile's native host, on private sockets. */
+	/**
+	 * `bridge`: install the freshly built CLI as this profile's native host, on private sockets.
+	 * `channels` (["production", "dev"]): load each channel's build in this one profile, as both
+	 * copies run in one browser, each with its own CLI build as native host on its own sockets;
+	 * `browser.channels[name]` holds its `id`, `socketDir` and `cli`.
+	 */
 	static async launch({
 		extensionDir = EXTENSION_DIR,
 		userDataDir,
@@ -146,26 +174,25 @@ export class Browser {
 		bridge = false,
 		sharedSocketDir,
 		hostCli = CLI,
+		channels,
 	} = {}) {
 		const profile = userDataDir ?? mkdtempSync(join(tmpdir(), "sitegeist-e2e-"));
 		let socketDir;
-		if (bridge) {
+		const loaded = {};
+		for (const name of channels ?? []) {
+			const { channel } = readChannel(repoRoot, name);
+			const dir = join(repoRoot, channel.outDir);
+			const cli = join(repoRoot, "cli", channel.cliOutDir, "index.js");
+			const sockets = mkdtempSync(`/tmp/sg-e2e-${name}-`);
+			chmodSync(sockets, 0o700);
+			writeHost(profile, channel, dir, cli, sockets);
+			loaded[name] = { dir, id: extensionIdOf(dir), socketDir: sockets, cli };
+		}
+		const extensionDirs = channels ? Object.values(loaded).map((c) => c.dir) : [extensionDir];
+		if (bridge && !channels) {
 			socketDir = sharedSocketDir ?? mkdtempSync("/tmp/sg-e2e-");
 			chmodSync(socketDir, 0o700);
-			const launcher = join(profile, "host.sh");
-			writeFileSync(launcher, `#!/bin/sh\nexec "${process.execPath}" "${hostCli}" host "$@"\n`, { mode: 0o755 });
-			const hosts = join(profile, "NativeMessagingHosts");
-			mkdirSync(hosts, { recursive: true });
-			writeFileSync(
-				join(hosts, `${CHANNEL.nativeHost}.json`),
-				JSON.stringify({
-					name: CHANNEL.nativeHost,
-					description: "sitegeist e2e",
-					path: launcher,
-					type: "stdio",
-					allowed_origins: [`chrome-extension://${extensionIdOf(extensionDir)}/`],
-				}),
-			);
+			writeHost(profile, CHANNEL, extensionDir, hostCli);
 		}
 		const args = [
 			`--user-data-dir=${profile}`,
@@ -175,8 +202,8 @@ export class Browser {
 			"--disable-background-networking",
 			"--disable-sync",
 			"--disable-features=DisableLoadExtensionCommandLineSwitch",
-			`--disable-extensions-except=${extensionDir}`,
-			`--load-extension=${extensionDir}`,
+			`--disable-extensions-except=${extensionDirs.join(",")}`,
+			`--load-extension=${extensionDirs.join(",")}`,
 			"--window-size=1400,950",
 			...(headless ? ["--headless=new"] : []),
 			"about:blank",
@@ -210,6 +237,7 @@ export class Browser {
 		browser.ownsProfile = !userDataDir;
 		browser.socketDir = socketDir;
 		browser.ownsSockets = !sharedSocketDir;
+		browser.channels = loaded;
 		browser.cdp = await Cdp.connect(`ws://127.0.0.1:${port}${path}`);
 		await browser.cdp.send("Target.setDiscoverTargets", { discover: true });
 		return browser;
@@ -224,11 +252,13 @@ export class Browser {
 		return (await this.cdp.send("Target.getTargets")).targetInfos;
 	}
 
-	async worker({ timeoutMs = 15000 } = {}) {
+	/** The service worker of extension `id` (the build under test by default); `except` skips a target. */
+	async worker({ timeoutMs = 15000, id = EXTENSION_ID, except } = {}) {
 		const deadline = Date.now() + timeoutMs;
 		for (;;) {
 			const found = (await this.targets()).find(
-				(t) => t.type === "service_worker" && t.url.startsWith(`chrome-extension://${EXTENSION_ID}/`),
+				(t) =>
+					t.type === "service_worker" && t.url.startsWith(`chrome-extension://${id}/`) && t.targetId !== except,
 			);
 			if (found) return this.attach(found.targetId);
 			if (Date.now() > deadline) throw new Error("Extension service worker did not start");
@@ -253,6 +283,7 @@ export class Browser {
 		this.cdp.ws.close();
 		if (this.ownsProfile) rmSync(this.profile, { recursive: true, force: true });
 		if (this.socketDir && this.ownsSockets) rmSync(this.socketDir, { recursive: true, force: true });
+		for (const c of Object.values(this.channels ?? {})) rmSync(c.socketDir, { recursive: true, force: true });
 	}
 }
 
@@ -507,16 +538,24 @@ export const pageText = (page) => page.evaluate(`document.body.innerText`);
 export class Harness {
 	static async connect(
 		browser,
-		{ name = "e2e", session = "e2e-session", env, era = process.env.SITEGEIST_E2E_ERA, elicit } = {},
+		{
+			name = "e2e",
+			session = "e2e-session",
+			env,
+			era = process.env.SITEGEIST_E2E_ERA,
+			elicit,
+			socketDir = browser.socketDir,
+			cli = CLI,
+		} = {},
 	) {
 		const home = mkdtempSync(join(tmpdir(), "sitegeist-e2e-home-"));
 		const transport = new StdioClientTransport({
 			command: process.execPath,
-			args: [CLI, "mcp"],
+			args: [cli, "mcp"],
 			env: {
 				...process.env,
 				HOME: home,
-				SITEGEIST_SOCKET_DIR: browser.socketDir,
+				SITEGEIST_SOCKET_DIR: socketDir,
 				SITEGEIST_CLIENT_NAME: name,
 				SITEGEIST_SESSION: session,
 				...env,
@@ -568,10 +607,10 @@ export class Harness {
 	}
 }
 
-/** Wait for a bridge host socket to appear in `browser`. */
-export async function bridgeReady(browser, timeoutMs = 15000) {
+/** Wait for a bridge host socket to appear in `browser` (or in `socketDir`). */
+export async function bridgeReady(browser, timeoutMs = 15000, socketDir = browser.socketDir) {
 	const deadline = Date.now() + timeoutMs;
-	while (readdirSync(browser.socketDir).filter((n) => n.endsWith(".sock")).length === 0) {
+	while (readdirSync(socketDir).filter((n) => n.endsWith(".sock")).length === 0) {
 		if (Date.now() > deadline) throw new Error("native host did not start");
 		await sleep(100);
 	}

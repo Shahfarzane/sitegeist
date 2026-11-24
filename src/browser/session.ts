@@ -16,6 +16,7 @@
  * agent's next attempt to open a tab is refused instead of starting a new group.
  */
 
+import { CHANNEL } from "../channel.js";
 import { detachTab, ensureAttached, isRestrictedUrl, releaseAgentViewport, shownTabIds } from "./cdp.js";
 
 const STORAGE_KEY = "browser_sessions";
@@ -24,7 +25,8 @@ const TABLE_LOCK = "sitegeist-browser-sessions";
 const RELEASED_LOCK = "sitegeist-released-tabs";
 /** How stale a session's "last used" time may get before it alone is worth a write. */
 const LAST_USED_WRITE_MS = 30000;
-const GROUP_PREFIX = "Sitegeist";
+/** "Sitegeist", or "Sitegeist dev" in the dev channel, so two copies in one profile tell their groups apart. */
+const GROUP_PREFIX = CHANNEL.groupPrefix;
 /** Tool calls closer together than this belong to one agent run. */
 const RUN_GAP_MS = 2 * 60 * 1000;
 const GROUP_REMOVED_MESSAGE =
@@ -171,8 +173,17 @@ export async function sessionIdForTab(tabId: number): Promise<string | undefined
 }
 
 /**
- * Ungroup tabs sitting in "Sitegeist · ..." groups that no live session owns (left behind
- * by an extension reload, which clears session storage but not the browser's groups).
+ * True for a tab group this copy of sitegeist titled: "Sitegeist · <label>", or "Sitegeist dev ·
+ * <label>" for the dev channel. The other copy's groups are never this copy's.
+ */
+export function ownsGroupTitle(title: string | undefined, prefix: string = GROUP_PREFIX): boolean {
+	return title?.startsWith(`${prefix} ·`) ?? false;
+}
+
+/**
+ * Ungroup tabs sitting in this copy's groups that no live session owns (left behind by an
+ * extension reload, which clears session storage but not the browser's groups). A copy of the
+ * other channel in the same profile keeps its groups: they carry the other prefix.
  */
 export async function cleanupOrphanGroups(): Promise<number> {
 	const table = await readTable();
@@ -181,7 +192,7 @@ export async function cleanupOrphanGroups(): Promise<number> {
 	const groups = await chrome.tabGroups.query({}).catch(() => []);
 	let released = 0;
 	for (const g of groups) {
-		if (!g.title?.startsWith(`${GROUP_PREFIX} ·`) || liveGroups.has(g.id)) continue;
+		if (!ownsGroupTitle(g.title) || liveGroups.has(g.id)) continue;
 		const tabs = await chrome.tabs.query({ groupId: g.id }).catch(() => []);
 		for (const t of tabs) {
 			if (t.id === undefined) continue;

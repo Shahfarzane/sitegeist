@@ -29,6 +29,7 @@ const local: Stored = {};
 let writes = 0;
 const tabs = new Map<number, Tab>();
 let nextGroup = 100;
+let groups: Array<{ id: number; title: string; windowId: number }> = [];
 const latency = () => new Promise((r) => setTimeout(r, Math.random() * 3));
 const event = () => ({ addListener: () => undefined, removeListener: () => undefined });
 
@@ -65,7 +66,7 @@ const event = () => ({ addListener: () => undefined, removeListener: () => undef
 		onRemoved: event(),
 		onActivated: event(),
 	},
-	tabGroups: { onRemoved: event(), get: async (id: number) => ({ id, windowId: 1 }), update: async () => undefined, query: async () => [] },
+	tabGroups: { onRemoved: event(), get: async (id: number) => ({ id, windowId: 1 }), update: async () => undefined, query: async () => groups },
 	windows: { get: async (id: number) => ({ id, type: "normal" }), getLastFocused: async () => ({ id: 1 }) },
 	debugger: { detach: async () => undefined, onDetach: event(), onEvent: event(), getTargets: async () => [] },
 	webNavigation: { onCommitted: event() },
@@ -77,6 +78,7 @@ beforeEach(() => {
 	for (const key of Object.keys(local)) delete local[key];
 	tabs.clear();
 	writes = 0;
+	groups = [];
 	for (let id = 1; id <= 40; id++) tabs.set(id, { id, windowId: 1, groupId: -1, url: "https://a.test", active: false, pinned: false });
 });
 
@@ -110,4 +112,23 @@ test("using a session does not rewrite the table when nothing changed", async ()
 	const before = writes;
 	for (let i = 0; i < 20; i++) await session.setCurrent(7);
 	assert.equal(writes, before);
+});
+
+test("a copy cleans up only its own channel's groups", async () => {
+	const module = await load("h");
+	// Two copies in one profile: a dev copy's live group, and a production group nobody owns.
+	groups = [
+		{ id: 300, title: "Sitegeist dev · claude", windowId: 1 },
+		{ id: 301, title: "Sitegeist · gone", windowId: 1 },
+	];
+	(tabs.get(1) as Tab).groupId = 300;
+	(tabs.get(2) as Tab).groupId = 301;
+	assert.equal(await module.cleanupOrphanGroups(), 1);
+	assert.equal(tabs.get(1)?.groupId, 300);
+	assert.equal(tabs.get(2)?.groupId, -1);
+	// The dev copy's check, the other way round.
+	assert.equal(module.ownsGroupTitle("Sitegeist · claude", "Sitegeist dev"), false);
+	assert.equal(module.ownsGroupTitle("Sitegeist dev · claude", "Sitegeist dev"), true);
+	assert.equal(module.ownsGroupTitle("Sitegeist dev · claude", "Sitegeist"), false);
+	assert.equal(module.ownsGroupTitle("Sitegeist · dev work", "Sitegeist dev"), false);
 });

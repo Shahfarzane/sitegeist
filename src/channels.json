@@ -8,7 +8,9 @@
 		"command": "sitegeist",
 		"launcher": "host",
 		"socketPrefix": "sitegeist-bridge",
-		"toolPrefix": ""
+		"toolPrefix": "",
+		"groupPrefix": "Sitegeist",
+		"label": "Sitegeist"
 	},
 	"dev": {
 		"extensionId": "jdoloceeppngimcgcjcopnammjaaggim",
@@ -20,11 +22,18 @@
 		"launcher": "host-dev",
 		"socketPrefix": "sitegeist-bridge-dev",
 		"toolPrefix": "dev_",
+		"groupPrefix": "Sitegeist dev",
+		"label": "Sitegeist DEV",
 		"manifest": {
 			"name": "Sitegeist Bridge DEV (unofficial fork)",
 			"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv0AOi9ARZThnqxfXBuTOdgAIFNpYjdkE3O1nZy0YH7mIiaxLVk/hgq29TV5YD/5WsZ0l+hyWjei2sUDulnOFVy7gfWfjaYw6rpEN+Lfe6RFrIomQ0M6EPoY3vpDUC9BkF3+oHWpGnSMS/uTmknfGq5bnfeB6JfTNINHE9YWtIGzkt8OzWYso7jWVvsRDR9CiMstuhYMop2XQhBMnX69PgSubHyX4dHTqRuAzTPFZnsI1bpENlnGnrkY13f+05hX8kTTw/s58FpWJ//Pz6rFgfTKjIgT7qKle3u2JkFbmntlEzRMWSPv312IUpQmoIG+TYh7OhRLUUeiz2XW1nvh9ZwIDAQAB",
 			"action": {
 				"default_title": "Sitegeist DEV: click to open side panel"
+			},
+			"commands": {
+				"toggle-sidepanel": {
+					"description": "Toggle side panel"
+				}
 			}
 		}
 	}
