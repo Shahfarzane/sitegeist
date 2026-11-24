@@ -45,6 +45,10 @@ test("the dev manifest has its own name, key and title, and keeps everything els
 	assert.deepEqual(manifest.permissions, source.permissions);
 	assert.deepEqual(manifest.host_permissions, source.host_permissions);
 	assert.equal(manifest.update_url, undefined);
+	// The store copy keeps Command+Shift+S; the dev copy asks for no key, so neither loses it unseen.
+	assert.equal(manifest.commands["toggle-sidepanel"].suggested_key, undefined);
+	assert.equal(manifest.commands["toggle-sidepanel"].description, source.commands["toggle-sidepanel"].description);
+	assert.ok(source.commands["toggle-sidepanel"].suggested_key.mac);
 	// The source object is left as it was.
 	assert.equal(extensionIdForKey(source.key), production.extensionId);
 });

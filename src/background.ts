@@ -7,6 +7,7 @@ import {
 	listSessions,
 	unmarkReleased,
 } from "./browser/session.js";
+import { CHANNEL } from "./channel.js";
 import { startLoginService } from "./credentials/login.js";
 import { startNotifications } from "./notify/notifications.js";
 import { startSelfUpdate } from "./utils/self-update.js";
@@ -263,13 +264,18 @@ const MENU_TABS = "sitegeist-ask-tabs";
 
 function createMenus(): void {
 	chrome.contextMenus.removeAll(() => {
-		chrome.contextMenus.create({ id: MENU_PAGE, title: "Ask Sitegeist about this page", contexts: ["page"] });
-		chrome.contextMenus.create({ id: MENU_SELECTION, title: 'Ask Sitegeist about "%s"', contexts: ["selection"] });
+		// "Sitegeist DEV" in the dev channel: a copy of each channel in one profile adds its own entries.
+		chrome.contextMenus.create({ id: MENU_PAGE, title: `Ask ${CHANNEL.label} about this page`, contexts: ["page"] });
+		chrome.contextMenus.create({
+			id: MENU_SELECTION,
+			title: `Ask ${CHANNEL.label} about "%s"`,
+			contexts: ["selection"],
+		});
 		// The tab strip's own menu (Chrome 150+); it covers every selected tab.
 		chrome.contextMenus.create(
 			{
 				id: MENU_TABS,
-				title: "Ask Sitegeist about these tabs",
+				title: `Ask ${CHANNEL.label} about these tabs`,
 				contexts: ["tab" as chrome.contextMenus.ContextType],
 			},
 			() => void chrome.runtime.lastError,

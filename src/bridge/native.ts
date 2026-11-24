@@ -9,7 +9,7 @@
 
 import { stopScreencastsOwnedBy, takeDialogs } from "../browser/cdp.js";
 import { setCdpMessageHandler, usableUserScripts } from "../browser/inject.js";
-import { BrowserSession, listSessions, NoTabError, pruneSessions } from "../browser/session.js";
+import { BrowserSession, listSessions, NoTabError, ownsGroupTitle, pruneSessions } from "../browser/session.js";
 import { showNotification } from "../notify/notifications.js";
 import { checkAnnouncedUpdate, checkForUpdate } from "../utils/self-update.js";
 import {
@@ -320,7 +320,7 @@ function onHostMessage(message: HostToExt): void {
 						.query({})
 						.then((groups) =>
 							groups
-								.filter((g) => g.title?.startsWith("Sitegeist"))
+								.filter((g) => ownsGroupTitle(g.title))
 								.map((g) => ({ id: g.id, title: g.title, windowId: g.windowId })),
 						)
 						.catch(() => []),

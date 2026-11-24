@@ -105,6 +105,12 @@ and the dev CLI (`cli/dist-dev/index.js browsers`, `mcp`, `reload`, or `sitegeis
 `cli` is linked again) sees only dev copies; `install` prints the `claude mcp add sitegeist-dev`
 line. A bridge change on a branch therefore reaches only the dev copy.
 
+Both copies can run at once in one browser. The dev copy's tab groups are titled
+"Sitegeist dev · ...", so neither copy's start-up cleanup touches the other's agent groups;
+its right-click entries say "Ask Sitegeist DEV"; and it asks for no keyboard shortcut, so
+Command+Shift+S stays with the store copy (give the dev copy its own at
+`chrome://extensions/shortcuts`).
+
 The fork is moving to the Chrome Web Store as an Unlisted item named "Sitegeist Bridge
 (unofficial fork)", under the same id. `scripts/store-zip.sh` builds the upload; the listing,
 the policy review and the first-upload steps are in
