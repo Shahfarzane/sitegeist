@@ -26,13 +26,12 @@ function probe(channel: "production" | "dev", home: string, body: string, env: R
 import { EXTENSION_ID, install } from ${JSON.stringify(join(src, "install.ts"))};
 import { socketDir } from ${JSON.stringify(join(src, "paths.ts"))};
 import { BridgeClient } from ${JSON.stringify(join(src, "client.ts"))};
-import { publishedVersion } from ${JSON.stringify(join(src, "release.ts"))};
 import { writePiExtension } from ${JSON.stringify(join(src, "pi-extension.ts"))};
-void NATIVE_HOST_NAME, EXTENSION_ID, install, socketDir, publishedVersion, writePiExtension, BridgeClient;
+void NATIVE_HOST_NAME, EXTENSION_ID, install, socketDir, writePiExtension, BridgeClient;
 process.stdout.write(JSON.stringify(${body}));
 `,
 	);
-	const { SITEGEIST_SOCKET_DIR: _socket, SITEGEIST_UPDATE_DIR: _update, ...inherited } = process.env;
+	const { SITEGEIST_SOCKET_DIR: _socket, ...inherited } = process.env;
 	const result = spawnSync(process.execPath, ["--import", "tsx", file], {
 		cwd: join(src, ".."),
 		encoding: "utf8",
@@ -71,28 +70,20 @@ test("production keeps its host name, socket folder and id; dev has its own", ()
 
 test("dev install registers the dev host and leaves every production file as it was", () => {
 	const home = mkdtempSync(join(work, "home-"));
-	// One browser folder for each platform install.ts knows, plus Helium (external installs).
+	// One browser folder for each platform install.ts knows.
 	for (const dir of ["Library/Application Support/Google/Chrome", "Library/Application Support/net.imput.helium", ".config/google-chrome"]) {
 		mkdirSync(join(home, dir), { recursive: true });
 	}
-	// A release published on this machine: production also writes Helium's external-install file.
-	const updates = mkdtempSync(join(work, "updates-"));
-	writeFileSync(join(updates, "updates.xml"), `<gupdate><app appid="${PRODUCTION_ID}"><updatecheck codebase="file:///x.crx" version="1.2.400" /></app></gupdate>`);
-	const env = { SITEGEIST_UPDATE_DIR: updates };
-
-	probe("production", home, "install()", env);
+	probe("production", home, "install()");
 	const before = snapshot(home);
 	assert.ok([...before.keys()].some((k) => k.endsWith("NativeMessagingHosts/ai.sitegeist.bridge.json")));
 
-	assert.equal(probe("dev", home, "publishedVersion() ?? null", env), null);
-	assert.equal(probe("production", home, "publishedVersion() ?? null", env), "1.2.400");
-	probe("dev", home, "install()", env);
+	probe("dev", home, "install()");
 	const afterDev = snapshot(home);
 
 	for (const [path, content] of before) assert.equal(afterDev.get(path), content, `${path} changed`);
 	const added = [...afterDev.keys()].filter((k) => !before.has(k)).sort();
 	assert.ok(added.includes(".config/sitegeist/host-dev"), added.join(", "));
-	assert.ok(!added.some((k) => k.includes("External Extensions")), added.join(", "));
 	const manifests = added.filter((k) => k.endsWith("/NativeMessagingHosts/ai.sitegeist.bridge.dev.json"));
 	assert.equal(manifests.length, added.length - 1, added.join(", "));
 	assert.ok(manifests.length >= 1);

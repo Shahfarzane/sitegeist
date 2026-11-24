@@ -9,9 +9,9 @@ scripts/store-zip.sh                 # release/store/sitegeist-<version>.zip
 scripts/store-zip.sh --first-upload  # the same zip plus key.pem, in a temp folder
 ```
 
-The version is `<major>.<minor>.<commits on HEAD>`, as `release-crx.sh` makes it. The zip has no `key` and no `update_url` (the store rejects the first and serves updates itself) and no source maps.
+The version is `<major>.<minor>.<commits on HEAD>`. The zip has no `key` and no `update_url` (the store rejects the first and serves updates itself) and no source maps.
 
-The first upload of the item uses `--first-upload`. It adds "sitegeist CRX signing key" from 1Password DEV as `key.pem`, which gives the store item the id the self-hosted releases have, `lnncppjiohlpejgcbdgoihplimdckddn`. The native host manifests (`cli/src/install.ts`) and the data in existing installs stay valid. Delete the temp folder after the upload. Later uploads use the plain zip.
+The first upload of the item uses `--first-upload`. It adds "sitegeist CRX signing key" from 1Password DEV as `key.pem`, which gives the store item the id production builds have, `lnncppjiohlpejgcbdgoihplimdckddn`. The native host manifests (`cli/src/install.ts`) and the data in existing installs stay valid. Delete the temp folder after the upload. Later uploads use the plain zip.
 
 The item was created on 2026-11-13 from 1.2.347 with `--first-upload`, and the dashboard shows id `lnncppjiohlpejgcbdgoihplimdckddn`.
 

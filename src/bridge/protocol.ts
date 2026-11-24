@@ -127,13 +127,7 @@ export interface HostPing {
 	type: "ping";
 }
 
-/** The self-hosted release on this machine (updates.xml), sent after the extension's hello. */
-export interface HostPublished {
-	type: "published";
-	version: string;
-}
-
-export type HostToExt = HostClientConnected | HostClientDisconnected | HostForwardedRequest | HostPing | HostPublished;
+export type HostToExt = HostClientConnected | HostClientDisconnected | HostForwardedRequest | HostPing;
 
 // ---- coding CLI logins ----------------------------------------------------
 // The extension asks with chrome.runtime.sendNativeMessage, which starts a host process

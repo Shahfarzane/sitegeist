@@ -130,8 +130,9 @@ results cost, and how that was measured: [docs/mcp-token-plan.md](../docs/mcp-to
 `run_js` takes one expression (a promise is awaited). Statements go in an IIFE:
 `(() => { const rows = [...document.querySelectorAll("tr")]; return rows.length; })()`.
 
-`sitegeist update` asks every running browser's extension to check its update URL now (used
-by `scripts/release-crx.sh`); the extension reloads itself once an update is downloaded.
+`sitegeist update` asks every running browser's extension to check the Chrome Web Store now;
+the extension reloads itself once an update is downloaded. A check that finds nothing makes
+Chrome answer `throttled` for a few hours, so run it after a version is published.
 
 `cdp` sends a raw Chrome DevTools Protocol command to the session's current tab (emulation,
 headers, PDF, DOM, performance, input). Under full access nothing is refused; with "ask before

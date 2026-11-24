@@ -47,50 +47,28 @@ Agents work in hidden tabs of their own group, on your logins, with full access 
 
 ## Install the extension
 
-This fork ships as a self-signed `.crx` (extension id
-`lnncppjiohlpejgcbdgoihplimdckddn`). The signing key is "sitegeist CRX signing key" in
-1Password DEV; `static/manifest.chrome.json` carries its public half, so unpacked builds
-and signed releases install under the same id.
+Production comes from the Chrome Web Store: the Unlisted item "Sitegeist Bridge (unofficial
+fork)", id `lnncppjiohlpejgcbdgoihplimdckddn`, in Google Chrome and in Helium (which installs
+and updates store items through its own services). `static/manifest.chrome.json` carries the
+public half of the item's key, so a production build has the store item's id.
 
-1. Prepare the sibling repos once per machine: `scripts/setup-siblings.sh`.
-2. Build, sign and publish: `scripts/release-crx.sh` (append ssh hosts, e.g. `m3`, to
-   publish there too). It writes the `.crx` and `updates.xml` to
-   `~/.local/share/sitegeist/extension/`, the `file://` update URL baked into the release.
-   The version is `<major>.<minor>.<commits on HEAD>`, so nothing needs committing.
+1. Add the store item from its Unlisted link, once per browser. The browser keeps it current
+   on its own schedule; `sitegeist update` asks for a check now.
+2. Prepare the sibling repos once per machine: `scripts/setup-siblings.sh`.
 3. Install the CLI (`cd cli && npm ci && npm run build && npm link`) and run
    `sitegeist install`. It writes the native host manifest for every Chromium browser it
-   finds and, once a release is published on this Mac, Helium's external-install file.
-4. Helium: restart it and turn sitegeist on once in `chrome://extensions` (Helium adds an
-   externally installed extension switched off).
-5. Install `release/sitegeist-chrome-policy.mobileconfig` once in System Settings >
-   General > Device Management. For Chrome it puts the id on `ExtensionInstallAllowlist`
-   (without it, Chrome on macOS disables off-store extensions); for Chrome and Helium it pins
-   sitegeist to the toolbar and lets it open `file://` pages. Reinstalling a newer profile
-   replaces the old one. `pack-crx.mjs --no-crx` writes it without the signing key.
-   Restart the browsers and check `chrome://policy`.
-6. Google Chrome: run
-   `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" file://$HOME/.local/share/sitegeist/extension/sitegeist-<version>.crx`
-   and confirm Add extension. Chrome force-installs off-store extensions only on Macs
-   enrolled in MDM, so this one click stays.
-7. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
+   finds.
+4. Open the side panel with `Cmd+Shift+S` / `Ctrl+Shift+S` and connect a provider. The browser owns the
    panel's width, so drag its edge to size it; the layout is built for 360 to 520 px.
 
-Later releases are automatic: `scripts/install-auto-release.sh m3` installs a launchd agent
-that runs `scripts/auto-release.sh` every 10 minutes. When `origin/main` moves it builds
-the new commit (only from a clean `main` checkout), signs, publishes here and to each ssh
-host (retrying hosts that are asleep), and ends with `sitegeist update`, which makes every
-running browser with the extension connected reload into the new version. A browser that
-was closed updates when it next connects to the native host, which reports the version in
-`updates.xml`. The extension asks Chrome for an update only when that version is newer:
-Chrome throttles `runtime.requestUpdateCheck` for 5 hours after any check that finds
-nothing, which is why speculative checks made the push answer `throttled`.
-Log: `~/Library/Logs/sitegeist-auto-release.log`.
+A new version goes to the store with `scripts/store-publish.sh publish` and reaches the
+browsers after the store's review ([docs/chrome-web-store.md](docs/chrome-web-store.md)).
 To start a new minor line, change the first two numbers of the version in
 `static/manifest.chrome.json`.
 
 For development, `npm run build:dev` (or `npm run dev`, which rebuilds on every change)
 builds the dev channel into `dist-chrome-dev/`. Load that folder unpacked and it installs
-beside the release instead of replacing it: its own id (`jdoloceeppngimcgcjcopnammjaaggim`,
+beside the store copy instead of replacing it: its own id (`jdoloceeppngimcgcjcopnammjaaggim`,
 from the public key in `src/channels.json`; an unpacked build needs no private key), the
 name "Sitegeist Bridge DEV", a green dot on its icon, and a `version_name` that names the
 branch and commit. It has its own settings and logins, and its build never bumps the
@@ -110,12 +88,6 @@ Both copies can run at once in one browser. The dev copy's tab groups are titled
 its right-click entries say "Ask Sitegeist DEV"; and it asks for no keyboard shortcut, so
 Command+Shift+S stays with the store copy (give the dev copy its own at
 `chrome://extensions/shortcuts`).
-
-The fork is moving to the Chrome Web Store as an Unlisted item named "Sitegeist Bridge
-(unofficial fork)", under the same id. `scripts/store-zip.sh` builds the upload; the listing,
-the policy review and the first-upload steps are in
-[docs/chrome-web-store.md](docs/chrome-web-store.md). Until the store item is live, the
-self-hosted `.crx` above stays the way to install.
 
 No toggles are required. In-page JavaScript runs through the `userScripts` API when the
 browser exposes it (an isolated world whose CSP blocks network access from injected code)
@@ -351,7 +323,7 @@ Builds the static site and uploads it to `sitegeist.ai`. Requires SSH access to
 
 Bumps the version in `static/manifest.chrome.json`, commits, tags, and pushes. GitHub
 Actions builds the extension and creates a release with the unpacked zip (no signing key in
-CI). For the signed `.crx`, use `scripts/release-crx.sh` (see Install the extension).
+CI). Store versions are published with `scripts/store-publish.sh` (see Install the extension).
 
 ## License
 

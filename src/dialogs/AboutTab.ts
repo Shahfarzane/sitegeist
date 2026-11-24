@@ -11,7 +11,7 @@ export class AboutTab extends SettingsTab {
 	}
 
 	render(): TemplateResult {
-		// Releases carry "1.2.250 (abc1234)" as version_name: the build and the commit it came from.
+		// Dev builds carry "1.2.364 dev (branch abc1234)" as version_name: the build and the commit it came from.
 		const manifest = chrome.runtime.getManifest();
 		const version = manifest.version_name ?? manifest.version;
 
@@ -28,16 +28,6 @@ export class AboutTab extends SettingsTab {
 						<span class="text-muted-foreground ml-2">${version}</span>
 					</div>
 				</div>
-
-				${
-					// Self-hosted releases carry a file:// update URL; store installs update through the store.
-					manifest.update_url?.startsWith("file://")
-						? html`<p class="text-xs text-muted-foreground">
-								Private build. New signed releases install automatically from your release folder
-								(<code>scripts/release-crx.sh</code>).
-							</p>`
-						: ""
-				}
 
 				<p class="text-xs text-muted-foreground">
 					An unofficial fork of sitegeist, not made by or affiliated with sitegeist.ai.

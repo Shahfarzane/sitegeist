@@ -9,7 +9,6 @@ import { runNativeHost } from "./host.ts";
 import { install, isInstalled, launcherProblem, mcpCommand } from "./install.ts";
 import { runMcpServer } from "./mcp.ts";
 import { writePiExtension } from "./pi-extension.ts";
-import { publishedVersion } from "./release.ts";
 import { VERSION } from "./version.ts";
 
 // The dev channel's CLI (cli/dist-dev, `npm run build:dev`) serves only dev copies of the extension.
@@ -23,12 +22,11 @@ const HELP = `sitegeist ${VERSION} - browser bridge for coding harnesses
 ${DEV_NOTE}
 Usage:
   sitegeist mcp             Run the MCP server on stdio (installs the native host on first run)
-  sitegeist install         Write the native messaging manifest for every Chromium browser found,
-                            and have Helium install the self-hosted release when one is published here
+  sitegeist install         Write the native messaging manifest for every Chromium browser found
   sitegeist status          Show whether the extension is reachable
   sitegeist browsers        List the browsers with a live bridge (SITEGEIST_BROWSER=<name> picks one)
   sitegeist reload          Reload the extension (picks up a rebuilt dist-chrome)
-  sitegeist update          Make every running browser install the release published here, if newer
+  sitegeist update          Ask every running browser to check the Chrome Web Store for a newer sitegeist now
   sitegeist allow <host>    Allow agents to open a site (subdomains included)
   sitegeist yolo            Allow agents to open ANY site, no per-site prompts (default)
   sitegeist ask             Require a prompt before agents open an un-allowed site
@@ -195,16 +193,16 @@ async function main(): Promise<void> {
 			if (CHANNEL_NAME !== "production") {
 				throw new Error(`The dev channel has no release to update to: run \`npm run ${CHANNEL.buildScript}\`, then \`${CHANNEL.command} reload\`.`);
 			}
-			// Every running browser has its own host; each extension checks its update_url only
-			// when the published version is newer than its own (an empty check is throttled for hours).
+			// Every running browser has its own host. Browsers check the store on their own every few
+			// hours; this asks once now. A check that finds nothing makes Chrome answer `throttled` to
+			// further requests for a few hours, so run it after a version is published, not on a timer.
 			const sockets = listSockets();
 			if (sockets.length === 0) throw new Error("No running browser has the extension connected");
-			const version = publishedVersion();
 			for (const path of sockets) {
 				const client = new BridgeClient({ name: "update" });
 				try {
 					await client.connect(path);
-					console.log(`${path}: ${JSON.stringify(await client.call("bridge.update", version ? { version } : {}, 15000))}`);
+					console.log(`${path}: ${JSON.stringify(await client.call("bridge.update", {}, 15000))}`);
 				} catch (err) {
 					console.log(`${path}: ${err instanceof Error ? err.message : String(err)}`);
 				} finally {
