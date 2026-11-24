@@ -7,7 +7,16 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, Harness, openPanel, pageText, repoRoot, sendPrompt, startFakeServer } from "./lib.mjs";
+import {
+	Browser,
+	bridgeReady,
+	EXTENSION_DIR,
+	Harness,
+	openPanel,
+	pageText,
+	sendPrompt,
+	startFakeServer,
+} from "./lib.mjs";
 
 const page = "<!doctype html><title>Notify</title><h1>Notify</h1>";
 const LONG_RUN = { tokens: Array.from({ length: 160 }, (_, i) => `w${i} `), delayMs: 100 };
@@ -22,7 +31,7 @@ before(async () => {
 		script: () => LONG_RUN,
 	});
 	copy = mkdtempSync(join(tmpdir(), "sitegeist-e2e-ext-"));
-	cpSync(join(repoRoot, "dist-chrome"), copy, { recursive: true });
+	cpSync(EXTENSION_DIR, copy, { recursive: true });
 	const manifestPath = join(copy, "manifest.json");
 	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 	manifest.permissions.push("notifications");

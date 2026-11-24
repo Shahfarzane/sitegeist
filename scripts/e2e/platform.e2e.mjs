@@ -7,7 +7,7 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, EXTENSION_ID, Harness, repoRoot, startFakeServer } from "./lib.mjs";
+import { Browser, bridgeReady, EXTENSION_DIR, EXTENSION_ID, Harness, startFakeServer } from "./lib.mjs";
 
 let browser;
 let worker;
@@ -36,7 +36,7 @@ before(async () => {
 	});
 	// The REPL's userScripts permission is optional; this copy asks for it up front.
 	copy = mkdtempSync(join(tmpdir(), "sitegeist-e2e-ext-"));
-	cpSync(process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, "dist-chrome"), copy, { recursive: true });
+	cpSync(EXTENSION_DIR, copy, { recursive: true });
 	const manifestPath = join(copy, "manifest.json");
 	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 	manifest.permissions.push("userScripts");
