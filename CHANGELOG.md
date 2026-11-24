@@ -105,6 +105,7 @@
 - A connector that asks for input in the middle of a call (2026-07-28 `input_required`) fails that call with an error saying so; the side panel does not answer such questions.
 - Dependencies at their latest releases, among them Biome 2.6.8, minimatch 11, pdfjs-dist 6.5.438, three 0.187, Tailwind 4.3.5 and Vite 8.3.8 (site). `@modelcontextprotocol/sdk` is replaced by `@modelcontextprotocol/client` (extension) and `@modelcontextprotocol/server` (CLI).
 - Only the dev channel carries the reload script (`src/utils/live-reload.ts`, which connects to `ws://localhost:8765`, the `npm run dev` server, and reloads the extension on every rebuild). The production build, and so the store upload, leaves it out, so it opens no localhost socket and a dev rebuild never reloads the store copy.
+- Each build carries only its own channel's entry of `src/channels.json` (`onlyThisChannel`): the production extension and CLI bundles hold no dev id, key, host name or group prefix, and the dev bundles none of production's.
 
 ### Fixed
 

@@ -72,3 +72,21 @@ export function devVersion(sourceVersion, git) {
 	const where = [git.branch, git.sha].filter(Boolean).join(" ");
 	return { version, versionName: `${version} dev (${where}${git.modified ? ", modified" : ""})` };
 }
+
+/**
+ * esbuild plugin: src/channels.json, as a bundle sees it, holds only the channel being built and
+ * none of its manifest fields. A production bundle so carries no dev id, key, host name or group
+ * prefix, and a dev bundle none of production's.
+ */
+export function onlyThisChannel(name, channel) {
+	const { manifest: _manifest, ...runtime } = channel;
+	return {
+		name: "only-this-channel",
+		setup(build) {
+			build.onLoad({ filter: /[\\/]src[\\/]channels\.json$/ }, () => ({
+				contents: JSON.stringify({ [name]: runtime }),
+				loader: "json",
+			}));
+		},
+	};
+}

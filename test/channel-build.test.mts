@@ -10,9 +10,11 @@ import {
 	channelManifest,
 	devVersion,
 	extensionIdForKey,
+	onlyThisChannel,
 	readChannel,
 } from "../scripts/channel-build.mjs";
 import { decodePng, markIcon } from "../scripts/mark-icon.mjs";
+import { build } from "esbuild";
 
 const root = join(import.meta.dirname, "..");
 const { channels } = readChannel(root, "production");
@@ -95,5 +97,27 @@ test("the dev icons carry a green dot in the corner and keep the rest", () => {
 		assert.ok(corner[1] > 150 && corner[0] < 100 && corner[3] === 255, `size ${size}: corner ${corner}`);
 		assert.deepEqual(at(after, 1, 1), at(before, 1, 1));
 		assert.deepEqual(at(after, size >> 2, size >> 2), at(before, size >> 2, size >> 2));
+	}
+});
+
+test("a bundle carries only the channel it is built for", async () => {
+	for (const [name, own, other] of [
+		["production", production, dev],
+		["dev", dev, production],
+	] as const) {
+		const result = await build({
+			entryPoints: [join(root, "src/channel.ts")],
+			bundle: true,
+			write: false,
+			format: "esm",
+			define: { "process.env.SITEGEIST_CHANNEL": JSON.stringify(name) },
+			plugins: [onlyThisChannel(name, own)],
+		});
+		const text = result.outputFiles[0].text;
+		assert.ok(text.includes(own.extensionId), `${name}: its own id`);
+		assert.ok(text.includes(`"${own.nativeHost}"`), `${name}: its own host`);
+		assert.ok(!text.includes(other.extensionId), `${name}: the other channel's id`);
+		assert.ok(!text.includes(`"${other.nativeHost}"`), `${name}: the other channel's host`);
+		assert.ok(!text.includes(dev.manifest.key), `${name}: the dev key`);
 	}
 });

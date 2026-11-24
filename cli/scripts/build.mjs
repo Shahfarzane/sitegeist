@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { readChannel } from "../../scripts/channel-build.mjs";
+import { onlyThisChannel, readChannel } from "../../scripts/channel-build.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // SITEGEIST_CHANNEL=dev builds the dev copy's CLI into dist-dev/: its own native host, launcher
@@ -28,5 +28,6 @@ await build({
 	logLevel: "info",
 	// src/channel.ts: the CLI knows its channel and never reads it from the environment.
 	define: { "process.env.SITEGEIST_CHANNEL": JSON.stringify(channelName) },
+	plugins: [onlyThisChannel(channelName, channel)],
 });
 chmodSync(join(outDir, "index.js"), 0o755);

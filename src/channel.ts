@@ -4,8 +4,9 @@
  * id, native host, CLI build and socket folder, so agents on one never see the other.
  *
  * scripts/build.mjs and cli/scripts/build.mjs replace process.env.SITEGEIST_CHANNEL with the
- * channel they build, so a built extension or CLI never takes it from the environment. Unbundled
- * tests set the variable before they import this.
+ * channel they build, so a built extension or CLI never takes it from the environment, and their
+ * builds give it a channels.json with that channel alone (onlyThisChannel). Unbundled tests set the
+ * variable before they import this.
  */
 
 import channels from "./channels.json" with { type: "json" };

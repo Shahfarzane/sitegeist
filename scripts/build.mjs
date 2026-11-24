@@ -3,7 +3,14 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync,
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, context } from "esbuild";
-import { channelCorsRules, channelManifest, devVersion, extensionIdForKey, readChannel } from "./channel-build.mjs";
+import {
+	channelCorsRules,
+	channelManifest,
+	devVersion,
+	extensionIdForKey,
+	onlyThisChannel,
+	readChannel,
+} from "./channel-build.mjs";
 import { markIcon } from "./mark-icon.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,7 +77,7 @@ const buildOptions = {
 		global: "globalThis",
 	},
 	inject: [join(packageRoot, "scripts/process-shim.js")],
-	plugins: [liveReloadOnlyInDev],
+	plugins: [liveReloadOnlyInDev, onlyThisChannel(channelName, channel)],
 	// Let bare imports inside the bundled pi-mono source resolve against pi-mono's
 	// installed dependencies (openai, @anthropic-ai/sdk, typebox, ...).
 	nodePaths: [join(packageRoot, "../pi-mono/node_modules")],
