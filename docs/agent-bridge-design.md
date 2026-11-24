@@ -255,9 +255,15 @@ over:
 
 Permissions: reuse the sidepanel's domain permission store. When a bridge session
 navigates to a domain without a grant, the extension emits a `permission_request`
-event; the MCP server turns it into an MCP elicitation where the client supports it,
-otherwise returns an error telling the user to approve in the sidepanel, where the
-pending request is shown with allow-once / allow-domain / deny. The same `follow a
+event naming the waiting request (`callId`). The MCP server returns the question as
+that tool call's own result (`input_required`, MCP 2026-07-28) where the client can show
+a form; the client's retry carries the answer, which the server sends on with
+`permission.respond` before the call finishes. On 2025-era connections the SDK's legacy
+shim sends the same question as an elicitation. Clients that cannot show it get an
+error telling the user to approve in the sidepanel, where the pending request is shown
+with allow-once / allow-domain / deny. Between the two rounds the bridge request stays
+open in the extension: an answer after the 90 s handler timeout still takes effect
+(`allow_host` is saved), and the retry reports the timed-out navigation. The same `follow a
 plan` shortcut Claude has (pre-approve a domain list) can come later.
 
 Visibility for the user: the sidepanel session list shows bridge sessions ("omp",
@@ -323,7 +329,8 @@ Data path, all JSON:
    and copies frames; it never inspects them.
 4. Extension: `clientId` -> `BrowserSession` -> primitive on that session's tab.
 
-Reverse direction: `permission_request` (new domain) becomes an MCP elicitation;
+Reverse direction: `permission_request` (new domain) becomes the tool call's
+`input_required` question (an elicitation for 2025-era clients);
 progress and "tab closed by user" arrive as events. The 1 MiB host->extension cap
 only affects uploads into the browser.
 
@@ -422,7 +429,8 @@ Chrome docs consulted: native messaging (framing, 1 MiB / 64 MiB limits, `allowe
   browser cannot wedge a client's queue. Under heavy machine load (15-minute load average
   above 150 during testing) individual Chrome API calls took seconds to tens of seconds;
   with the machine idle the same calls take 1 to 3 ms (`sitegeist debug` shows both).
-- Headless MCP clients without elicitation (`claude -p`) get an immediate denial with
+- Headless MCP clients get an immediate denial, whether they declare no form elicitation or
+  cancel the question (`claude -p` 2.1.331 declares it and cancels at once), with
   instructions instead of a 120 s stall; `sitegeist allow <host>` and
   `SITEGEIST_AUTO_ALLOW=1` cover unattended runs.
 - `sitegeist reload` makes iteration possible without the extensions page.

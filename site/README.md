@@ -58,18 +58,21 @@ Starts backend API (`:3000`) and Vite dev server (`:8080`) with hot reload.
 Builds, syncs to `slayer.marioslab.io:/home/badlogic/sitegeist.ai`, restarts services via Docker, and streams logs.
 
 Additional commands:
+
 - `./run.sh sync` - Sync files without restart
 - `./run.sh logs-remote` - Stream remote logs
 
 ## API Pattern
 
 Uses type-safe API pattern with auto-generated client/server code:
+
 - **`src/shared/api.ts`** - API interface and route definitions (single source of truth)
 - **`src/frontend/api-client.ts`** - Auto-generated client (creates typed fetch calls)
 - **`src/backend/api-server.ts`** - Auto-generated Express routes
 - **`src/backend/handlers.ts`** - Business logic implementing the API interface
 
 Adding a new endpoint only requires:
+
 1. Add method to `Api` interface in `api.ts`
 2. Add route definition to `apiRoutes` map
 3. Implement handler in `handlers.ts`

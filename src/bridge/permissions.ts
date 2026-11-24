@@ -3,7 +3,8 @@
  *
  * Mode "allow_all" (default): a harness may open any site. Mode "ask": a harness
  * may only navigate to hosts the user allowed; unknown hosts raise a permission
- * request that the harness shows (MCP elicitation) or that the user answers in
+ * request that the harness shows (`sitegeist mcp` returns it as the tool call's
+ * question, an elicitation on 2025-era MCP clients) or that the user answers in
  * Settings > Bridge.
  */
 

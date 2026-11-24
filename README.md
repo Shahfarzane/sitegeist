@@ -15,6 +15,7 @@ OpenAI/ChatGPT, GitHub Copilot, Google Gemini). Your data stays on your machine.
 is collected or tracked.
 
 This fork (0xSero/sitegeist) adds three things to upstream (badlogic/sitegeist):
+
 1. **Background operation.** Every chat owns its own tab group. Tabs open inactive, the
    agent acts on its own current tab, and it never sees or touches your other tabs.
 2. **Per-tab panels for parallel tasks.** The panel is bound to a tab, not a window (the
@@ -50,6 +51,7 @@ This fork ships as a self-signed `.crx` (extension id
 `lnncppjiohlpejgcbdgoihplimdckddn`). The signing key is "sitegeist CRX signing key" in
 1Password DEV; `static/manifest.chrome.json` carries its public half, so unpacked builds
 and signed releases install under the same id.
+
 1. Prepare the sibling repos once per machine: `scripts/setup-siblings.sh`.
 2. Build, sign and publish: `scripts/release-crx.sh` (append ssh hosts, e.g. `m3`, to
    publish there too). It writes the `.crx` and `updates.xml` to
@@ -141,8 +143,9 @@ only tool that changes what you see.
 
 Site access: by default agents may open any site. To be asked first, switch Settings >
 Bridge to "Ask before opening a new site" or run `sitegeist ask` (`sitegeist yolo` switches
-back). In that mode Claude Code and Codex show the prompt inline (MCP elicitation);
-otherwise answer it in the side panel under Settings > Bridge or run `sitegeist allow <host>`.
+back). In that mode Claude Code and Codex show the prompt inline (the tool call asks for
+input on MCP 2026-07-28, an elicitation on earlier revisions); otherwise answer it in the side
+panel under Settings > Bridge or run `sitegeist allow <host>`.
 
 Provider logins: when Claude Code or Codex is logged in on this computer, the Anthropic and
 ChatGPT providers use that login, so they need no setup. The native host reads Claude Code's
@@ -178,6 +181,7 @@ CLI commands: `mcp`, `install`, `status`, `browsers`, `connectors`, `allow <host
 ## What changed in this fork
 
 Extension:
+
 - `src/browser/` is new and is the only code that touches tabs: `session.ts` (tab group
   per session, current tab, persistence in `chrome.storage.session`), `cdp.ts`
   (`chrome.debugger` screenshots, real input events, focus emulation so hidden tabs keep

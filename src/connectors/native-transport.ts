@@ -4,15 +4,23 @@
  * page or a model says can make the host run a program.
  */
 
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { JSONRPCMessage, Transport } from "@modelcontextprotocol/client";
 import { hostCapabilities } from "../bridge/host-capabilities.js";
 import { CAPABILITY_CONNECTORS, type HostConnectorMessage, NATIVE_HOST_NAME } from "../bridge/protocol.js";
 
 export class NativeConnectorTransport implements Transport {
 	onclose?: () => void;
 	onerror?: (error: Error) => void;
-	onmessage?: <T extends JSONRPCMessage>(message: T) => void;
+	onmessage?: (message: JSONRPCMessage) => void;
+
+	/**
+	 * The SDK's version probe looks for these two to tell a stdio channel from HTTP: on stdio a
+	 * server that ignores server/discover is one from before 2026 and gets initialize, where over
+	 * HTTP the silence would fail the connect. The process runs in the native host, so neither
+	 * is known here.
+	 */
+	readonly stderr = null;
+	readonly pid = null;
 
 	private port?: chrome.runtime.Port;
 	/** Messages over the 1 MiB native limit arrive in parts. */

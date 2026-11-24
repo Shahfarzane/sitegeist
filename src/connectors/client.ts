@@ -4,18 +4,24 @@
  * page needs on top.
  */
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-	OAuthClientInformationMixed,
-	OAuthClientMetadata,
-	OAuthTokens,
-} from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { jsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/types.js";
+import {
+	Client,
+	type ClientOptions,
+	IssuerMismatchError,
+	type OAuthClientMetadata,
+	type OAuthClientProvider,
+	type OAuthDiscoveryState,
+	ProtocolError,
+	ProtocolErrorCode,
+	SdkError,
+	SdkErrorCode,
+	SSEClientTransport,
+	type StoredOAuthClientInformation,
+	type StoredOAuthTokens,
+	StreamableHTTPClientTransport,
+	type Transport,
+	UnauthorizedError,
+} from "@modelcontextprotocol/client";
 import { waitForOAuthRedirect } from "../oauth/browser-oauth.js";
 import type { Connector, ConnectorAuth } from "../storage/stores/connectors-store.js";
 import { NativeConnectorTransport } from "./native-transport.js";
@@ -24,10 +30,22 @@ import { NativeConnectorTransport } from "./native-transport.js";
 const REDIRECT_HOST = "127.0.0.1:53917";
 const REDIRECT_URL = `http://${REDIRECT_HOST}/sitegeist/oauth`;
 
-/** The SDK's default validator compiles schemas with `new Function`, which extension CSP forbids. */
-const noOutputValidation: jsonSchemaValidator = {
-	getValidator: () => (input) => ({ valid: true, data: input as never, errorMessage: undefined }),
-};
+/**
+ * A 2026 server answers server/discover at once. A local server that stays silent this long is
+ * taken as one from before 2026 and gets initialize instead; the manager allows 8 s in all.
+ */
+const LOCAL_PROBE_TIMEOUT_MS = 3000;
+
+/** The RFC 6749 codes an authorization server may put in a failed redirect; anything else is not shown. */
+const OAUTH_ERROR_CODES = new Set([
+	"access_denied",
+	"invalid_request",
+	"invalid_scope",
+	"server_error",
+	"temporarily_unavailable",
+	"unauthorized_client",
+	"unsupported_response_type",
+]);
 
 export class LoginRequiredError extends Error {
 	constructor(name: string) {
@@ -72,20 +90,31 @@ class StoredAuth implements OAuthClientProvider {
 		};
 	}
 
-	clientInformation(): OAuthClientInformationMixed | undefined {
-		return this.auth.clientInformation as OAuthClientInformationMixed | undefined;
+	// Stored and returned as the SDK hands them over: it stamps the issuer on them and treats a
+	// value bound to another authorization server as absent.
+	clientInformation(): StoredOAuthClientInformation | undefined {
+		return this.auth.clientInformation;
 	}
 
-	saveClientInformation(info: OAuthClientInformationMixed): Promise<void> {
-		return this.update({ clientInformation: info as unknown as Record<string, unknown> });
+	saveClientInformation(clientInformation: StoredOAuthClientInformation): Promise<void> {
+		return this.update({ clientInformation });
 	}
 
-	tokens(): OAuthTokens | undefined {
-		return this.auth.tokens as OAuthTokens | undefined;
+	tokens(): StoredOAuthTokens | undefined {
+		return this.auth.tokens;
 	}
 
-	saveTokens(tokens: OAuthTokens): Promise<void> {
-		return this.update({ tokens: tokens as unknown as Record<string, unknown> });
+	saveTokens(tokens: StoredOAuthTokens): Promise<void> {
+		return this.update({ tokens });
+	}
+
+	/** Which authorization server the redirect went to, so the code is exchanged at the same one. */
+	discoveryState(): OAuthDiscoveryState | undefined {
+		return this.auth.discoveryState;
+	}
+
+	saveDiscoveryState(discoveryState: OAuthDiscoveryState): Promise<void> {
+		return this.update({ discoveryState });
 	}
 
 	redirectToAuthorization(url: URL): void {
@@ -104,11 +133,16 @@ class StoredAuth implements OAuthClientProvider {
 
 	invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier" | "discovery"): Promise<void> {
 		if (scope === "all")
-			return this.update({ clientInformation: undefined, tokens: undefined, codeVerifier: undefined });
+			return this.update({
+				clientInformation: undefined,
+				tokens: undefined,
+				codeVerifier: undefined,
+				discoveryState: undefined,
+			});
 		if (scope === "client") return this.update({ clientInformation: undefined });
 		if (scope === "tokens") return this.update({ tokens: undefined });
 		if (scope === "verifier") return this.update({ codeVerifier: undefined });
-		return Promise.resolve();
+		return this.update({ discoveryState: undefined });
 	}
 }
 
@@ -127,6 +161,13 @@ export interface ToolContent {
 	resource?: unknown;
 }
 
+/** A connector asked the user something mid-call: the 2026 input_required result, which the panel cannot show. */
+function isInputRequest(err: unknown): boolean {
+	if (err instanceof SdkError && err.code === SdkErrorCode.UnsupportedResultType) return true;
+	// A server that checks capabilities first refuses instead: this client declares none.
+	return err instanceof ProtocolError && err.code === ProtocolErrorCode.MissingRequiredClientCapability;
+}
+
 export class ConnectorClient {
 	private client?: Client;
 	/** Kept apart from the client: a connect that times out has a transport but no client yet. */
@@ -139,18 +180,29 @@ export class ConnectorClient {
 		private readonly persistAuth: (auth: ConnectorAuth) => Promise<void>,
 	) {}
 
-	private makeClient(): Client {
+	private makeClient(versionNegotiation: ClientOptions["versionNegotiation"]): Client {
 		return new Client(
 			{ name: "sitegeist", version: chrome.runtime.getManifest().version },
-			{ jsonSchemaValidator: noOutputValidation },
+			{
+				versionNegotiation,
+				// No capabilities and no auto-fulfilment: a question a connector asks mid-call
+				// fails that call with a clear error instead of waiting on a handler.
+				inputRequired: { autoFulfill: false },
+			},
 		);
 	}
 
-	private async attach(transport: Transport): Promise<void> {
+	/**
+	 * `legacy` connects with initialize and no server/discover probe: SSE servers, and local ones
+	 * known to predate 2026.
+	 */
+	private async attach(transport: Transport, legacy = false, probeTimeoutMs?: number): Promise<void> {
 		if (this.closed) throw new Error(`${this.connector.name} was closed`);
 		this.transport = transport;
-		const client = this.makeClient();
-		await client.connect(transport);
+		const client = this.makeClient(
+			legacy ? undefined : { mode: "auto", ...(probeTimeoutMs ? { probe: { timeoutMs: probeTimeoutMs } } : {}) },
+		);
+		await client.connect(transport, legacy ? { prior: { kind: "legacy" } } : undefined);
 		if (this.closed) {
 			await client.close().catch(() => undefined);
 			throw new Error(`${this.connector.name} was closed`);
@@ -163,11 +215,23 @@ export class ConnectorClient {
 		return { authProvider: provider, ...(headers ? { requestInit: { headers } } : {}) };
 	}
 
+	private async connectLocal(name: string): Promise<void> {
+		try {
+			await this.attach(new NativeConnectorTransport(name), false, LOCAL_PROBE_TIMEOUT_MS);
+		} catch (err) {
+			// Some servers from before 2026 exit on any request ahead of initialize: start it again
+			// and skip the probe.
+			if (this.closed || !(err instanceof SdkError) || err.code !== SdkErrorCode.EraNegotiationFailed) throw err;
+			await this.transport?.close().catch(() => undefined);
+			await this.attach(new NativeConnectorTransport(name), true);
+		}
+	}
+
 	/** Connect with what is stored. Throws LoginRequiredError when the server wants a login. */
 	async connect(): Promise<void> {
 		const { connector } = this;
 		if (connector.kind === "local") {
-			await this.attach(new NativeConnectorTransport(connector.name));
+			await this.connectLocal(connector.name);
 			return;
 		}
 		if (!connector.url) throw new Error(`${connector.name} has no URL`);
@@ -180,7 +244,7 @@ export class ConnectorClient {
 			if (this.closed) throw err;
 			// Servers from before Streamable HTTP only speak SSE.
 			try {
-				await this.attach(new SSEClientTransport(url, this.remoteOptions(provider)));
+				await this.attach(new SSEClientTransport(url, this.remoteOptions(provider)), true);
 			} catch (fallback) {
 				if (fallback instanceof UnauthorizedError) throw new LoginRequiredError(connector.name);
 				throw err;
@@ -199,7 +263,7 @@ export class ConnectorClient {
 			url,
 			options,
 		);
-		let reconnect = () => new StreamableHTTPClientTransport(url, options) as Transport;
+		let sse = false;
 		try {
 			await this.attach(transport);
 			return;
@@ -207,9 +271,9 @@ export class ConnectorClient {
 			if (!(err instanceof UnauthorizedError)) {
 				// A server from before Streamable HTTP rejects its POSTs: its login runs over SSE.
 				transport = new SSEClientTransport(url, options);
-				reconnect = () => new SSEClientTransport(url, options);
+				sse = true;
 				try {
-					await this.attach(transport);
+					await this.attach(transport, true);
 					return;
 				} catch (fallback) {
 					if (!(fallback instanceof UnauthorizedError)) throw err;
@@ -218,24 +282,37 @@ export class ConnectorClient {
 			if (!provider.authorizationUrl) throw err;
 		}
 		const redirect = await waitForOAuthRedirect(provider.authorizationUrl.toString(), REDIRECT_HOST);
-		if (redirect.searchParams.get("state") !== provider.expectedState)
-			throw new Error("The login redirect did not match");
-		const code = redirect.searchParams.get("code");
-		if (!code) throw new Error(redirect.searchParams.get("error") ?? "The login returned no code");
-		await transport.finishAuth(code);
-		await this.attach(reconnect());
+		const params = redirect.searchParams;
+		// The SDK checks iss but not state.
+		if (params.get("state") !== provider.expectedState) throw new Error("The login redirect did not match");
+		if (!params.get("code")) {
+			const code = params.get("error") ?? "";
+			throw new Error(`The login did not finish${OAUTH_ERROR_CODES.has(code) ? ` (${code})` : ""}`);
+		}
+		try {
+			await transport.finishAuth(params);
+		} catch (err) {
+			// A mix-up attack: the redirect came from another authorization server. Its text is not shown.
+			if (err instanceof IssuerMismatchError)
+				throw new Error("The login came back from a different authorization server and was refused");
+			throw err;
+		}
+		await this.attach(
+			sse ? new SSEClientTransport(url, options) : new StreamableHTTPClientTransport(url, options),
+			sse,
+		);
 	}
 
 	async tools(): Promise<ConnectorTool[]> {
 		if (!this.client) throw new Error("Not connected");
-		const tools: ConnectorTool[] = [];
-		let cursor: string | undefined;
-		do {
-			const page = await this.client.listTools(cursor ? { cursor } : undefined);
-			tools.push(...(page.tools as ConnectorTool[]));
-			cursor = page.nextCursor;
-		} while (cursor);
-		return tools;
+		// Without a cursor the SDK walks every page (up to 64).
+		const { tools } = await this.client.listTools();
+		return tools.map((tool) => ({
+			name: tool.name,
+			title: tool.title,
+			description: tool.description,
+			inputSchema: tool.inputSchema,
+		}));
 	}
 
 	async call(
@@ -244,16 +321,27 @@ export class ConnectorClient {
 		signal?: AbortSignal,
 	): Promise<{ content: ToolContent[]; isError: boolean; structured?: unknown }> {
 		if (!this.client) throw new Error("Not connected");
-		const result = await this.client.callTool({ name, arguments: args }, undefined, {
-			signal,
-			timeout: 120000,
-			resetTimeoutOnProgress: true,
-		});
-		return {
-			content: (result.content as ToolContent[]) ?? [],
-			isError: result.isError === true,
-			structured: result.structuredContent,
-		};
+		try {
+			const result = await this.client.callTool(
+				{ name, arguments: args },
+				{
+					signal,
+					timeout: 120000,
+					resetTimeoutOnProgress: true,
+				},
+			);
+			return {
+				content: result.content as ToolContent[],
+				isError: result.isError === true,
+				structured: result.structuredContent,
+			};
+		} catch (err) {
+			if (isInputRequest(err))
+				throw new Error(
+					`${this.connector.name} asked for input during ${name}, and the side panel cannot answer that. Use another tool or ask the user to run it elsewhere.`,
+				);
+			throw err;
+		}
 	}
 
 	async close(): Promise<void> {

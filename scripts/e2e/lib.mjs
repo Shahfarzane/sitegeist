@@ -19,6 +19,8 @@ import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Client } from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = join(here, "../..");
@@ -481,14 +483,17 @@ export function assistantText(text) {
 
 export const pageText = (page) => page.evaluate(`document.body.innerText`);
 
-/** A harness on the real path: MCP client -> `sitegeist mcp` -> socket -> native host -> extension. */
+/**
+ * A harness on the real path: MCP client -> `sitegeist mcp` -> socket -> native host -> extension.
+ * `era: "2026"` pins the client to the 2026-07-28 revision (default: SITEGEIST_E2E_ERA, else the
+ * 2025 initialize handshake). `elicit(params)` answers permission prompts; without it the client
+ * declares no elicitation, like a headless run.
+ */
 export class Harness {
-	static async connect(browser, { name = "e2e", session = "e2e-session", env } = {}) {
-		const sdk = join(repoRoot, "cli/node_modules/@modelcontextprotocol/sdk/dist/esm/client");
-		const [{ Client }, { StdioClientTransport }] = await Promise.all([
-			import(`${sdk}/index.js`),
-			import(`${sdk}/stdio.js`),
-		]);
+	static async connect(
+		browser,
+		{ name = "e2e", session = "e2e-session", env, era = process.env.SITEGEIST_E2E_ERA, elicit } = {},
+	) {
 		const home = mkdtempSync(join(tmpdir(), "sitegeist-e2e-home-"));
 		const transport = new StdioClientTransport({
 			command: process.execPath,
@@ -503,7 +508,14 @@ export class Harness {
 			},
 			stderr: "ignore",
 		});
-		const client = new Client({ name: "e2e", version: "1.0.0" });
+		const client = new Client(
+			{ name: "e2e", version: "1.0.0" },
+			{
+				...(era === "2026" ? { versionNegotiation: { mode: { pin: "2026-07-28" } } } : {}),
+				...(elicit ? { capabilities: { elicitation: { form: {} } } } : {}),
+			},
+		);
+		if (elicit) client.setRequestHandler("elicitation/create", async (request) => elicit(request.params));
 		await client.connect(transport);
 		const harness = new Harness();
 		harness.client = client;
@@ -512,7 +524,7 @@ export class Harness {
 	}
 
 	async call(name, args = {}) {
-		const result = await this.client.callTool({ name, arguments: args }, undefined, { timeout: 120000 });
+		const result = await this.client.callTool({ name, arguments: args }, { timeout: 120000 });
 		if (result.isError) throw new Error(`${name}: ${result.content.map((c) => c.text).join(" ")}`);
 		return result;
 	}
