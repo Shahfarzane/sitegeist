@@ -236,6 +236,8 @@ export interface Snapshot {
 	nodes: SnapshotNode[];
 	/** Readable text of the page (truncated). */
 	text: string;
+	/** Length of the whole text, so a reader can tell that `text` was cut. */
+	textLength: number;
 }
 
 /**
@@ -342,7 +344,8 @@ function pageSnapshot(maxNodes: number, maxTextChars: number, filter: string): u
 	}
 	w.__sitegeistRefSeq = seq;
 	// biome-ignore lint/performance/useDomNodeTextContent: Snapshots need rendered text, excluding CSS-hidden content.
-	const text = (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n").slice(0, maxTextChars);
+	const fullText = (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n");
+	const text = fullText.slice(0, maxTextChars);
 	return {
 		url: location.href,
 		title: document.title,
@@ -355,6 +358,7 @@ function pageSnapshot(maxNodes: number, maxTextChars: number, filter: string): u
 		},
 		nodes,
 		text,
+		textLength: fullText.length,
 	};
 }
 
@@ -620,6 +624,42 @@ export async function scrollPage(
 		return { scrollX: Math.round(window.scrollX), scrollY: Math.round(window.scrollY), pageHeight: document.documentElement.scrollHeight };
 	})()`;
 	return runInPage(tabId, code);
+}
+
+const SETTLE_POLL_MS = 150;
+/** Polls in a row that must agree once the page has loaded: about 300 ms of holding still. */
+const SETTLE_LOADED_POLLS = 3;
+/** While resources are still coming in the content may be one of them: about 1 s of holding still. */
+const SETTLE_LOADING_POLLS = 8;
+
+/**
+ * Wait until the page stops changing, for a read that follows a navigation or a click in the
+ * same call. DOMContentLoaded comes before a client-rendered page has any content, and a
+ * read taken then is an empty shell that costs the caller a wait and a second read.
+ *
+ * Polled from the worker: timers inside a hidden tab fire once a second at best. A page
+ * that never holds still (a ticker, a feed) is read as it is when `maxMs` runs out.
+ */
+export async function settle(tabId: number, maxMs = 2500): Promise<void> {
+	const deadline = Date.now() + maxMs;
+	let last = "";
+	let stable = 0;
+	while (Date.now() < deadline) {
+		let now = "";
+		try {
+			now = await runInPage<string>(
+				tabId,
+				`document.readyState + ":" + document.getElementsByTagName("*").length + ":" + (document.body ? document.body.innerText.length : 0)`,
+			);
+		} catch {
+			/* the page is navigating: not settled */
+		}
+		stable = now !== "" && now === last ? stable + 1 : 1;
+		last = now;
+		const needed = now.startsWith("complete") ? SETTLE_LOADED_POLLS : SETTLE_LOADING_POLLS;
+		if (now !== "" && !now.startsWith("loading") && stable >= needed) return;
+		await new Promise((r) => setTimeout(r, SETTLE_POLL_MS));
+	}
 }
 
 /** Wait until a selector appears, text is present, or the URL matches. */

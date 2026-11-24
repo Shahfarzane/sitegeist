@@ -44,6 +44,7 @@ import {
 	runInPage,
 	type Snapshot,
 	scrollPage,
+	settle,
 	snapshot,
 	waitFor,
 	waitForLoad,
@@ -171,9 +172,13 @@ function hasTarget(t: ElementTarget): boolean {
 	return !!(t.ref || t.selector || t.text);
 }
 
-/** The page after a step, for callers that asked for it instead of a separate read_page. */
-function readPage(tabId: number, read: unknown): Promise<Snapshot> {
+/**
+ * The page after a step, for callers that asked for it instead of a separate read_page.
+ * No model turn sits between the step and this read, so it waits for the page to settle.
+ */
+async function readPage(tabId: number, read: unknown): Promise<Snapshot> {
 	const interactive = read === "interactive";
+	await settle(tabId);
 	return snapshot(tabId, { filter: interactive ? "interactive" : "all", maxTextChars: interactive ? 0 : 3000 });
 }
 
