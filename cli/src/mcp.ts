@@ -456,8 +456,11 @@ export async function runMcpServer(): Promise<void> {
 				if (!read) return call(bridge, "click", args);
 				try {
 					// One step of actions: its read waits for the page to settle after the click.
-					const done = (await bridge("actions", { steps: [{ click: args }], read, tabId: args.tabId })) as { page: PageSnapshot };
-					return { content: text(`Clicked.\n${formatSnapshot(done.page)}`) };
+					const done = (await bridge("actions", { steps: [{ click: args }], read, tabId: args.tabId })) as {
+						page: PageSnapshot;
+						dialogs?: unknown[];
+					};
+					return { content: text(`Clicked.${dialogNote(done)}\n${formatSnapshot(done.page)}`) };
 				} catch (err) {
 					return errorResult(err);
 				}

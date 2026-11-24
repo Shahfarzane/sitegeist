@@ -130,11 +130,17 @@ test("a page text that was cut says how much there is", async () => {
 	assert.ok(!(await harness.callText("navigate", { url: `${server.origin}/form` })).includes("characters;"));
 });
 
-test("dialogs answered during actions are reported", async () => {
+test("results that are text report the dialogs answered during the call", async () => {
 	await harness.callText("navigate", { url: `${server.origin}/confirm`, read: false });
-	const result = await harness.callText("actions", { steps: [{ click: { text: "Ask" } }], read: true });
-	assert.match(result, /Dialogs answered: .*Sure\?/);
-	assert.ok(result.includes("Page: yes"), result);
+	const calls = {
+		actions: () => harness.callText("actions", { steps: [{ click: { text: "Ask" } }], read: true }),
+		"click with read": () => harness.callText("click", { text: "Ask", read: true }),
+	};
+	for (const [name, run] of Object.entries(calls)) {
+		const result = await run();
+		assert.match(result, /Dialogs answered: .*Sure\?/, name);
+		assert.ok(result.includes("Page: yes"), `${name}: ${result}`);
+	}
 });
 
 test("run_js on statements says it takes an expression", async () => {
