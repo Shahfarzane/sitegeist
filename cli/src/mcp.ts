@@ -194,14 +194,14 @@ export async function runMcpServer(): Promise<void> {
 	const instructions = [
 		"sitegeist drives the user's real Chromium browser in the background: your own tab group, never in focus, no view of the user's other tabs.",
 		"Every tool call is a full model turn, so make each one do as much as it can.",
-		"navigate and tabs_create return the page once it holds still (elements with refs, and its text): do not wait or read_page after them.",
+		"navigate and tabs_create return the page once it holds still (elements with refs, and its text): no wait or read_page after them, unless it still shows a placeholder; then wait for the text you expect.",
 		"click with read:true returns the page after the click.",
 		"Steps you already know (a form, a canvas gesture) are one actions call ending in read or screenshot, not one call per field, key or drag; when the result comes from a request, end with a wait for its text.",
 		"Name fields and buttons by what a person reads (text); refs come from the latest read and expire when the page changes.",
 		"wait is for a condition (a text, a selector, a URL), not a fixed sleep.",
 		"Read with the page you already have, get_page_text or run_js; screenshots are for layout and canvas apps.",
-		"In canvas editors (Excalidraw, tldraw, Figma-like) use the app's shortcuts and mouse drags and check the screenshot; do not reverse-engineer its internals with run_js.",
-		"Reuse your tab: tabs_create only when two pages must stay open, tabs_close for the ones you are done with.",
+		"In canvas editors (Excalidraw, tldraw) use the app's shortcuts and drags and check the screenshot, not its internals through run_js.",
+		"Reuse your tab: tabs_create only when two pages must stay open, tabs_close when done.",
 	].join(" ");
 
 	/** One instance per connection: serveStdio builds it once the client's opening picks the era. */
@@ -334,7 +334,7 @@ export async function runMcpServer(): Promise<void> {
 			"navigate",
 			{
 				description:
-					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. No wait or read_page is needed after it.",
+					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. A wait or read_page after it is needed only when the page still shows a placeholder.",
 				inputSchema: {
 					url: z.string(),
 					tabId,
