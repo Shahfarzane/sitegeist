@@ -12,6 +12,7 @@ import { z } from "zod";
 import { BridgeClient, BridgeRpcError, listBrowsers } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
 import { PermissionPrompts, type Track } from "./permission-prompts.ts";
+import { toolInput } from "./tool-schema.ts";
 import { VERSION } from "./version.ts";
 
 type Content = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -77,14 +78,19 @@ function formatNodes(nodes: SnapNode[], pageUrl: string): string {
 		.join("\n");
 }
 
-/** read_page as compact text: a fraction of the tokens of pretty JSON, same information. */
-function formatSnapshot(snap: {
+interface PageSnapshot {
 	url: string;
 	title: string;
 	viewport: { width: number; height: number; scrollY: number; pageHeight: number };
 	nodes: SnapNode[];
 	text: string;
-}): string {
+	/** Length of the whole page text; absent from extensions that do not report it. */
+	textLength?: number;
+	dialogs?: unknown[];
+}
+
+/** read_page as compact text: a fraction of the tokens of pretty JSON, same information. */
+function formatSnapshot(snap: PageSnapshot): string {
 	const v = snap.viewport;
 	const parts = [
 		`Page: ${snap.title} | ${snap.url}`,
@@ -92,9 +98,22 @@ function formatSnapshot(snap: {
 		`Elements (${snap.nodes.length}; use the ref with click/type/fill/scroll):`,
 		formatNodes(snap.nodes, snap.url),
 	];
-	if (snap.text) parts.push("", "Text:", snap.text);
-	return parts.join("\n");
+	if (snap.text) {
+		const cut = (snap.textLength ?? 0) > snap.text.length;
+		// Without the note a cut text reads as the whole page, and the model answers from a part of it.
+		parts.push("", cut ? `Text (first ${snap.text.length} of ${snap.textLength} characters; get_page_text has the rest):` : "Text:", snap.text);
+	}
+	return parts.join("\n") + dialogNote(snap);
 }
+
+/** Dialogs the page opened during a call, for results that are text instead of JSON. */
+function dialogNote(result: { dialogs?: unknown[] }): string {
+	return result.dialogs?.length ? `\nDialogs answered: ${JSON.stringify(result.dialogs)}` : "";
+}
+
+/** run_js takes one expression; statements fail to parse, and the raw error does not say why. */
+const STATEMENT_ERROR = /SyntaxError: (?:Unexpected (?:token|identifier)(?!.*JSON)|Illegal return statement|Identifier '.*' has already been declared)/;
+const STATEMENT_HINT = "run_js takes one expression. Wrap statements in an IIFE: (() => { const a = 1; return a; })()";
 
 function harnessName(): string {
 	const explicit = process.env.SITEGEIST_CLIENT_NAME;
@@ -173,16 +192,16 @@ export async function runMcpServer(): Promise<void> {
 	}
 
 	const instructions = [
-		"sitegeist drives the user's real Chromium browser in the background.",
-		"You get your own tab group; your tabs never take focus and you cannot see the user's other tabs.",
-		"Every tool call is a full model turn, so do as much as you can per call.",
-		"Workflow: navigate with read:true (the page comes back in the same call), then actions for everything you already know: fill fields, click, type, with read:true or screenshot:true to see the result in that same call.",
-		"Fields and buttons can be named by what a person reads (text), so a form you can describe needs no read_page first.",
-		"For canvas apps and multi-step input, batch steps with actions (one call, screenshot at the end) instead of one tool call per key or drag.",
-		"Canvas editors (Excalidraw, tldraw, Figma-like): use the app's keyboard shortcuts and mouse drags, check the result on the screenshot, and do not reverse-engineer the app's internals with run_js.",
-		"Reuse your current tab for step-by-step browsing; tabs_create only when two pages must stay open.",
-		"Close tabs you no longer need with tabs_close. Prefer read_page/get_page_text over screenshots for reading.",
-		"Refs expire when the page changes; take a new read_page after navigation or big updates.",
+		"sitegeist drives the user's real Chromium browser in the background: your own tab group, never in focus, no view of the user's other tabs.",
+		"Every tool call is a full model turn, so make each one do as much as it can.",
+		"navigate and tabs_create return the page once it holds still (elements with refs, and its text): do not wait or read_page after them.",
+		"click with read:true returns the page after the click.",
+		"Steps you already know (a form, a canvas gesture) are one actions call ending in read or screenshot, not one call per field, key or drag; when the result comes from a request, end with a wait for its text.",
+		"Name fields and buttons by what a person reads (text); refs come from the latest read and expire when the page changes.",
+		"wait is for a condition (a text, a selector, a URL), not a fixed sleep.",
+		"Read with the page you already have, get_page_text or run_js; screenshots are for layout and canvas apps.",
+		"In canvas editors (Excalidraw, tldraw, Figma-like) use the app's shortcuts and mouse drags and check the screenshot; do not reverse-engineer its internals with run_js.",
+		"Reuse your tab: tabs_create only when two pages must stay open, tabs_close for the ones you are done with.",
 	].join(" ");
 
 	/** One instance per connection: serveStdio builds it once the client's opening picks the era. */
@@ -197,7 +216,7 @@ export async function runMcpServer(): Promise<void> {
 			config: { description: string; inputSchema: Shape },
 			run: (args: z.infer<z.ZodObject<Shape>>, bridge: Bridge) => Promise<CallToolResult>,
 		): void {
-			server.registerTool(name, { description: config.description, inputSchema: z.object(config.inputSchema) }, (args, ctx) =>
+			server.registerTool(name, { description: config.description, inputSchema: toolInput(config.inputSchema) }, (args, ctx) =>
 				prompts.handle(
 					ctx,
 					// Undefined on 2026 connections, which carry them per request instead.
@@ -207,11 +226,21 @@ export async function runMcpServer(): Promise<void> {
 			);
 		}
 
-		const tabId = z.number().int().optional().describe("Tab to act on; defaults to the session's current tab");
+		/** The tab's summary as JSON, then the page when the extension sent one. */
+		const loaded = ({ page, ...summary }: { page?: PageSnapshot }): Content[] =>
+			text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary);
+
+		// Shared by most tools, so every word here is paid for once per tool.
+		const tabId = z.number().int().optional().describe("Default: your current tab");
 		const readOption = z
 			.union([z.boolean(), z.literal("interactive")])
 			.optional()
-			.describe("Also return the page: true for elements and text, interactive for elements only");
+			.describe("Return the page afterwards: true for elements and text, interactive for elements only");
+		// A call that loads a URL returns the page: one that returned a title alone was followed by a wait and a read.
+		const loadRead = z
+			.union([z.boolean(), z.literal("interactive")])
+			.optional()
+			.describe("Default true. false: tabId, url and title only. interactive: elements without the text");
 
 		tool(
 			"list_connected_browsers",
@@ -263,8 +292,7 @@ export async function runMcpServer(): Promise<void> {
 		tool(
 			"tabs_context",
 			{
-				description:
-					"List the tabs in your session's own tab group (background tabs, separate from the user's). A new session has none: navigate opens the first one.",
+				description: "List your session's tabs. A new session has none: navigate opens the first.",
 				inputSchema: {},
 			},
 			(_args, bridge) => call(bridge, "tabs.context"),
@@ -273,10 +301,16 @@ export async function runMcpServer(): Promise<void> {
 			"tabs_create",
 			{
 				description:
-					"Open a URL in an additional background tab in your group and make it current. Only for keeping a second page open; for normal browsing use navigate.",
-				inputSchema: { url: z.string().url() },
+					"Open a URL in another background tab, make it current and return the page as navigate does. Only to keep a second page open; otherwise navigate.",
+				inputSchema: { url: z.string().url(), read: loadRead },
 			},
-			(args, bridge) => call(bridge, "tabs.create", args),
+			async (args, bridge) => {
+				try {
+					return { content: loaded(await bridge("tabs.create", { ...args, read: args.read ?? true })) };
+				} catch (err) {
+					return errorResult(err);
+				}
+			},
 		);
 		tool(
 			"tabs_close",
@@ -300,18 +334,17 @@ export async function runMcpServer(): Promise<void> {
 			"navigate",
 			{
 				description:
-					"Load a URL in your current tab (the first call opens your tab), or 'back' / 'forward'. Waits for the page; the result has tabId, url, title, and loading:true if it is still loading. read:true also returns the page (elements with refs and text), saving a read_page call.",
+					"Load a URL in your current tab (the first call opens it), or 'back' / 'forward'. Waits until the page holds still and returns it: tabId, url, title (loading:true if it is still loading), elements with refs, and text. No wait or read_page is needed after it.",
 				inputSchema: {
 					url: z.string(),
 					tabId,
 					waitUntil: z.enum(["domcontentloaded", "load"]).optional(),
-					read: readOption,
+					read: loadRead,
 				},
 			},
 			async (args, bridge) => {
 				try {
-					const { page, ...summary } = (await bridge("navigate", args)) as { page?: Parameters<typeof formatSnapshot>[0] };
-					return { content: text(page ? `${JSON.stringify(summary)}\n${formatSnapshot(page)}` : summary) };
+					return { content: loaded(await bridge("navigate", { ...args, read: args.read ?? true })) };
 				} catch (err) {
 					return errorResult(err);
 				}
@@ -321,15 +354,11 @@ export async function runMcpServer(): Promise<void> {
 			"screenshot",
 			{
 				description:
-					"JPEG screenshot of the current tab's viewport (works while it is hidden). For layout and visual checks; read_page / get_page_text are faster and cheaper for reading.",
+					"JPEG of the tab's viewport (works while it is hidden). For layout and visual checks; reading is cheaper with read_page or get_page_text.",
 				inputSchema: {
 					tabId,
 					fullPage: z.boolean().optional(),
-					maxWidth: z
-						.number()
-						.int()
-						.optional()
-						.describe("Image width in pixels. Default: the viewport's CSS width (max 1280), so image x/y can be clicked directly"),
+					maxWidth: z.number().int().optional().describe("Width in pixels. Default: the viewport's CSS width, 1280 at most"),
 				},
 			},
 			async (args, bridge) => {
@@ -359,7 +388,7 @@ export async function runMcpServer(): Promise<void> {
 			"read_page",
 			{
 				description:
-					"Compact snapshot of the page: interactive elements with refs (e1, e2, ...) and coordinates, plus readable text. Use refs with click/type/fill.",
+					"The page as text: interactive elements with refs (e1, e2, ...) for click/type/fill, then its readable text (the first 3000 characters unless maxTextChars says otherwise).",
 				inputSchema: {
 					tabId,
 					filter: z.enum(["all", "interactive"]).optional(),
@@ -369,7 +398,7 @@ export async function runMcpServer(): Promise<void> {
 			},
 			async (args, bridge) => {
 				try {
-					const snap = (await bridge("snapshot", { ...args, maxTextChars: args.maxTextChars ?? 3000 })) as Parameters<typeof formatSnapshot>[0];
+					const snap = (await bridge("snapshot", { ...args, maxTextChars: args.maxTextChars ?? 3000 })) as PageSnapshot;
 					return { content: text(formatSnapshot(snap)) };
 				} catch (err) {
 					return errorResult(err);
@@ -390,14 +419,14 @@ export async function runMcpServer(): Promise<void> {
 			"find",
 			{
 				description:
-					'Find elements by what you would call them: "search bar", "login button", "add to cart". Role words and common synonyms are understood. Returns refs for click/type/fill.',
+					'Find elements by what you would call them ("search bar", "login button"); role words and common synonyms work. Returns refs for click/type/fill.',
 				inputSchema: { query: z.string(), tabId, limit: z.number().int().optional() },
 			},
 			async (args, bridge) => {
 				try {
-					const found = (await bridge("find", args)) as { matches: SnapNode[] };
+					const found = (await bridge("find", args)) as { matches: SnapNode[]; dialogs?: unknown[] };
 					if (found.matches.length === 0) return { content: text(`No elements match "${args.query}". Try read_page or other words.`) };
-					return { content: text(formatNodes(found.matches, "")) };
+					return { content: text(formatNodes(found.matches, "") + dialogNote(found)) };
 				} catch (err) {
 					return errorResult(err);
 				}
@@ -405,34 +434,52 @@ export async function runMcpServer(): Promise<void> {
 		);
 		const targetSchema = {
 			tabId,
-			ref: z.string().optional().describe("Element ref from read_page or find"),
+			ref: z.string().optional().describe("From read_page or find"),
 			selector: z.string().optional().describe("CSS selector"),
-			text: z.string().optional().describe("What a person reads on it: a label, placeholder, or button text"),
-			x: z.number().optional().describe("Pixel x in the latest screenshot"),
-			y: z.number().optional().describe("Pixel y in the latest screenshot"),
+			text: z.string().optional().describe("Its visible label, placeholder or button text"),
+			x: z.number().optional().describe("Pixels of the latest screenshot"),
+			y: z.number().optional(),
 		};
 		tool(
 			"click",
 			{
-				description: "Click an element by ref, selector or text, or at x/y pixels of the latest screenshot, with real input events.",
-				inputSchema: { ...targetSchema, button: z.enum(["left", "right", "middle"]).optional(), clickCount: z.number().int().optional() },
+				description:
+					"Click an element by ref, selector or text, or at x/y of the latest screenshot, with real input events. read:true returns the page once it holds still after the click.",
+				inputSchema: {
+					...targetSchema,
+					button: z.enum(["left", "right", "middle"]).optional(),
+					clickCount: z.number().int().optional(),
+					read: readOption,
+				},
 			},
-			(args, bridge) => call(bridge, "click", args),
+			async ({ read, ...args }, bridge) => {
+				if (!read) return call(bridge, "click", args);
+				try {
+					// One step of actions: its read waits for the page to settle after the click.
+					const done = (await bridge("actions", { steps: [{ click: args }], read, tabId: args.tabId })) as {
+						page: PageSnapshot;
+						dialogs?: unknown[];
+					};
+					return { content: text(`Clicked.${dialogNote(done)}\n${formatSnapshot(done.page)}`) };
+				} catch (err) {
+					return errorResult(err);
+				}
+			},
 		);
 		tool("hover", { description: "Move the mouse over an element.", inputSchema: targetSchema }, (args, bridge) => call(bridge, "hover", args));
 		tool(
 			"type",
 			{
 				description:
-					"Type text with real key events. Long text goes into a text field in one insertion; set keys:true for an editor that needs a key event per character. Clicks the target first when ref, selector or target (visible text) is given. submit presses Enter afterwards.",
+					"Type text with real key events, after clicking ref, selector or target when one is given. Long text is inserted at once; keys:true sends a key event per character, for editors that need it. submit presses Enter afterwards.",
 				inputSchema: {
 					text: z.string(),
 					tabId,
 					ref: z.string().optional(),
 					selector: z.string().optional(),
-					target: z.string().optional().describe("Label, placeholder or visible text of the field to click first"),
+					target: z.string().optional().describe("Visible label or placeholder of the field"),
 					submit: z.boolean().optional(),
-					keys: z.boolean().optional().describe("Send every character as key events, however long the text is"),
+					keys: z.boolean().optional(),
 				},
 			},
 			(args, bridge) => call(bridge, "type", args),
@@ -449,7 +496,7 @@ export async function runMcpServer(): Promise<void> {
 			"list_downloads",
 			{
 				description:
-					"Files pages downloaded, newest first: absolute path, source URL, type, size and state. Use it after a click that saves a file, then read the file from its path. The user turns this on under Settings > Downloads in the side panel.",
+					"Files that pages downloaded, newest first, with their absolute paths: use it after a click that saves a file. The user turns it on under Settings > Downloads in the side panel.",
 				inputSchema: { limit: z.number().int().min(1).max(100).optional() },
 			},
 			(args, bridge) => call(bridge, "downloads.list", args),
@@ -458,7 +505,7 @@ export async function runMcpServer(): Promise<void> {
 			"handle_dialog",
 			{
 				description:
-					"Set how the next confirm() or prompt() on the tab is answered. Page dialogs are answered at once (accepted by default, so they never block the page) and every tool result lists the dialogs answered during the call. Call this before the action that opens a dialog you want to dismiss or answer with text.",
+					"Choose the answer to the next confirm() or prompt(), before the action that opens it. Without it page dialogs are accepted at once, and each tool result lists the ones answered during the call.",
 				inputSchema: {
 					accept: z.boolean().describe("false dismisses (Cancel)"),
 					promptText: z.string().optional().describe("Text to enter in a prompt()"),
@@ -470,13 +517,14 @@ export async function runMcpServer(): Promise<void> {
 		tool(
 			"fill",
 			{
-				description: "Set a form control's value directly (inputs, textareas, selects, checkboxes, contenteditable). Name it by ref, selector or text (its label or placeholder).",
+				description:
+					"Set the value of a form control (input, textarea, select, checkbox, contenteditable), named by ref, selector or text (its label or placeholder).",
 				inputSchema: {
 					value: z.string(),
 					tabId,
 					ref: z.string().optional(),
 					selector: z.string().optional(),
-					text: z.string().optional().describe("Label or placeholder of the field"),
+					text: z.string().optional(),
 				},
 			},
 			(args, bridge) => call(bridge, "fill", args),
@@ -499,7 +547,7 @@ export async function runMcpServer(): Promise<void> {
 		tool(
 			"drag",
 			{
-				description: "Drag with the mouse between two points given in the latest screenshot's pixels (draw shapes, move items, connect arrows).",
+				description: "Drag the mouse between two points of the latest screenshot (draw shapes, move items, connect arrows).",
 				inputSchema: { tabId, from: z.object({ x: z.number(), y: z.number() }), to: z.object({ x: z.number(), y: z.number() }) },
 			},
 			(args, bridge) => call(bridge, "drag", args),
@@ -508,14 +556,14 @@ export async function runMcpServer(): Promise<void> {
 			"actions",
 			{
 				description:
-					"Run several steps in one call, then optionally read the page or screenshot. Use it for anything you already know how to do: " +
-					'a form is one call, e.g. steps [{"fill":{"text":"Name","value":"Ada"}},{"fill":{"text":"Plan","value":"Pro"}},{"click":{"text":"Send"}}], read true. ' +
-					'A canvas: steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"press":"Enter"},{"type":"Start"},{"press":"Escape"}], screenshot true. ' +
-					"Step kinds: navigate (url), fill ({ref|selector|text, value}), press (key or chord), click ({x,y} | {ref} | {selector} | {text}, optional clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), hover ({x,y}|{ref}), scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
-					"x/y are pixels of the latest screenshot. Steps are spaced by settleMs (default 80) so the app can react. Stops at the first failing step.",
+					"Run several steps in one call, then read the page or screenshot it. " +
+					'A form: steps [{"fill":{"text":"Name","value":"Ada"}},{"click":{"text":"Send"}}], read true. ' +
+					'A canvas: steps [{"press":"r"},{"drag":{"from":{"x":200,"y":200},"to":{"x":360,"y":300}}},{"type":"Start"}], screenshot true. ' +
+					"Steps: navigate (url), fill ({ref|selector|text, value}), click ({ref|selector|text} or {x,y}, clickCount), doubleClick ({x,y}), drag ({from,to}), type (text), press (key or chord), hover, scroll ({dx,dy}|{to}), wait (ms, or {selector|text|urlIncludes}). " +
+					"x/y are pixels of the latest screenshot. Stops at the first failing step. When the result arrives after a request, end with a wait for its text.",
 				inputSchema: {
 					steps: z.array(z.record(z.string(), z.any())).min(1).max(40),
-					screenshot: z.boolean().optional().describe("Return a screenshot after the last step"),
+					screenshot: z.boolean().optional().describe("Screenshot after the last step"),
 					read: readOption,
 					settleMs: z.number().int().optional().describe("Pause between steps in ms (default 80)"),
 					tabId,
@@ -526,9 +574,10 @@ export async function runMcpServer(): Promise<void> {
 					const res = (await bridge("actions", args)) as {
 						steps: number;
 						screenshot?: { data: string; mimeType: string; width: number; height: number };
-						page?: Parameters<typeof formatSnapshot>[0];
+						page?: PageSnapshot;
+						dialogs?: unknown[];
 					};
-					const content: Content[] = [{ type: "text", text: `${res.steps} steps done.` }];
+					const content: Content[] = [{ type: "text", text: `${res.steps} steps done.${dialogNote(res)}` }];
 					if (res.page) content.push({ type: "text", text: formatSnapshot(res.page) });
 					if (res.screenshot) {
 						content.unshift({ type: "image", data: res.screenshot.data, mimeType: res.screenshot.mimeType });
@@ -547,25 +596,30 @@ export async function runMcpServer(): Promise<void> {
 			"run_js",
 			{
 				description:
-					"Run JavaScript in the page and return its JSON value. world=user (default) is an isolated world with DOM access; world=main sees the page's own globals. frame runs the code inside a cross-origin iframe (embedded checkouts, editors, consent dialogs) whose URL contains that text; the error lists the frames when none matches. skill loads a skill's library first, so its helpers are there for your code.",
+					"Run JavaScript in the page and return its JSON value. code is one expression (a promise is awaited); wrap statements in an IIFE: (() => { const a = 1; return a; })(). world user (default) is an isolated world with DOM access, main sees the page's own globals. frame runs it in a cross-origin iframe (embedded checkout, editor, consent dialog) whose URL contains that text; the error lists the frames when none matches. skill loads that skill's helper library first.",
 				inputSchema: {
 					code: z.string(),
 					tabId,
 					world: z.enum(["user", "main"]).optional(),
-					frame: z.string().optional().describe("Part of a cross-origin iframe's URL"),
-					skill: z.string().optional().describe("Name of a skill whose library to load first"),
+					frame: z.string().optional(),
+					skill: z.string().optional(),
 				},
 			},
-			(args, bridge) => call(bridge, "evaluate", args),
+			async (args, bridge) => {
+				const res = await call(bridge, "evaluate", args);
+				const first = res.content[0];
+				if (res.isError && first?.type === "text" && STATEMENT_ERROR.test(first.text)) first.text += `\n${STATEMENT_HINT}`;
+				return res;
+			},
 		);
 		tool(
 			"cdp",
 			{
 				description:
-					"Send a raw Chrome DevTools Protocol command to your current tab and return its result (e.g. Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, DOM.getDocument, Performance.getMetrics, Input.dispatchMouseEvent). The tab is already attached; enable domains first if a command needs it. If the user turned on asking for new sites, commands that reach other tabs or browser-wide state are refused. Events are not streamed: use read_console and read_network. Prefer the dedicated tools when one fits.",
+					"Send a raw Chrome DevTools Protocol command to your tab and return its result, for what no other tool does (Emulation.setGeolocationOverride, Network.setExtraHTTPHeaders, Page.printToPDF, Performance.getMetrics). The tab is attached; enable a domain first if the command needs it. Events are not streamed: use read_console and read_network. Commands that reach other tabs or browser-wide state are refused when the user asks to approve new sites.",
 				inputSchema: {
-					method: z.string().describe("CDP method, e.g. Emulation.setDeviceMetricsOverride"),
-					params: z.record(z.string(), z.unknown()).optional().describe("Command parameters as in the CDP docs"),
+					method: z.string().describe("e.g. Emulation.setDeviceMetricsOverride"),
+					params: z.record(z.string(), z.unknown()).optional(),
 					tabId,
 				},
 			},
@@ -581,7 +635,8 @@ export async function runMcpServer(): Promise<void> {
 		tool(
 			"wait",
 			{
-				description: "Wait for a selector, text, URL fragment, or a fixed number of milliseconds.",
+				description:
+					"Wait until a selector, a text or a URL fragment appears (timeoutMs, default 10000), or for a fixed ms. navigate and read:true already wait until the page holds still; for content that a request brings later, wait for its text, not for a fixed time.",
 				inputSchema: {
 					tabId,
 					selector: z.string().optional(),
@@ -597,8 +652,8 @@ export async function runMcpServer(): Promise<void> {
 			"file_upload",
 			{
 				description:
-					"Attach local files to the page. Without a target this fills the page's file input, hidden ones included. Name a file input, its label, an upload button, or a drop zone with ref, selector or text; or give x/y for a drop target. Do not click upload buttons yourself: name them here. With sitegeist's \"Allow access to file URLs\" on, Chrome takes the files directly (any size, and an upload button's picker is answered); otherwise 25 MB per call and upload buttons cannot be used.",
-				inputSchema: { paths: z.array(z.string()).min(1).describe("Absolute paths of local files"), ...targetSchema },
+					"Attach local files to the page. With no target they go to the page's file input, hidden ones included; or name a file input, its label, an upload button or a drop zone by ref, selector or text, or a drop point by x/y. Never click an upload button yourself: name it here. Upload buttons, and more than 25 MB per call, need sitegeist's \"Allow access to file URLs\".",
+				inputSchema: { paths: z.array(z.string()).min(1).describe("Absolute paths"), ...targetSchema },
 			},
 			async ({ paths, ...where }, bridge) => {
 				try {
@@ -636,7 +691,7 @@ export async function runMcpServer(): Promise<void> {
 			"upload_image",
 			{
 				description:
-					"Send a screenshot you took (its imageId) to a file input or drop target, e.g. a bug report or a document. Target as in file_upload; tabId may be another of your tabs.",
+					"Send a screenshot you took (its imageId) to a file input or drop target, named as in file_upload. tabId may be another of your tabs.",
 				inputSchema: { imageId: z.string(), filename: z.string().optional(), ...targetSchema },
 			},
 			(args, bridge) => call(bridge, "upload.image", args),
@@ -645,7 +700,7 @@ export async function runMcpServer(): Promise<void> {
 			"skills_list",
 			{
 				description:
-					"List the skills saved in the browser: ready-made instructions and helper code for sites, recorded workflows included. navigate tells you when a page has one. Give url to see what applies there.",
+					"List the skills saved in the browser: instructions and helper code for sites, recorded workflows included. navigate says when a page has one; url narrows the list to that page.",
 				inputSchema: { url: z.string().optional() },
 			},
 			(args, bridge) => call(bridge, "skills.list", args),
@@ -681,10 +736,10 @@ export async function runMcpServer(): Promise<void> {
 			"record_video",
 			{
 				description:
-					"Record the tab as an MP4 video, encoded by Chrome (153+). start, do the steps, then stop: stop writes the file and returns its path. Works on hidden tabs. Use gif_creator for an annotated GIF instead.",
+					"Record the tab as an MP4 (Chrome 153+, hidden tabs included): start, do the steps, then stop, which writes the file and returns its path. gif_creator makes an annotated GIF instead.",
 				inputSchema: {
 					action: z.enum(["start", "stop"]),
-					path: z.string().optional().describe("For stop: where to write the file. Default: recording-<time>.mp4 in the working directory"),
+					path: z.string().optional().describe("For stop: the file to write. Default: recording-<time>.mp4 in the working directory"),
 					frameRate: z.number().int().min(1).max(60).optional(),
 					maxWidth: z.number().int().min(100).max(4096).optional(),
 					tabId,
@@ -709,10 +764,10 @@ export async function runMcpServer(): Promise<void> {
 					"Record your tab as an animated GIF with click markers, drag arrows, action labels and a progress bar, to show how something works. start_recording, do the steps, then export (it stops by itself). The recording shows everything on screen, logged-in details too, so review it before sharing.",
 				inputSchema: {
 					action: z.enum(["start_recording", "stop_recording", "export", "clear"]),
-					path: z.string().optional().describe("For export: where to write the file. Default: recording-<time>.gif in the working directory"),
+					path: z.string().optional().describe("For export: the file to write. Default: recording-<time>.gif in the working directory"),
 					options: z
 						.object({
-							maxWidth: z.number().int().optional().describe("Output width in pixels (default 800)"),
+							maxWidth: z.number().int().optional().describe("Pixels (default 800)"),
 							showClickIndicators: z.boolean().optional(),
 							showDragPaths: z.boolean().optional(),
 							showActionLabels: z.boolean().optional(),
@@ -740,8 +795,8 @@ export async function runMcpServer(): Promise<void> {
 			"fill_login",
 			{
 				description:
-					"Fill the sign-in form on your current page from the user's 1Password. They approve it in 1Password; you never see the password. Works per step: a page with only a username field gets that, a one-time-code page gets the code. Then press the sign-in button yourself. Several logins for the site come back as a list; call again with item set to one id. Use this instead of asking the user for a password.",
-				inputSchema: { item: z.string().optional().describe("Id of a login from an earlier list"), tabId },
+					"Fill the sign-in form on your page from the user's 1Password, instead of asking them for a password: they approve it in 1Password and you never see it. It fills what the page shows (username, password or one-time code); press the sign-in button yourself. Several logins for the site come back as a list: call again with item set to one id.",
+				inputSchema: { item: z.string().optional(), tabId },
 			},
 			(args, bridge) => call(bridge, "login.fill", args),
 		);
@@ -749,7 +804,7 @@ export async function runMcpServer(): Promise<void> {
 			"notify_user",
 			{
 				description:
-					"Show the user a desktop notification when they must act: a login, a captcha, a decision. Pair it with tabs_show. Clicking it opens your tab. Does nothing if the user has notifications off.",
+					"Show the user a desktop notification when they must act (a login, a captcha, a decision); clicking it opens your tab. Pair it with tabs_show. Does nothing if they have notifications off.",
 				inputSchema: { title: z.string(), message: z.string().optional(), tabId },
 			},
 			(args, bridge) => call(bridge, "notify", args),
@@ -772,7 +827,7 @@ export async function runMcpServer(): Promise<void> {
 					urlPattern: z.string().optional(),
 					clear: z.boolean().optional(),
 					limit: z.number().int().optional(),
-					body: z.boolean().optional().describe("Include text response bodies"),
+					body: z.boolean().optional(),
 					bodyChars: z.number().int().optional().describe("Characters per body (default 20000)"),
 				},
 			},
