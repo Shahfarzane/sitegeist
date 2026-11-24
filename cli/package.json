@@ -5,7 +5,8 @@
 	"license": "AGPL-3.0",
 	"type": "module",
 	"bin": {
-		"sitegeist": "./dist/index.js"
+		"sitegeist": "./dist/index.js",
+		"sitegeist-dev": "./dist-dev/index.js"
 	},
 	"files": [
 		"dist",
@@ -13,6 +14,7 @@
 	],
 	"scripts": {
 		"build": "node scripts/build.mjs",
+		"build:dev": "SITEGEIST_CHANNEL=dev node scripts/build.mjs",
 		"typecheck": "tsc --noEmit",
 		"test": "node --import tsx --no-warnings --test src/*.test.ts",
 		"check": "npm run typecheck && npm test && npm run build",

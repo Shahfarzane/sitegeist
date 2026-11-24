@@ -1,11 +1,25 @@
 {
 	"production": {
 		"extensionId": "lnncppjiohlpejgcbdgoihplimdckddn",
-		"outDir": "dist-chrome"
+		"outDir": "dist-chrome",
+		"buildScript": "build",
+		"nativeHost": "ai.sitegeist.bridge",
+		"cliOutDir": "dist",
+		"command": "sitegeist",
+		"launcher": "host",
+		"socketPrefix": "sitegeist-bridge",
+		"toolPrefix": ""
 	},
 	"dev": {
 		"extensionId": "jdoloceeppngimcgcjcopnammjaaggim",
 		"outDir": "dist-chrome-dev",
+		"buildScript": "build:dev",
+		"nativeHost": "ai.sitegeist.bridge.dev",
+		"cliOutDir": "dist-dev",
+		"command": "sitegeist-dev",
+		"launcher": "host-dev",
+		"socketPrefix": "sitegeist-bridge-dev",
+		"toolPrefix": "dev_",
 		"manifest": {
 			"name": "Sitegeist Bridge DEV (unofficial fork)",
 			"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv0AOi9ARZThnqxfXBuTOdgAIFNpYjdkE3O1nZy0YH7mIiaxLVk/hgq29TV5YD/5WsZ0l+hyWjei2sUDulnOFVy7gfWfjaYw6rpEN+Lfe6RFrIomQ0M6EPoY3vpDUC9BkF3+oHWpGnSMS/uTmknfGq5bnfeB6JfTNINHE9YWtIGzkt8OzWYso7jWVvsRDR9CiMstuhYMop2XQhBMnX69PgSubHyX4dHTqRuAzTPFZnsI1bpENlnGnrkY13f+05hX8kTTw/s58FpWJ//Pz6rFgfTKjIgT7qKle3u2JkFbmntlEzRMWSPv312IUpQmoIG+TYh7OhRLUUeiz2XW1nvh9ZwIDAQAB",

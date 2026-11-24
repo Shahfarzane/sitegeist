@@ -96,6 +96,15 @@ name "Sitegeist Bridge DEV", a green dot on its icon, and a `version_name` that 
 branch and commit. It has its own settings and logins, and its build never bumps the
 tracked version. `npm run build` stays the production build.
 
+The dev copy has a bridge of its own. `npm run build:dev` also builds the dev CLI into
+`cli/dist-dev/`, and `cli/dist-dev/index.js install` registers its native host
+(`ai.sitegeist.bridge.dev`, for the dev id only) with its own launcher
+(`~/.config/sitegeist/host-dev`) and socket folder (`/tmp/sitegeist-bridge-dev-<user>`). It
+writes none of the production host's files. Agents on `sitegeist` never see the dev copy,
+and the dev CLI (`cli/dist-dev/index.js browsers`, `mcp`, `reload`, or `sitegeist-dev` once
+`cli` is linked again) sees only dev copies; `install` prints the `claude mcp add sitegeist-dev`
+line. A bridge change on a branch therefore reaches only the dev copy.
+
 The fork is moving to the Chrome Web Store as an Unlisted item named "Sitegeist Bridge
 (unofficial fork)", under the same id. `scripts/store-zip.sh` builds the upload; the listing,
 the policy review and the first-upload steps are in

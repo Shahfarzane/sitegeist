@@ -9,6 +9,7 @@ import { basename, extname, resolve } from "node:path";
 import { type CallToolResult, McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { z } from "zod";
+import { CHANNEL } from "../../src/channel.ts";
 import { BridgeClient, BridgeRpcError, listBrowsers } from "./client.ts";
 import { install, isInstalled } from "./install.ts";
 import { PermissionPrompts, type Track } from "./permission-prompts.ts";
@@ -163,7 +164,7 @@ export async function runMcpServer(): Promise<void> {
 		);
 	const prompts = new PermissionPrompts(respond, (host) => {
 		process.stderr.write(
-			`[sitegeist] ${host} needs approval: run \`sitegeist allow ${host}\`, use the side panel (Settings > Bridge), or set SITEGEIST_AUTO_ALLOW=1.\n`,
+			`[sitegeist] ${host} needs approval: run \`${CHANNEL.command} allow ${host}\`, use the side panel (Settings > Bridge), or set SITEGEIST_AUTO_ALLOW=1.\n`,
 		);
 	});
 
@@ -207,7 +208,7 @@ export async function runMcpServer(): Promise<void> {
 	/** One instance per connection: serveStdio builds it once the client's opening picks the era. */
 	function buildServer(): McpServer {
 		const server = new McpServer(
-			{ name: "sitegeist", version: VERSION },
+			{ name: CHANNEL.command, version: VERSION },
 			{ instructions, requestState: { verify: prompts.codec.verify } },
 		);
 

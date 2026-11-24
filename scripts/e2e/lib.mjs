@@ -25,9 +25,12 @@ import { extensionIdForKey, readChannel } from "../channel-build.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = join(here, "../..");
-/** The build under test: SITEGEIST_E2E_EXTENSION, else the folder of the channel SITEGEIST_CHANNEL names. */
-export const EXTENSION_DIR =
-	process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, readChannel(repoRoot).channel.outDir);
+/** The channel under test (SITEGEIST_CHANNEL, production by default): its build, native host and CLI build. */
+export const CHANNEL = readChannel(repoRoot).channel;
+/** The build under test: SITEGEIST_E2E_EXTENSION, else the channel's folder. */
+export const EXTENSION_DIR = process.env.SITEGEIST_E2E_EXTENSION ?? join(repoRoot, CHANNEL.outDir);
+/** The channel's CLI build: the native host and `mcp` of every bridge test. */
+export const CLI = join(repoRoot, "cli", CHANNEL.cliOutDir, "index.js");
 
 /** The id a build loads under, from the key in its manifest. */
 export function extensionIdOf(dir) {
@@ -142,7 +145,7 @@ export class Browser {
 		env,
 		bridge = false,
 		sharedSocketDir,
-		hostCli = join(repoRoot, "cli/dist/index.js"),
+		hostCli = CLI,
 	} = {}) {
 		const profile = userDataDir ?? mkdtempSync(join(tmpdir(), "sitegeist-e2e-"));
 		let socketDir;
@@ -154,13 +157,13 @@ export class Browser {
 			const hosts = join(profile, "NativeMessagingHosts");
 			mkdirSync(hosts, { recursive: true });
 			writeFileSync(
-				join(hosts, "ai.sitegeist.bridge.json"),
+				join(hosts, `${CHANNEL.nativeHost}.json`),
 				JSON.stringify({
-					name: "ai.sitegeist.bridge",
+					name: CHANNEL.nativeHost,
 					description: "sitegeist e2e",
 					path: launcher,
 					type: "stdio",
-					allowed_origins: [`chrome-extension://${EXTENSION_ID}/`],
+					allowed_origins: [`chrome-extension://${extensionIdOf(extensionDir)}/`],
 				}),
 			);
 		}
@@ -509,7 +512,7 @@ export class Harness {
 		const home = mkdtempSync(join(tmpdir(), "sitegeist-e2e-home-"));
 		const transport = new StdioClientTransport({
 			command: process.execPath,
-			args: [join(repoRoot, "cli/dist/index.js"), "mcp"],
+			args: [CLI, "mcp"],
 			env: {
 				...process.env,
 				HOME: home,

@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { CHANNEL_NAME } from "../../src/channel.ts";
 
 export function updateDir(): string {
 	// The e2e suite publishes into a folder of its own.
@@ -27,8 +28,9 @@ export function parsePublishedVersion(xml: string): string | undefined {
 	return tag ? /\bversion\s*=\s*(["'])([0-9.]+)\1/.exec(tag)?.[2] : undefined;
 }
 
-/** The release published on this machine, if there is one. */
+/** The release published on this machine, if there is one. The dev channel has none: it is built and reloaded by hand. */
 export function publishedVersion(): string | undefined {
+	if (CHANNEL_NAME !== "production") return undefined;
 	const path = updateManifestPath();
 	if (!existsSync(path)) return undefined;
 	try {

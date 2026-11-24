@@ -22,6 +22,16 @@ sitegeist install               # writes the native-messaging manifest for every
 `sitegeist mcp` runs the installer itself on first use, so a harness configured to start
 it needs no extra step. Reload the extension once after the first install.
 
+## Dev channel
+
+`npm run build:dev` (from the repo root) builds this CLI a second time into `dist-dev/`, for
+the dev copy of the extension (`dist-chrome-dev/`, its own id). That build has its own native
+host name (`ai.sitegeist.bridge.dev`), launcher (`~/.config/sitegeist/host-dev`) and socket
+folder (`/tmp/sitegeist-bridge-dev-<user>`): `dist-dev/index.js install` writes only those,
+`browsers` and `mcp` see only dev copies, and the production CLI never sees one. Its
+`pi-extension` writes `sitegeist-dev.ts` with tools named `dev_browser_*`. `update` has nothing
+to do in the dev channel; rebuild and `reload` instead.
+
 ## Commands
 
 | Command | Purpose |

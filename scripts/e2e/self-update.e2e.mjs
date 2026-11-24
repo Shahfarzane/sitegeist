@@ -10,9 +10,9 @@ import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, EXTENSION_ID, repoRoot } from "./lib.mjs";
+import { Browser, bridgeReady, CLI, EXTENSION_ID } from "./lib.mjs";
 
-const cli = join(repoRoot, "cli/dist/index.js");
+const cli = CLI;
 let browser;
 let updateDir;
 

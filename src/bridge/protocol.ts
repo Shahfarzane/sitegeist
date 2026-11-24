@@ -8,7 +8,10 @@
  * copies frames between the two and only adds/strips `clientId`.
  */
 
-export const NATIVE_HOST_NAME = "ai.sitegeist.bridge";
+import { CHANNEL } from "../channel.js";
+
+/** The build channel's host: a dev copy talks only to the dev checkout's own CLI build. */
+export const NATIVE_HOST_NAME = CHANNEL.nativeHost;
 export const PROTOCOL_VERSION = 1;
 
 /** Native messaging caps host->extension frames at 1 MiB; leave headroom. */

@@ -3,6 +3,9 @@
  * this machine, plus the launcher script the manifest points at, and (when a release is
  * published here) Helium's external-install file. Idempotent; run automatically by
  * `sitegeist mcp` when the manifest is missing.
+ *
+ * Each channel writes only its own files: the dev CLI registers the dev host name for the dev id,
+ * with its own launcher, and never touches the production host's manifest or launcher.
  */
 
 import { execFileSync } from "node:child_process";
@@ -10,14 +13,15 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { NATIVE_HOST_NAME } from "../../src/bridge/protocol.ts";
+import { CHANNEL } from "../../src/channel.ts";
 import { publishedVersion, updateManifestUrl } from "./release.ts";
 
 /**
- * Stable id from the `key` in static/manifest.chrome.json: the public half of the CRX
- * signing key ("sitegeist CRX signing key" in 1Password DEV), so unpacked builds and
- * signed .crx releases share it.
+ * The channel's extension id (src/channels.json). Production's comes from the `key` in
+ * static/manifest.chrome.json, the public half of the CRX signing key ("sitegeist CRX signing key"
+ * in 1Password DEV), which the store item shares; dev's from the public key in the channel table.
  */
-export const EXTENSION_ID = "lnncppjiohlpejgcbdgoihplimdckddn";
+export const EXTENSION_ID = CHANNEL.extensionId;
 
 function browserDirs(): string[] {
 	const home = homedir();
@@ -54,7 +58,7 @@ function browserDirs(): string[] {
 }
 
 function launcherPath(): string {
-	return join(homedir(), ".config", "sitegeist", process.platform === "win32" ? "host.cmd" : "host");
+	return join(homedir(), ".config", "sitegeist", process.platform === "win32" ? `${CHANNEL.launcher}.cmd` : CHANNEL.launcher);
 }
 
 /**

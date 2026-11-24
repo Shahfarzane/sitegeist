@@ -53,6 +53,8 @@ const buildOptions = {
 	define: {
 		"process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV ?? (isWatch ? "development" : "production")),
 		"process.env.TARGET_BROWSER": JSON.stringify(targetBrowser),
+		// src/channel.ts: the bundle knows its channel and never reads it at run time.
+		"process.env.SITEGEIST_CHANNEL": JSON.stringify(channelName),
 		global: "globalThis",
 	},
 	inject: [join(packageRoot, "scripts/process-shim.js")],
