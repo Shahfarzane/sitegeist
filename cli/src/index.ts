@@ -41,7 +41,7 @@ Usage:
   sitegeist host            (internal) native messaging host, spawned by the browser
   sitegeist credentials <p> (internal) one login lookup for the host, printed as JSON
 
-Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`sitegeist install\` prints them):
+Harness setup (absolute paths: GUI apps do not inherit the shell PATH; \`${CHANNEL.command} install\` prints them):
   claude mcp add --scope user sitegeist -- /opt/homebrew/opt/node@24/bin/node /opt/homebrew/bin/sitegeist mcp
   codex:  [mcp_servers.sitegeist]  command = "sitegeist"  args = ["mcp"]
   omp:    add an MCP server entry running "sitegeist mcp"
@@ -54,13 +54,13 @@ function connectors(args: string[]): void {
 	if (action === "add") {
 		const separator = args.indexOf("--");
 		const [command, ...commandArgs] = separator >= 0 ? args.slice(separator + 1) : [];
-		if (!name || name === "--" || !command) throw new Error("usage: sitegeist connectors add <name> -- <command> [args...]");
+		if (!name || name === "--" || !command) throw new Error(`usage: ${CHANNEL.command} connectors add <name> -- <command> [args...]`);
 		writeConnectors({ ...current, [name]: { command, args: commandArgs } });
 		console.log(`Added ${name}. Open it in the side panel under Settings > Connectors.`);
 		return;
 	}
 	if (action === "remove") {
-		if (!name || !(name in current)) throw new Error("usage: sitegeist connectors remove <name>");
+		if (!name || !(name in current)) throw new Error(`usage: ${CHANNEL.command} connectors remove <name>`);
 		delete current[name];
 		writeConnectors(current);
 		console.log(`Removed ${name}.`);
@@ -73,7 +73,7 @@ function connectors(args: string[]): void {
 		return;
 	}
 	const names = Object.keys(current);
-	if (names.length === 0) console.log("No local connectors. Add one: sitegeist connectors add <name> -- <command> [args...]");
+	if (names.length === 0) console.log(`No local connectors. Add one: ${CHANNEL.command} connectors add <name> -- <command> [args...]`);
 	for (const entry of names) console.log(`${entry}  ${current[entry].command} ${(current[entry].args ?? []).join(" ")}`);
 }
 
@@ -89,10 +89,10 @@ async function browsers(): Promise<void> {
 
 async function status(): Promise<void> {
 	const sockets = listSockets();
-	console.log(`native host manifest: ${isInstalled() ? "installed" : "missing (run: sitegeist install)"}`);
+	console.log(`native host manifest: ${isInstalled() ? "installed" : `missing (run: ${CHANNEL.command} install)`}`);
 	const problem = launcherProblem();
 	if (problem) {
-		console.log(`host launcher: broken, ${problem} (run: sitegeist install)`);
+		console.log(`host launcher: broken, ${problem} (run: ${CHANNEL.command} install)`);
 		process.exitCode = 1;
 	}
 	if (sockets.length === 0) {
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
 			return;
 		case "allow": {
 			const host = process.argv[3];
-			if (!host) throw new Error("usage: sitegeist allow <host>");
+			if (!host) throw new Error(`usage: ${CHANNEL.command} allow <host>`);
 			const client = new BridgeClient({ name: "allow" });
 			await client.connect();
 			console.log(JSON.stringify(await client.call("permission.allow", { host }, 5000)));
@@ -221,7 +221,8 @@ async function main(): Promise<void> {
 			console.log(CHANNEL_NAME === "production" ? VERSION : `${VERSION} (${CHANNEL_NAME})`);
 			return;
 		default:
-			process.stdout.write(HELP);
+			// The usage lines name the channel's own command (sitegeist-dev in the dev channel).
+			process.stdout.write(HELP.replace(/^ {2}sitegeist /gm, `  ${CHANNEL.command} `));
 			if (command && command !== "--help" && command !== "-h") process.exitCode = 1;
 	}
 }

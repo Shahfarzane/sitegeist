@@ -93,7 +93,7 @@ class Bridge {
 	private async ensure(): Promise<void> {
 		if (this.socket && !this.socket.destroyed) return;
 		const path = newestSocket();
-		if (!path) throw new Error("sitegeist browser bridge is not running (is the sitegeist extension loaded and \`sitegeist install\` done?)");
+		if (!path) throw new Error("sitegeist browser bridge is not running (is the sitegeist extension loaded and \`${CHANNEL.command} install\` done?)");
 		await new Promise<void>((resolve, reject) => {
 			const socket = connect(path);
 			socket.once("error", reject);
@@ -125,7 +125,7 @@ class Bridge {
 				if (process.env.SITEGEIST_AUTO_ALLOW === "1") {
 					this.socket?.write(encode({ type: "request", id: ++this.seq, method: "permission.respond", params: { requestId: msg.data.requestId, decision: "allow_once" } }));
 				} else {
-					process.stderr.write(\`[sitegeist] \${msg.data.host} needs approval: run \\\`sitegeist allow \${msg.data.host}\\\` or use the side panel (Settings > Bridge)\\n\`);
+					process.stderr.write(\`[sitegeist] \${msg.data.host} needs approval: run \\\`${CHANNEL.command} allow \${msg.data.host}\\\` or use the side panel (Settings > Bridge)\\n\`);
 				}
 			}
 		}
