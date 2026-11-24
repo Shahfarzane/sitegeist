@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import JSZip from "jszip";
 
-const packCrx = join(import.meta.dirname, "../scripts/pack-crx.mjs");
+const packStore = join(import.meta.dirname, "../scripts/pack-store.mjs");
 const work = mkdtempSync(join(tmpdir(), "pack-store-"));
 after(() => rmSync(work, { recursive: true, force: true }));
 
@@ -31,7 +31,7 @@ writeFileSync(join(dist, "background.js"), "");
 writeFileSync(join(dist, "background.js.map"), "{}");
 
 const pack = (out: string, ...args: string[]) =>
-	spawnSync(process.execPath, [packCrx, "--store", "--dir", dist, "--out", out, ...args], { encoding: "utf8" });
+	spawnSync(process.execPath, [packStore, "--dir", dist, "--out", out, ...args], { encoding: "utf8" });
 
 const read = async (zipPath: string) => JSZip.loadAsync(readFileSync(zipPath));
 
@@ -67,7 +67,7 @@ test("--include-key refuses a key that would give the item another id", () => {
 test("--include-key refuses to write the key without an explicit --out", () => {
 	const keyFile = join(work, "key.pem");
 	writeFileSync(keyFile, pem(key));
-	const result = spawnSync(process.execPath, [packCrx, "--store", "--dir", dist, "--include-key", keyFile], {
+	const result = spawnSync(process.execPath, [packStore, "--dir", dist, "--include-key", keyFile], {
 		encoding: "utf8",
 	});
 	assert.notEqual(result.status, 0);
@@ -82,9 +82,19 @@ test("--include-key refuses a build whose manifest has no key to check against",
 	writeFileSync(keyFile, pem(key));
 	const result = spawnSync(
 		process.execPath,
-		[packCrx, "--store", "--dir", keyless, "--out", join(work, "keyless-out"), "--include-key", keyFile],
+		[packStore, "--dir", keyless, "--out", join(work, "keyless-out"), "--include-key", keyFile],
 		{ encoding: "utf8" },
 	);
 	assert.notEqual(result.status, 0);
 	assert.match(result.stderr, /needs the manifest's `key`/);
+});
+
+test("a dev build is refused: only the production build goes to the store", () => {
+	const channels = JSON.parse(readFileSync(join(import.meta.dirname, "../src/channels.json"), "utf8"));
+	const devBuild = join(work, "dev-build");
+	execFileSync("mkdir", ["-p", devBuild]);
+	writeFileSync(join(devBuild, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "dev", version: "1.2.3", key: channels.dev.manifest.key }));
+	const result = spawnSync(process.execPath, [packStore, "--dir", devBuild, "--out", join(work, "dev-out")], { encoding: "utf8" });
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /a dev build/);
 });

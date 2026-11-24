@@ -61,7 +61,7 @@ export function channelCorsRules(text, productionId, channelId) {
 }
 
 /**
- * A dev build's version: `<major>.<minor>.<commits on HEAD>` as scripts/release-crx.sh makes it,
+ * A dev build's version: `<major>.<minor>.<commits on HEAD>` as scripts/store-zip.sh makes it,
  * and a version_name that says dev and names the branch and commit. Without git (an export), the
  * source version and a plain "dev".
  */

@@ -259,7 +259,7 @@ const run = async () => {
 
 		process.stdout.write("Watching for changes...\n");
 	} else {
-		// Releases pin the version (SITEGEIST_VERSION, derived from git by release-crx.sh) and
+		// Releases pin the version (SITEGEIST_VERSION, derived from git by store-zip.sh) and
 		// leave the source manifest alone; plain production builds keep the auto-bump. Dev builds
 		// pin theirs in copyStatic and never bump.
 		const pinned = process.env.SITEGEIST_VERSION;

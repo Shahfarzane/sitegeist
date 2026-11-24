@@ -164,6 +164,7 @@
 
 ### Removed
 
+- The self-hosted channel: production comes from the Chrome Web Store only. Gone are `scripts/release-crx.sh`, `scripts/auto-release.sh` and `scripts/install-auto-release.sh` (the launchd release job), the CRX signing, `updates.xml` and the macOS policy profile in `pack-crx.mjs` (its store zip lives on as `scripts/pack-store.mjs`, which refuses a dev build), Helium's External Extensions file from `sitegeist install`, and the release the native host announced on connect. `sitegeist update` now asks each running browser for one Chrome Web Store check.
 - Upstream update check (About tab and the disabled startup prompt against `sitegeist.ai/uploads/version.json`) and `UpdateNotificationDialog`: the fork's version numbers differ and its updates come from signed releases.
 
 ## [1.0.0] - 2026-03-15

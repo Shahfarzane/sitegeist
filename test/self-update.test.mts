@@ -1,10 +1,9 @@
-// Self-update asks Chrome only when a newer release is published: an empty check arms a
-// 5-hour throttle, which used to swallow the push after every release.
+// `sitegeist update` asks Chrome for one store check now and reports its answer.
 // Run: npm test (node --import tsx --test).
 
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { checkAnnouncedUpdate, checkForUpdate, isNewerVersion } from "../src/utils/self-update.ts";
+import { checkForUpdate } from "../src/utils/self-update.ts";
 
 let checks = 0;
 let session: Record<string, unknown> = {};
@@ -29,42 +28,15 @@ beforeEach(() => {
 	};
 });
 
-const quiet = () => undefined;
+const lines: string[] = [];
 
-test("compares dotted versions numerically", () => {
-	assert.equal(isNewerVersion("1.2.330", "1.2.322"), true);
-	assert.equal(isNewerVersion("1.10.0", "1.9.99"), true);
-	assert.equal(isNewerVersion("1.2.322", "1.2.322"), false);
-	assert.equal(isNewerVersion("1.2.3", "1.2.322"), false);
-	assert.equal(isNewerVersion("1.3", "1.2.322"), true);
-	assert.equal(isNewerVersion("garbage", "1.2.322"), false);
-});
-
-test("skips the check when the published release is not newer", async () => {
-	assert.deepEqual(await checkForUpdate("1.2.322", quiet, "test"), { status: "current" });
-	assert.deepEqual(await checkForUpdate("1.2.300", quiet, "test"), { status: "current" });
-	assert.equal(checks, 0);
-});
-
-test("asks Chrome when the published release is newer", async () => {
-	assert.deepEqual(await checkForUpdate("1.2.330", quiet, "test"), { status: "update_available", version: "1.2.330" });
+test("asks Chrome once and reports its answer", async () => {
+	lines.length = 0;
+	assert.deepEqual(await checkForUpdate((line) => lines.push(line), "sitegeist update"), {
+		status: "update_available",
+		version: "1.2.330",
+	});
 	assert.equal(checks, 1);
-});
-
-test("asks Chrome when an older CLI sends no version", async () => {
-	await checkForUpdate(undefined, quiet, "test");
-	assert.equal(checks, 1);
-});
-
-test("a release the host announces again after a reconnect is not checked twice", async () => {
-	assert.equal((await checkAnnouncedUpdate("1.2.330", quiet)).status, "update_available");
-	assert.equal((await checkAnnouncedUpdate("1.2.330", quiet)).status, "skipped");
-	assert.equal(checks, 1);
-	await checkAnnouncedUpdate("1.2.331", quiet);
-	assert.equal(checks, 2);
-});
-
-test("an announced release that is not newer is not remembered", async () => {
-	assert.equal((await checkAnnouncedUpdate("1.2.322", quiet)).status, "current");
+	assert.deepEqual(lines, ["update check (sitegeist update): update_available 1.2.330"]);
 	assert.deepEqual(session, {});
 });

@@ -1,8 +1,8 @@
 /**
  * Writes the native messaging host manifest for every Chromium browser present on
- * this machine, plus the launcher script the manifest points at, and (when a release is
- * published here) Helium's external-install file. Idempotent; run automatically by
- * `sitegeist mcp` when the manifest is missing.
+ * this machine, plus the launcher script the manifest points at. Idempotent; run
+ * automatically by `sitegeist mcp` when the manifest is missing. The extension itself comes
+ * from the Chrome Web Store (production) or is loaded unpacked (dev).
  *
  * Each channel writes only its own files: the dev CLI registers the dev host name for the dev id,
  * with its own launcher, and never touches the production host's manifest or launcher.
@@ -11,10 +11,9 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { NATIVE_HOST_NAME } from "../../src/bridge/protocol.ts";
 import { CHANNEL } from "../../src/channel.ts";
-import { publishedVersion, updateManifestUrl } from "./release.ts";
 
 /**
  * The channel's extension id (src/channels.json). Production's comes from the `key` in
@@ -126,35 +125,6 @@ export interface InstallResult {
 	skipped: string[];
 }
 
-/**
- * Browsers that install an off-store extension from a per-user "External Extensions" file.
- * Google Chrome, Edge and Brave on macOS and Windows accept only Web Store update URLs there.
- */
-function externalInstallDirs(): string[] {
-	if (process.platform !== "darwin") return [];
-	return [join(homedir(), "Library", "Application Support", "net.imput.helium")];
-}
-
-/**
- * Point each such browser at the release published on this machine, so it installs the
- * extension at its next start and keeps it updated. Only when a release is published here.
- */
-function writeExternalInstalls(options: { force?: boolean }, written: string[], skipped: string[]): void {
-	if (!publishedVersion()) return;
-	const content = `${JSON.stringify({ external_update_url: updateManifestUrl() }, null, 2)}\n`;
-	for (const dir of externalInstallDirs()) {
-		if (!existsSync(dir)) continue;
-		const file = join(dir, "External Extensions", `${EXTENSION_ID}.json`);
-		if (!options.force && existsSync(file) && readFileSync(file, "utf8").trim() === content.trim()) {
-			skipped.push(file);
-			continue;
-		}
-		mkdirSync(dirname(file), { recursive: true });
-		writeFileSync(file, content);
-		written.push(file);
-	}
-}
-
 export function install(options: { force?: boolean } = {}): InstallResult {
 	const launcher = writeLauncher();
 	const manifest = manifestFor(launcher);
@@ -189,7 +159,6 @@ export function install(options: { force?: boolean } = {}): InstallResult {
 		writeFileSync(file, manifest);
 		written.push(file);
 	}
-	writeExternalInstalls(options, written, skipped);
 	return { launcher, written, skipped };
 }
 
