@@ -1,12 +1,14 @@
 /**
  * `sitegeist pi-extension`: writes a self-contained pi extension that registers
  * the browser tools by talking to the bridge socket directly (pi loads TypeScript
- * extensions and has no MCP client).
+ * extensions and has no MCP client). The dev CLI writes sitegeist-dev.ts, on the dev sockets,
+ * with its tools named dev_browser_*, so pi can load both without a clash.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CHANNEL } from "../../src/channel.ts";
 
 const TOOLS: Array<{ name: string; method: string; description: string; params: string }> = [
 	{ name: "browser_tabs", method: "tabs.context", description: "List the tabs this session owns", params: "{}" },
@@ -34,8 +36,8 @@ const TOOLS: Array<{ name: string; method: string; description: string; params: 
 function extensionSource(): string {
 	const tools = TOOLS.map(
 		(t) => `	pi.registerTool({
-		name: ${JSON.stringify(t.name)},
-		label: ${JSON.stringify(t.name.replace("browser_", "Browser: "))},
+		name: ${JSON.stringify(`${CHANNEL.toolPrefix}${t.name}`)},
+		label: ${JSON.stringify(`${CHANNEL.toolPrefix ? "DEV " : ""}${t.name.replace("browser_", "Browser: ")}`)},
 		description: ${JSON.stringify(t.description)},
 		parameters: Type.Object(${t.params}),
 		async execute(_id, params) {
@@ -53,7 +55,7 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
-const SOCKET_DIR = \`/tmp/sitegeist-bridge-\${userInfo().username}\`;
+const SOCKET_DIR = \`/tmp/${CHANNEL.socketPrefix}-\${userInfo().username}\`;
 // One key per pi process: a reconnect (extension reload) must land on the same tabs.
 const SESSION_FALLBACK = \`p\${process.pid}-\${Date.now().toString(36)}\`;
 
@@ -174,7 +176,7 @@ ${tools}
 export function writePiExtension(dirOverride?: string): string {
 	const dir = dirOverride ?? join(homedir(), ".pi", "agent", "extensions");
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-	const file = join(dir, "sitegeist.ts");
+	const file = join(dir, `${CHANNEL.command}.ts`);
 	writeFileSync(file, extensionSource());
 	return file;
 }

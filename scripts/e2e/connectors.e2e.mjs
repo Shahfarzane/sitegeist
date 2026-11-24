@@ -10,7 +10,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
-import { Browser, bridgeReady, idbPutSource, openPanel, repoRoot, sendPrompt, startFakeServer } from "./lib.mjs";
+import { Browser, bridgeReady, CLI, idbPutSource, openPanel, repoRoot, sendPrompt, startFakeServer } from "./lib.mjs";
 
 const page = "<!doctype html><title>Connect</title><h1>Connect</h1>";
 const TOOLS = [
@@ -144,16 +144,7 @@ before(async () => {
 	const addLocal = (name, script, ...args) =>
 		execFileSync(
 			process.execPath,
-			[
-				join(repoRoot, "cli/dist/index.js"),
-				"connectors",
-				"add",
-				name,
-				"--",
-				process.execPath,
-				join(repoRoot, "scripts/e2e", script),
-				...args,
-			],
+			[CLI, "connectors", "add", name, "--", process.execPath, join(repoRoot, "scripts/e2e", script), ...args],
 			{ env: { ...process.env, SITEGEIST_CONFIG_DIR: configDir } },
 		);
 	addLocal("fake-local", "fake-stdio-server.mjs", logs.legacy);

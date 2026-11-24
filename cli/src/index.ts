@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHANNEL, CHANNEL_NAME } from "../../src/channel.ts";
 import { BridgeClient, listBrowsers, listSockets } from "./client.ts";
 import { importableConnectors, readConnectors, writeConnectors } from "./connectors.ts";
 import { cliCredentials } from "./credentials.ts";
@@ -11,8 +12,15 @@ import { writePiExtension } from "./pi-extension.ts";
 import { publishedVersion } from "./release.ts";
 import { VERSION } from "./version.ts";
 
-const HELP = `sitegeist ${VERSION} - browser bridge for coding harnesses
+// The dev channel's CLI (cli/dist-dev, `npm run build:dev`) serves only dev copies of the extension.
+const DEV_NOTE =
+	CHANNEL_NAME === "dev"
+		? `\nDev channel: this CLI serves only the dev copy (${CHANNEL.extensionId}), through its own native host
+(${CHANNEL.nativeHost}) and sockets; the production \`sitegeist\` never sees it, and this one never sees production.\n`
+		: "";
 
+const HELP = `sitegeist ${VERSION} - browser bridge for coding harnesses
+${DEV_NOTE}
 Usage:
   sitegeist mcp             Run the MCP server on stdio (installs the native host on first run)
   sitegeist install         Write the native messaging manifest for every Chromium browser found,
@@ -130,7 +138,7 @@ async function main(): Promise<void> {
 			for (const f of result.skipped) console.log(`current ${f}`);
 			if (result.written.length + result.skipped.length === 0) console.log("no Chromium browser profile directories found");
 			console.log("Reload the sitegeist extension once if it was loaded before this install.");
-			console.log(`Claude Code (every project): claude mcp add --scope user sitegeist -- ${mcpCommand().join(" ")}`);
+			console.log(`Claude Code (every project): claude mcp add --scope user ${CHANNEL.command} -- ${mcpCommand().join(" ")}`);
 			return;
 		}
 		case "browsers":
@@ -171,11 +179,11 @@ async function main(): Promise<void> {
 		}
 		case "reload": {
 			// Refuse to reload onto a broken bundle: a half-written dist-chrome unloads the extension.
-			const dist = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "dist-chrome");
+			const dist = join(dirname(fileURLToPath(import.meta.url)), "..", "..", CHANNEL.outDir);
 			const required = ["manifest.json", "background.js", "sidepanel.js", "sidepanel.html", "app.css"];
 			const missing = required.filter((f) => !existsSync(join(dist, f)));
 			if (existsSync(dist) && missing.length > 0) {
-				throw new Error(`dist-chrome is incomplete (missing ${missing.join(", ")}); run \`npm run build\` first`);
+				throw new Error(`${CHANNEL.outDir} is incomplete (missing ${missing.join(", ")}); run \`npm run ${CHANNEL.buildScript}\` first`);
 			}
 			const client = new BridgeClient({ name: "reload" });
 			await client.connect();
@@ -184,6 +192,9 @@ async function main(): Promise<void> {
 			return;
 		}
 		case "update": {
+			if (CHANNEL_NAME !== "production") {
+				throw new Error(`The dev channel has no release to update to: run \`npm run ${CHANNEL.buildScript}\`, then \`${CHANNEL.command} reload\`.`);
+			}
 			// Every running browser has its own host; each extension checks its update_url only
 			// when the published version is newer than its own (an empty check is throttled for hours).
 			const sockets = listSockets();
@@ -207,7 +218,7 @@ async function main(): Promise<void> {
 			return;
 		case "--version":
 		case "-v":
-			console.log(VERSION);
+			console.log(CHANNEL_NAME === "production" ? VERSION : `${VERSION} (${CHANNEL_NAME})`);
 			return;
 		default:
 			process.stdout.write(HELP);

@@ -102,6 +102,7 @@ cli/
 
 ## Bridge development
 
-- After changing `src/`, rebuild and reload with `npm run build && sitegeist reload` (always `&&`: a reload after a failed build unloads the extension until it is reloaded from the extensions page).
+- Develop on the dev copy (`dist-chrome-dev/`, its own id and bridge; README, Install the extension). After changing `src/` or `cli/`, rebuild and reload it with `npm run build:dev && cli/dist-dev/index.js reload` (always `&&`: a reload after a failed build unloads the extension until it is reloaded from the extensions page). `cli/dist-dev/index.js install` registers the dev host once per checkout.
+- `sitegeist` (production) never sees the dev copy, and the dev CLI never sees production.
 - `sitegeist debug` prints the extension's bridge state, request timings, and a Chrome API benchmark.
 - The CLI is a separate package: `cd cli && npm run check`.

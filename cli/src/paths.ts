@@ -1,13 +1,17 @@
 import { statSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { CHANNEL } from "../../src/channel.ts";
 
-/** Socket directory: per user, outside $TMPDIR so every process finds the same path. */
+/**
+ * Socket directory: per user and per channel, outside $TMPDIR so every process finds the same
+ * path. A dev host has its own, so production commands never list a dev copy, and the other way round.
+ */
 export function socketDir(): string {
 	// The e2e suite runs its own browser beside the user's, on its own sockets.
 	if (process.env.SITEGEIST_SOCKET_DIR) return process.env.SITEGEIST_SOCKET_DIR;
-	if (process.platform === "win32") return `\\\\.\\pipe\\sitegeist-bridge-${userInfo().username}`;
-	return `/tmp/sitegeist-bridge-${userInfo().username}`;
+	if (process.platform === "win32") return `\\\\.\\pipe\\${CHANNEL.socketPrefix}-${userInfo().username}`;
+	return `/tmp/${CHANNEL.socketPrefix}-${userInfo().username}`;
 }
 
 export function socketPath(pid: number): string {
