@@ -19,15 +19,16 @@ const DEV_ID = "jdoloceeppngimcgcjcopnammjaaggim";
 
 /** Runs `body` (TypeScript, with the CLI modules imported) under a channel and a home folder. */
 function probe(channel: "production" | "dev", home: string, body: string, env: Record<string, string> = {}): unknown {
-	const file = join(work, `probe-${Math.random().toString(36).slice(2)}.ts`);
+	const file = join(work, `probe-${Math.random().toString(36).slice(2)}.mts`);
 	writeFileSync(
 		file,
 		`import { NATIVE_HOST_NAME } from ${JSON.stringify(join(src, "../../src/bridge/protocol.ts"))};
 import { EXTENSION_ID, install } from ${JSON.stringify(join(src, "install.ts"))};
 import { socketDir } from ${JSON.stringify(join(src, "paths.ts"))};
+import { BridgeClient } from ${JSON.stringify(join(src, "client.ts"))};
 import { publishedVersion } from ${JSON.stringify(join(src, "release.ts"))};
 import { writePiExtension } from ${JSON.stringify(join(src, "pi-extension.ts"))};
-void NATIVE_HOST_NAME, EXTENSION_ID, install, socketDir, publishedVersion, writePiExtension;
+void NATIVE_HOST_NAME, EXTENSION_ID, install, socketDir, publishedVersion, writePiExtension, BridgeClient;
 process.stdout.write(JSON.stringify(${body}));
 `,
 	);
@@ -118,4 +119,20 @@ test("the dev pi extension has its own file, sockets and tool names", () => {
 	assert.match(prod, /\/tmp\/sitegeist-bridge-\$\{/);
 	assert.match(prod, /name: "browser_tabs"/);
 	assert.ok(existsSync(devFile) && existsSync(prodFile));
+});
+
+test("every hint a dev CLI prints names the dev command, never production's", () => {
+	const home = mkdtempSync(join(work, "home-"));
+	const dir = join(home, "extensions");
+	const empty = mkdtempSync(join(work, "sockets-"));
+	const noBridge = (channel: "production" | "dev") =>
+		probe(channel, home, `await new BridgeClient({ name: "t" }).connect().then(() => "connected", (e) => e.message)`, {
+			SITEGEIST_SOCKET_DIR: empty,
+		}) as string;
+	assert.match(noBridge("dev"), /`sitegeist-dev install`/);
+	assert.match(noBridge("production"), /`sitegeist install`/);
+	const dev = readFileSync(probe("dev", home, `writePiExtension(${JSON.stringify(dir)})`) as string, "utf8");
+	assert.match(dev, /sitegeist-dev allow/);
+	assert.match(dev, /sitegeist-dev install/);
+	assert.doesNotMatch(dev, /`sitegeist (allow|install)/);
 });

@@ -7,6 +7,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
 import type { ClientToHost, HostToClient, RpcError } from "../../src/bridge/protocol.ts";
+import { CHANNEL } from "../../src/channel.ts";
 import { MAX_FRAME_FROM_EXTENSION } from "../../src/bridge/protocol.ts";
 import { encodeFrame, FrameParser } from "./framing.ts";
 import { assertSecurePath, socketDir } from "./paths.ts";
@@ -132,7 +133,7 @@ export class BridgeClient {
 		const target = path ?? (await this.pickSocket());
 		if (!target) {
 			throw new Error(
-				"No sitegeist browser bridge is running. Make sure the sitegeist extension is loaded in a Chromium browser and that `sitegeist install` has been run.",
+				`No sitegeist browser bridge is running. Make sure the sitegeist extension is loaded in a Chromium browser and that \`${CHANNEL.command} install\` has been run.`,
 			);
 		}
 		if (process.platform !== "win32") assertSecurePath(target, "socket");

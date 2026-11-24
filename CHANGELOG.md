@@ -106,6 +106,7 @@
 
 ### Fixed
 
+- The dev CLI's hints name its own command: `status`, its usage errors, the error when no bridge runs, and its pi extension's approval and install hints said `sitegeist`, which acts on the production copy.
 - A REPL `browserjs()` call whose page script did not run (Chrome returns `null` for code that does not parse, or the page navigated away) was reported as a success with a note; it is now an error.
 - Cmd and Option shortcuts (Cmd+A, Cmd+Z, Option+Left and others) did nothing on macOS: synthetic key events skip Cocoa's key bindings. `press` and the REPL's native keys now send the editing command with the chord, and `nativePress` applies keys held with `nativeKeyDown`.
 - A page `alert()`, `confirm()` or `prompt()` in an agent tab blocked every later script on it. Dialogs are now answered at once (accepted unless `handle_dialog` set otherwise), listed in the bridge result as `dialogs`, and logged to the console capture.
