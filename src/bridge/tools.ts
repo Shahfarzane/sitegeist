@@ -38,6 +38,7 @@ import {
 	goForward,
 	locate,
 	navigateTabDetailed,
+	type PageExcerpt,
 	type PageFile,
 	pageHtml,
 	pageText,
@@ -180,6 +181,14 @@ async function readPage(tabId: number, read: unknown): Promise<Snapshot> {
 	const interactive = read === "interactive";
 	await settle(tabId);
 	return snapshot(tabId, { filter: interactive ? "interactive" : "all", maxTextChars: interactive ? 0 : 3000 });
+}
+
+/** Without it a cut excerpt reads as the whole thing: the caller misses what lies past the cut, or reads again to find out. */
+function cutNote(excerpt: PageExcerpt): { cut?: string } {
+	if (excerpt.length <= excerpt.content.length) return {};
+	return {
+		cut: `first ${excerpt.content.length} of ${excerpt.length} characters; raise maxChars or narrow the selector`,
+	};
 }
 
 async function pointFor(_ctx: HandlerContext, params: Params, tabId: number): Promise<{ x: number; y: number }> {
@@ -522,13 +531,13 @@ export const handlers: Record<string, Handler> = {
 	text: async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, false);
 		const text = await pageText(tabId, str(params, "selector"), num(params, "maxChars"));
-		return { ...(await tabSummary(tabId)), text };
+		return { ...(await tabSummary(tabId)), ...cutNote(text), text: text.content };
 	},
 
 	html: async (ctx, params) => {
 		const tabId = await resolveTab(ctx, params, false);
 		const html = await pageHtml(tabId, str(params, "selector"), num(params, "maxChars"));
-		return { ...(await tabSummary(tabId)), html };
+		return { ...(await tabSummary(tabId)), ...cutNote(html), html: html.content };
 	},
 
 	find: async (ctx, params) => {

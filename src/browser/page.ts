@@ -587,24 +587,32 @@ export async function fillElement(tabId: number, target: ElementTarget, value: s
 	await runInPage(tabId, code);
 }
 
-export async function pageText(tabId: number, selector?: string, maxChars = 50000): Promise<string> {
+/** What a read returned and how long the whole of it is, so a reader can tell that it was cut. */
+export interface PageExcerpt {
+	content: string;
+	length: number;
+}
+
+export async function pageText(tabId: number, selector?: string, maxChars = 50000): Promise<PageExcerpt> {
 	const code = `(() => {
 		const sel = ${JSON.stringify(selector ?? "")};
 		const el = sel ? document.querySelector(sel) : document.body;
 		if (!el) throw new Error("Selector not found: " + sel);
-		return (el.innerText || el.textContent || "").slice(0, ${maxChars});
+		const all = el.innerText || el.textContent || "";
+		return { content: all.slice(0, ${maxChars}), length: all.length };
 	})()`;
-	return runInPage<string>(tabId, code);
+	return runInPage<PageExcerpt>(tabId, code);
 }
 
-export async function pageHtml(tabId: number, selector?: string, maxChars = 200000): Promise<string> {
+export async function pageHtml(tabId: number, selector?: string, maxChars = 200000): Promise<PageExcerpt> {
 	const code = `(() => {
 		const sel = ${JSON.stringify(selector ?? "")};
 		const el = sel ? document.querySelector(sel) : document.documentElement;
 		if (!el) throw new Error("Selector not found: " + sel);
-		return el.outerHTML.slice(0, ${maxChars});
+		const all = el.outerHTML;
+		return { content: all.slice(0, ${maxChars}), length: all.length };
 	})()`;
-	return runInPage<string>(tabId, code);
+	return runInPage<PageExcerpt>(tabId, code);
 }
 
 /** Scroll the page or an element; returns the new scroll position. */
